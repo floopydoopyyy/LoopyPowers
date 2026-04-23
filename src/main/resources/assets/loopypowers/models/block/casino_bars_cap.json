@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/iron_bars_cap",
+  "textures": {
+    "bars": "loopypowers:block/casino_bars",
+    "edge": "loopypowers:block/casino_bars",
+    "particle": "loopypowers:block/casino_bars"
+  }
+}

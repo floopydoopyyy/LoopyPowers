@@ -1,0 +1,15 @@
+{
+  "multipart": [
+    { "apply": { "model": "loopypowers:block/casino_bars_post" } },
+
+    { "when": { "north": "true" }, "apply": { "model": "loopypowers:block/casino_bars_side", "uvlock": true } },
+    { "when": { "east": "true" },  "apply": { "model": "loopypowers:block/casino_bars_side", "y": 90,  "uvlock": true } },
+    { "when": { "south": "true" }, "apply": { "model": "loopypowers:block/casino_bars_side", "y": 180, "uvlock": true } },
+    { "when": { "west": "true" },  "apply": { "model": "loopypowers:block/casino_bars_side", "y": 270, "uvlock": true } },
+
+    { "when": { "north": "false" }, "apply": { "model": "loopypowers:block/casino_bars_cap" } },
+    { "when": { "east": "false" },  "apply": { "model": "loopypowers:block/casino_bars_cap", "y": 90 } },
+    { "when": { "south": "false" }, "apply": { "model": "loopypowers:block/casino_bars_cap", "y": 180 } },
+    { "when": { "west": "false" },  "apply": { "model": "loopypowers:block/casino_bars_cap", "y": 270 } }
+  ]
+}

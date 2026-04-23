@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "loopypowers:block/deepslate_celestial_ore"
+  }
+}

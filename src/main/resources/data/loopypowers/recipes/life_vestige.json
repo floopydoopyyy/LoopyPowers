@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " E ",
+    " P ",
+    " G "
+  ],
+  "key": {
+    "E": {
+      "item": "minecraft:emerald"
+    },
+    "P": {
+      "item": "loopypowers:power_vestige"
+    },
+    "G": {
+      "item": "minecraft:golden_apple"
+    }
+  },
+  "result": {
+    "item": "loopypowers:life_vestige",
+    "count": 1
+  }
+}

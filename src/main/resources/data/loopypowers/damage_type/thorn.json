@@ -1,0 +1,7 @@
+{
+  "message_id": "thorn",
+  "exhaustion": 0.1,
+  "scaling": "never",
+  "effects": "poking",
+  "death_message_type": "default"
+}

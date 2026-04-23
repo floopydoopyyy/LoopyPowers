@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "C",
+    "T",
+    "C"
+  ],
+  "key": {
+    "C": {
+      "item": "minecraft:cobbled_deepslate"
+    },
+    "T": {
+      "item": "minecraft:totem_of_undying"
+    }
+  },
+  "result": {
+    "item": "loopypowers:empty_vestige",
+    "count": 1
+  }
+}

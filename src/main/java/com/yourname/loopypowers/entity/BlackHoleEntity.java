@@ -1,0 +1,337 @@
+package com.yourname.loopypowers.entity;
+
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.particle.DustParticleEffect;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
+import org.joml.Vector3f;
+
+import java.util.List;
+
+public class BlackHoleEntity extends Entity {
+
+    private ServerPlayerEntity owner;
+    private int life;
+
+    /* ============================================================
+       Constants
+       ============================================================ */
+
+    public static final int   LIFESPAN         = 200;  // ticks
+
+    public static final double OUTER_RADIUS    = 25.0;
+    public static final double MID_RADIUS      = 16.0;
+    public static final double INNER_RADIUS    = 4.0;
+
+    // Pull strengths per ring
+    public static final double OUTER_PULL      = 0.06;
+    public static final double MID_PULL        = 0.13;
+    public static final double INNER_PULL      = 0.30;
+
+    // velocity cap
+    private static final double MAX_PULL_SPEED = 0.65;
+
+    // Higher = more circular orbit, Lower = More direct pull
+    private static final double ORBIT_TANGENT_MIX = 0.55;
+
+    // Damage applied per tick in inner ring
+    public static final float INNER_DAMAGE_PER_TICK = 0.5f;
+
+    // Particles
+    private static final int   CORE_RINGS       = 8;    // more rings = bigger core
+    private static final int DISC_ARMS = 4; // spinny parts
+    private static final float DISC_ARM_RADIUS = 6.0f; // disk size
+    private static final int   OUTER_WISP_COUNT = 12;
+
+    // particles, last float is size, more central stuff should be bigger
+    private static final DustParticleEffect BLACK =
+            new DustParticleEffect(new Vector3f(0.02f, 0.0f, 0.05f), 2.8f);
+
+    private static final DustParticleEffect PURPLE =
+            new DustParticleEffect(new Vector3f(0.25f, 0.0f, 0.4f), 1.5f);
+
+    private static final DustParticleEffect ORANGE =
+            new DustParticleEffect(new Vector3f(1.0f, 0.45f, 0.0f), 1.5f);
+
+    private static final DustParticleEffect HOT_ORANGE =
+            new DustParticleEffect(new Vector3f(1.0f, 0.65f, 0.1f), 1.55f);
+
+    private static final DustParticleEffect LIGHT_PURPLE =
+            new DustParticleEffect(new Vector3f(0.5f, 0.0f, 0.7f), 1.55f);
+    /* ============================================================
+       Constructor
+       ============================================================ */
+
+    public BlackHoleEntity(EntityType<?> type, World world) {
+        super(type, world);
+        this.setNoGravity(true);
+        this.noClip = true;
+    }
+
+    public void setOwner(ServerPlayerEntity owner) {
+        this.owner = owner;
+    }
+
+    public ServerPlayerEntity getOwner() {
+        return owner;
+    }
+
+    /* ============================================================
+       Tick
+       ============================================================ */
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (this.getWorld().isClient()) return;
+
+        life++;
+        if (life > LIFESPAN || owner == null || owner.isRemoved()) {
+            this.discard();
+            return;
+        }
+
+        // follow caster
+        Vec3d followTarget = owner.getPos().add(0, 0.4, 0); // offset up slightly to center on body
+
+        Vec3d current = this.getPos();
+        double followSpeed = 0.2; // slightly snappier since there's no forward offset to lag behind
+        Vec3d newPos = current.add(followTarget.subtract(current).multiply(followSpeed));
+        this.setPos(newPos.x, newPos.y, newPos.z);
+
+        ServerWorld world = (ServerWorld) this.getWorld();
+        Vec3d center = this.getPos();
+        float lifeProgress = (float) life / LIFESPAN;
+
+        pullAndDamageEntities(world, center);
+        spawnAllParticles(world, center, lifeProgress);
+    }
+
+    /* ============================================================
+       pull stuff
+       ============================================================ */
+
+    private void pullAndDamageEntities(ServerWorld world, Vec3d center) { // applied to closer entities
+        List<LivingEntity> nearby = world.getEntitiesByClass(
+                LivingEntity.class,
+                new net.minecraft.util.math.Box(center, center).expand(OUTER_RADIUS),
+                e -> e.isAlive() && e != owner
+        );
+
+        for (LivingEntity e : nearby) {
+            Vec3d toCenter = center.subtract(e.getPos());
+            double dist = toCenter.length();
+            if (dist < 0.01) continue;
+
+            if (dist <= INNER_RADIUS) {
+                applyOrbitalPull(e, toCenter, dist, INNER_PULL);
+                applyInnerRingEffects(e);
+
+            } else if (dist <= MID_RADIUS) {
+                applyOrbitalPull(e, toCenter, dist, MID_PULL);
+
+            } else {
+                applyOrbitalPull(e, toCenter, dist, OUTER_PULL);
+            }
+        }
+    }
+
+    private void applyOrbitalPull(LivingEntity entity, Vec3d toCenter, double dist, double strength) { // applied to further entities
+        Vec3d inward = toCenter.normalize();
+
+        // tangent — perpendicular to inward on the horizontal plane
+        Vec3d tangent = new Vec3d(-inward.z, 0, inward.x).normalize();
+
+        // blend - mostly inward close up, more orbital further out
+        double tangentMix = ORBIT_TANGENT_MIX * MathHelper.clamp(dist / MID_RADIUS, 0, 1);
+        Vec3d pullDir = inward.multiply(1.0 - tangentMix).add(tangent.multiply(tangentMix)).normalize();
+
+        Vec3d vel = entity.getVelocity();
+        Vec3d newVel = vel.add(pullDir.multiply(strength));
+
+        if (newVel.length() > MAX_PULL_SPEED) {
+            newVel = newVel.normalize().multiply(MAX_PULL_SPEED);
+        }
+
+        entity.setVelocity(newVel);
+        entity.velocityModified = true;
+
+        if (entity.getWorld() instanceof ServerWorld sw) {
+            sw.getChunkManager().sendToNearbyPlayers(entity,
+                    new net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket(entity));
+        }
+    }
+
+    private void applyInnerRingEffects(LivingEntity entity) {
+        // Direct damage every tick
+        entity.damage(entity.getDamageSources().magic(), INNER_DAMAGE_PER_TICK);
+
+        // quickly drain fate
+        com.yourname.loopypowers.power.CosmicPower.drainFateTimer(entity);
+    }
+
+    /* ============================================================
+       Particles
+       ============================================================ */
+
+    private void spawnAllParticles(ServerWorld world, Vec3d center, float lifeProgress) {
+        long time = world.getTime();
+
+        spawnEventHorizon(world, center, time);
+        spawnAccretionDisk(world, center, time, lifeProgress);
+        spawnInnerVortex(world, center, time);
+        spawnOuterWisps(world, center, time);
+
+        // extra stuff when close to despawning
+        if (lifeProgress > 0.75f) {
+            spawnCollapseFlare(world, center, lifeProgress, time);
+        }
+    }
+
+    private void spawnEventHorizon(ServerWorld world, Vec3d center, long time) {
+        for (int ring = 0; ring < CORE_RINGS; ring++) {
+            double ringRadius = 0.5 + ring * 0.45; // was 0.3 + ring * 0.25 — wider rings
+            int pointsInRing = 8 + ring * 2;        // was 6 + ring * 2 — more points per ring
+            double rotOffset = time * (0.08 + ring * 0.015) * (ring % 2 == 0 ? 1 : -1);
+
+            for (int j = 0; j < pointsInRing; j++) {
+                double angle = rotOffset + (j * Math.PI * 2.0 / pointsInRing);
+                double tiltY = Math.sin(angle * 0.5 + ring) * 0.25; // was 0.15 — more 3D tilt
+
+                double x = center.x + Math.cos(angle) * ringRadius;
+                double y = center.y + 1.0 + tiltY;
+                double z = center.z + Math.sin(angle) * ringRadius;
+
+                DustParticleEffect color = (ring < 2) ? BLACK : PURPLE;
+                world.spawnParticles(color, x, y, z, 1, 0, 0, 0, 0);
+            }
+        }
+    }
+
+    private void spawnAccretionDisk(ServerWorld world, Vec3d center, long time, float lifeProgress) {
+        double baseSpeed = 0.06 + lifeProgress * 0.04; // spins faster near end
+
+        for (int arm = 0; arm < DISC_ARMS; arm++) {
+            double armOffset = arm * (Math.PI * 2.0 / DISC_ARMS);
+
+            // Each arm has multiple particles spiralling
+            int trailLength = 14;
+            for (int t = 0; t < trailLength; t++) {
+                double trailFraction = (double) t / trailLength;
+
+                // Spiral - angle increases, radius increases with trail position
+                double angle = time * baseSpeed + armOffset - (t * 0.28);
+                double r = 0.9 + trailFraction * (DISC_ARM_RADIUS - 0.9);
+
+                // Slight vertical wave for depth
+                double waveY = Math.sin(angle * 2 + arm) * 0.18 * (1.0 - trailFraction);
+
+                double x = center.x + Math.cos(angle) * r;
+                double y = center.y + 1.0 + waveY;
+                double z = center.z + Math.sin(angle) * r;
+
+                // orange near core, purple at edges
+                DustParticleEffect diskColor = (trailFraction < 0.4) ? ORANGE
+                        : (trailFraction < 0.7) ? HOT_ORANGE
+                        : LIGHT_PURPLE;
+
+                world.spawnParticles(diskColor, x, y, z, 1, 0, 0, 0, 0);
+
+                // these can't really be seen
+                if (t < 4 && world.random.nextFloat() < 0.35f) {
+                    world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
+                            x, y, z, 1,
+                            (world.random.nextDouble() - 0.5) * 0.05,
+                            (world.random.nextDouble() - 0.5) * 0.05,
+                            (world.random.nextDouble() - 0.5) * 0.05,
+                            0.01);
+                }
+            }
+        }
+    }
+
+    private void spawnInnerVortex(ServerWorld world, Vec3d center, long time) {
+        int points = 12;
+        for (int i = 0; i < points; i++) {
+            // Counter-rotates relative to the disk
+            double angle = -(time * 0.14) + (i * Math.PI * 2.0 / points);
+            double r = 0.55 + Math.sin(time * 0.1 + i) * 0.1; // slight pulse
+
+            double x = center.x + Math.cos(angle) * r;
+            double y = center.y + 1.0 + Math.sin(angle * 3) * 0.1;
+            double z = center.z + Math.sin(angle) * r;
+
+            world.spawnParticles(PURPLE, x, y, z, 1, 0, 0, 0, 0);
+        }
+    }
+
+    private void spawnOuterWisps(ServerWorld world, Vec3d center, long time) {
+        // spawns at tick offset
+        int wispIndex = (int)(time % OUTER_WISP_COUNT);
+
+        double angle = time * 0.03 + (wispIndex * Math.PI * 2.0 / OUTER_WISP_COUNT);
+        double r = OUTER_RADIUS * 0.6 + world.random.nextDouble() * OUTER_RADIUS * 0.3;
+
+        double x = center.x + Math.cos(angle) * r;
+        double y = center.y + 1.0 + (world.random.nextDouble() - 0.5) * 3.0;
+        double z = center.z + Math.sin(angle) * r;
+
+        // Velocity directed slightly inward
+        double dx = (center.x - x) * 0.01;
+        double dz = (center.z - z) * 0.01;
+
+        world.spawnParticles(LIGHT_PURPLE, x, y, z, 1, dx, 0.005, dz, 0.008);
+    }
+
+    private void spawnCollapseFlare(ServerWorld world, Vec3d center, float lifeProgress, long time) {
+        float intensity = (lifeProgress - 0.75f) / 0.25f; // 0 → 1 in final quarter
+
+        // despawn particles
+        if (time % 3 == 0) {
+            int burstCount = (int)(3 + intensity * 8);
+            for (int i = 0; i < burstCount; i++) {
+                double vx = (world.random.nextDouble() - 0.5) * 0.3 * intensity;
+                double vy = (world.random.nextDouble() - 0.5) * 0.2 * intensity;
+                double vz = (world.random.nextDouble() - 0.5) * 0.3 * intensity;
+                world.spawnParticles(ParticleTypes.END_ROD,
+                        center.x, center.y + 1.0, center.z,
+                        1, vx, vy, vz, 0.05);
+            }
+        }
+
+        // more stuff that I can't really see.
+        int coronaCount = (int)(intensity * 6);
+        for (int i = 0; i < coronaCount; i++) {
+            double angle = world.random.nextDouble() * Math.PI * 2;
+            double r = 0.5 + world.random.nextDouble() * 0.8;
+            world.spawnParticles(ORANGE,
+                    center.x + Math.cos(angle) * r,
+                    center.y + 1.0 + (world.random.nextDouble() - 0.5) * 0.4,
+                    center.z + Math.sin(angle) * r,
+                    1, 0, 0, 0, 0);
+        }
+    }
+
+    /* ============================================================
+       Data
+       ============================================================ */
+
+    @Override protected void initDataTracker() {}
+
+    @Override
+    protected void readCustomDataFromNbt(NbtCompound nbt) {
+        this.life = nbt.getInt("Life");
+    }
+
+    @Override
+    protected void writeCustomDataToNbt(NbtCompound nbt) {
+        nbt.putInt("Life", this.life);
+    }
+}

@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " P ",
+    " V ",
+    " B "
+  ],
+  "key": {
+    "P": {
+      "item": "minecraft:phantom_membrane"
+    },
+    "V": {
+      "item": "loopypowers:power_vestige"
+    },
+    "B": {
+      "item": "minecraft:blaze_rod"
+    }
+  },
+  "result": {
+    "item": "loopypowers:elemental_vestige",
+    "count": 1
+  }
+}

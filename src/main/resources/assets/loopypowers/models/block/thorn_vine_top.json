@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cross",
+  "textures": {
+    "cross": "loopypowers:block/thorn_vine_top"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " F ",
+    " P ",
+    " E "
+  ],
+  "key": {
+    "F": {
+      "item": "minecraft:fermented_spider_eye"
+    },
+    "P": {
+      "item": "loopypowers:power_vestige"
+    },
+    "E": {
+      "item": "minecraft:echo_shard"
+    }
+  },
+  "result": {
+    "item": "loopypowers:ruin_vestige",
+    "count": 1
+  }
+}

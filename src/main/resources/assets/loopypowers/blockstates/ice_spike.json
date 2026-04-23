@@ -1,0 +1,24 @@
+{
+  "multipart": [
+    {
+      "when": { "vertical_direction": "up", "thickness": "tip_merge" },
+      "apply": { "model": "loopypowers:block/ice_spike_tip_merge" }
+    },
+    {
+      "when": { "vertical_direction": "up", "thickness": "tip" },
+      "apply": { "model": "loopypowers:block/ice_spike_tip" }
+    },
+    {
+      "when": { "vertical_direction": "up", "thickness": "frustum" },
+      "apply": { "model": "loopypowers:block/ice_spike_frustum" }
+    },
+    {
+      "when": { "vertical_direction": "up", "thickness": "middle" },
+      "apply": { "model": "loopypowers:block/ice_spike_middle" }
+    },
+    {
+      "when": { "vertical_direction": "up", "thickness": "base" },
+      "apply": { "model": "loopypowers:block/ice_spike_base" }
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+package com.yourname.loopypowers.power;
+
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.server.network.ServerPlayerEntity;
+
+// This is an interface with mainly getter methods
+
+public interface Power { // Basis for all powers
+
+    // Called once when the player gets the power
+    void onAssign(ServerPlayerEntity player);
+// take a guess
+    default void onRemove(ServerPlayerEntity player) {}
+
+    // Called every tick (20 times per second)
+    void onTick(ServerPlayerEntity player);
+
+    // try wrappers for abilities that can fail.
+    // if they don't exist, the attempt should succeed.
+    default boolean tryActivatePrimary(ServerPlayerEntity player) {
+        activatePrimary(player);
+        return true;}
+    default boolean tryActivateSecondary(ServerPlayerEntity player) {
+        activateSecondary(player);
+        return true;}
+    default boolean tryActivateUltimate(ServerPlayerEntity player) {
+        activateUltimate(player);
+        return true;}
+
+    // Active abilities
+    void activatePrimary(ServerPlayerEntity player);
+    void activateSecondary(ServerPlayerEntity player);
+    long getPrimaryCooldownMs();
+    long getSecondaryCooldownMs();
+
+    // Ultimate
+    void activateUltimate(ServerPlayerEntity player);
+    long getUltimateCooldownMs();
+
+    //Ability Names
+        default String getPassiveName() { return "Passive"; }
+
+        default String getPrimaryName() {
+            return "Primary";
+        }
+
+        default String getSecondaryName() {
+            return "Secondary";
+        }
+
+        default String getUltimateName() {
+            return "Ultimate";
+        }
+        // passive on hit effects
+        default void onHit
+        (ServerPlayerEntity attacker,
+         LivingEntity target
+        ) {
+            // default = nothing
+        }
+
+    String getName();
+
+        // HELP / DESCRIPTIONS - for help command
+
+    default String getOverviewDescription() {
+        return "No overview description set yet.";
+    }
+
+    default String getPassiveDescription() {
+        return "No passive description set yet.";
+    }
+
+    default String getPrimaryDescription() {
+        return "No primary description set yet.";
+    }
+
+    default String getSecondaryDescription() {
+        return "No secondary description set yet.";
+    }
+
+    default String getUltimateDescription() {
+        return "No ultimate description set yet.";
+    }
+}

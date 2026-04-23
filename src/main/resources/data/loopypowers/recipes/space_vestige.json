@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " E ",
+    " P ",
+    " F "
+  ],
+  "key": {
+    "E": {
+      "item": "minecraft:ender_pearl"
+    },
+    "P": {
+      "item": "loopypowers:power_vestige"
+    },
+    "F": {
+      "item": "minecraft:fire_charge"
+    }
+  },
+  "result": {
+    "item": "loopypowers:space_vestige",
+    "count": 1
+  }
+}

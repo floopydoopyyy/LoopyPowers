@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "values": [
+    "loopypowers:casino_floor",
+    "loopypowers:casino_bars",
+    "loopypowers:ice_spike",
+    "loopypowers:celestial_ore",
+    "loopypowers:deepslate_celestial_ore",
+    "loopypowers:celestial_block"
+  ]
+}

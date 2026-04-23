@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/pointed_dripstone",
+  "ambientocclusion": false,
+  "textures": {
+    "cross": "loopypowers:block/ice_spike_frustum"
+  }
+}

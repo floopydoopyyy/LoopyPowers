@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " F ",
+    " P ",
+    " L "
+  ],
+  "key": {
+    "F": {
+      "item": "minecraft:feather"
+    },
+    "P": {
+      "item": "loopypowers:power_vestige"
+    },
+    "L": {
+      "item": "minecraft:lapis_lazuli"
+    }
+  },
+  "result": {
+    "item": "loopypowers:motion_vestige",
+    "count": 1
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " S ",
+    "SES",
+    " S "
+  ],
+  "key": {
+    "S": {
+      "item": "loopypowers:celestial_shard"
+    },
+    "E": {
+      "item": "loopypowers:empty_vestige"
+    }
+  },
+  "result": {
+    "item": "loopypowers:power_vestige",
+    "count": 1
+  }
+}

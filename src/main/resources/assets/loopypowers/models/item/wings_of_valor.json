@@ -1,0 +1,6 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "loopypowers:item/wings_of_valor"
+  }
+}
