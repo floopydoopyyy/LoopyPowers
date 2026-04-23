@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.item;
 
 import com.yourname.loopypowers.manager.PowerManager;
+import com.yourname.loopypowers.ritual.RitualManager;
 import net.minecraft.client.item.TooltipContext;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -36,6 +37,7 @@ public class SeveranceStoneItem extends Item {
 
     @Override
     public TypedActionResult<ItemStack> use(World world, PlayerEntity user, Hand hand) {
+        ItemStack stack = user.getStackInHand(hand);
         if (world.isClient) {
             return TypedActionResult.pass(user.getStackInHand(hand));
         }
@@ -44,23 +46,25 @@ public class SeveranceStoneItem extends Item {
             return TypedActionResult.pass(user.getStackInHand(hand));
         }
 
-
-        boolean hadPower = PowerManager.getPower(player) != null;
-
-        if (!hadPower) {
+        // No power
+        if (PowerManager.getPower(player) == null) {
             player.sendMessage(Text.literal("§cYou do not have a power."), true);
             return TypedActionResult.pass(user.getStackInHand(hand));
         }
 
-        // remove power
-        PowerManager.removePower(player); // cleanup handled by this method
-
-        // consume item
-        if (!player.getAbilities().creativeMode) {
-            user.getStackInHand(hand).decrement(1);
+        // don't start multiple rituals
+        if (RitualManager.isActive(player)) {
+            player.sendMessage(Text.literal("§cA ritual is already in progress."), true);
+            return TypedActionResult.pass(user.getStackInHand(hand));
         }
 
-        player.sendMessage(Text.literal("§cYour power has been stripped..."), true);
+        // begin and consume
+        RitualManager.startRitual(player, RitualManager.RitualType.SEVERANCE_RITUAL);
+
+        // consume
+        if (!player.getAbilities().creativeMode) {
+            stack.decrement(1);
+        }
 
         return TypedActionResult.success(user.getStackInHand(hand));
     }
