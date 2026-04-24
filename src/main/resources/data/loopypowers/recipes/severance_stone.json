@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " N ",
+    "NSN",
+    " N "
+  ],
+  "key": {
+    "N": {
+      "item": "minecraft:netherite_ingot"
+    },
+    "S": {
+      "item": "loopypowers:celestial_shard"
+    }
+  },
+  "result": {
+    "item": "loopypowers:severance_stone",
+    "count": 1
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " N ",
+    "SRS",
+    " N "
+  ],
+  "key": {
+    "N": {
+      "item": "minecraft:netherite_ingot"
+    },
+    "S": {
+      "item": "loopypowers:celestial_shard"
+    },
+    "R": {
+      "item": "loopypowers:refined_celestial_core"
+    }
+  },
+  "result": {
+    "item": "loopypowers:perfected_celestial_core",
+    "count": 1
+  }
+}

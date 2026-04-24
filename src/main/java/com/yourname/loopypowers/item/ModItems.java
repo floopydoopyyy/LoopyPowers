@@ -74,12 +74,12 @@ public class ModItems {
     // CORES
     public static final Item REFINED_CORE = Registry.register(
             Registries.ITEM,
-            new Identifier(Loopypowers.MOD_ID, "refined_core"),
+            new Identifier(Loopypowers.MOD_ID, "refined_celestial_core"),
             new RefinedCoreItem(new FabricItemSettings())
     );
     public static final Item PERFECTED_CORE = Registry.register(
             Registries.ITEM,
-            new Identifier(Loopypowers.MOD_ID, "perfected_core"),
+            new Identifier(Loopypowers.MOD_ID, "perfected_celestial_core"),
             new PerfectedCoreItem(new FabricItemSettings())
     );
 

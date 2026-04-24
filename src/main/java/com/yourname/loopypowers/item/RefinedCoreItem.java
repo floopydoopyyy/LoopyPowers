@@ -1,5 +1,7 @@
 package com.yourname.loopypowers.item;
 
+import com.yourname.loopypowers.manager.PowerManager;
+import com.yourname.loopypowers.ritual.RitualManager;
 import net.minecraft.client.item.TooltipContext;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -39,7 +41,53 @@ public class RefinedCoreItem extends Item {
 
     @Override
     public TypedActionResult<ItemStack> use(World world, PlayerEntity user, Hand hand) {
-        // this will do a thing
-        return super.use(world, user, hand);
+        ItemStack stack = user.getStackInHand(hand);
+
+        if (world.isClient) {
+            return TypedActionResult.success(stack);
+        }
+
+        if (!(user instanceof net.minecraft.server.network.ServerPlayerEntity player)) {
+            return TypedActionResult.pass(stack);
+        }
+
+        // no power
+        if (PowerManager.getPower(player) == null) {
+            player.sendMessage(
+                    Text.literal("§cYou are powerless, the item has no effect"),
+                    true
+            );
+            return TypedActionResult.fail(stack);
+        }
+
+        int level = PowerManager.getLevel(player);
+
+        // too high
+        if (level > 1) {
+            player.sendMessage(
+                    Text.literal("§cYour connection Level is already beyond this point, the item has no effect."),
+                    true
+            );
+            return TypedActionResult.fail(stack);
+        }
+
+        // somehow below 1
+        if (level < 1) {
+            player.sendMessage(
+                    Text.literal("§cThis is an exception: Your power level is somehow below 1.."),
+                    true
+            );
+            return TypedActionResult.fail(stack);
+        }
+
+        // apply it
+        RitualManager.startRitual(player, RitualManager.RitualType.REFINED_UPGRADE);
+
+        // consume item
+        if (!player.getAbilities().creativeMode) {
+            stack.decrement(1);
+        }
+
+        return TypedActionResult.success(stack, world.isClient());
     }
 }

@@ -1,5 +1,6 @@
 package com.yourname.loopypowers.item;
 
+import com.yourname.loopypowers.manager.PowerManager;
 import net.minecraft.client.item.TooltipContext;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -39,7 +40,68 @@ public class PerfectedCoreItem extends Item {
 
     @Override
     public TypedActionResult<ItemStack> use(World world, PlayerEntity user, Hand hand) {
-        // this will do a thing
-        return super.use(world, user, hand);
+        ItemStack stack = user.getStackInHand(hand);
+
+        if (world.isClient) {
+            return TypedActionResult.success(stack);
+        }
+
+        if (!(user instanceof net.minecraft.server.network.ServerPlayerEntity player)) {
+            return TypedActionResult.pass(stack);
+        }
+
+        // no power
+        if (PowerManager.getPower(player) == null) {
+            player.sendMessage(
+                    Text.literal("§cYou are powerless, the item has no effect"),
+                    true
+            );
+            return TypedActionResult.fail(stack);
+        }
+
+        int level = PowerManager.getLevel(player);
+
+        // too high
+        if (level > 3) {
+            player.sendMessage(
+                    Text.literal("§cYou have already maxed out the connection level, the item has no effect."),
+                    true
+            );
+            return TypedActionResult.fail(stack);
+        }
+
+        // Below 2
+        if (level < 2) {
+            player.sendMessage(
+                    Text.literal("§cYour connection level is not high enough to use this, the item has no effect."),
+                    true
+            );
+            return TypedActionResult.fail(stack);
+        }
+
+        // apply it
+        PowerManager.setLevel(player, 3);
+
+        player.sendMessage(
+                Text.literal("§dYour connection has been strengthened to Level 3."),
+                false
+        );
+
+        // sound
+        world.playSound(
+                null,
+                player.getBlockPos(),
+                net.minecraft.sound.SoundEvents.ENTITY_PLAYER_LEVELUP,
+                player.getSoundCategory(),
+                1.0f,
+                1.2f
+        );
+
+        // consume item
+        if (!player.getAbilities().creativeMode) {
+            stack.decrement(1);
+        }
+
+        return TypedActionResult.success(stack, world.isClient());
     }
 }

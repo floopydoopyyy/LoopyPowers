@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " S ",
+    "SNS",
+    " S "
+  ],
+  "key": {
+    "S": {
+      "item": "loopypowers:celestial_shard"
+    },
+    "N": {
+      "item": "minecraft:nether_star"
+    }
+  },
+  "result": {
+    "item": "loopypowers:refined_celestial_core",
+    "count": 1
+  }
+}

@@ -18,10 +18,10 @@
   "item.loopypowers.elemental_vestige": "§5Vestige of the Elements",
   "item.loopypowers.empty_vestige": "§3Empty Vestige",
   "item.loopypowers.severance_stone": "§5Severance Stone",
-  "item.loopypowers.refined_core": "§5Refined Celestial Core",
-  "item.loopypowers.perfected_core": "§6Perfected Celestial Core",
+  "item.loopypowers.refined_celestial_core": "§5Refined Celestial Core",
+  "item.loopypowers.perfected_celestial_core": "§6Perfected Celestial Core",
 
-  "block.loopypowers.celestial_block.tooltip": "§7Reduces cooldowns when in contact with the block.",
+  "block.loopypowers.celestial_block.tooltip": "§7Cooldown speed is slightly faster when stood on.",
 
   "subtitles.loopypowers.thunderclap": "Thunderclap",
   "subtitles.loopypowers.teleportclap": "Teleporter swaps",
