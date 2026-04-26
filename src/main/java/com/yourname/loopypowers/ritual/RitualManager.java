@@ -19,7 +19,8 @@ public class RitualManager {
         SPACE_VESTIGE,
         MIND_VESTIGE,
         SEVERANCE_RITUAL,
-        REFINED_UPGRADE
+        REFINED_UPGRADE,
+        PERFECTED_UPGRADE
     }
 
     private static final Map<UUID, Ritual> ACTIVE = new HashMap<>();
@@ -36,6 +37,7 @@ public class RitualManager {
             case SPACE_VESTIGE      -> new SpaceRitual(player, type);
             case SEVERANCE_RITUAL -> new SeveranceRitual(player, type);
             case REFINED_UPGRADE -> new PowerUpgradeRitual(player, type);
+            case PERFECTED_UPGRADE    -> new PerfectedUpgradeRitual(player, type);
             default                -> new PowerRitual(player, type);
         };
 

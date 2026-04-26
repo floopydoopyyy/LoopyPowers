@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.network.RenderPackets;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
@@ -55,7 +56,7 @@ public class DarknessPower implements Power {
     }
 
     /* ============================================================
-       PASSIVE - BACKSTABBING
+       PASSIVE
        ============================================================ */
 
     private static final float BACKSTAB_BONUS_MULT = 1.30f; // +30%
@@ -244,7 +245,7 @@ public class DarknessPower implements Power {
     }
 
     /* ============================================================
-       ULTIMATE - BLACKOUT
+       ULTIMATE
        ============================================================ */
 
     private static final String ULT_ACTIVE = "dk_ult_"; // dk_ult_<ticks>
@@ -256,13 +257,13 @@ public class DarknessPower implements Power {
     // TIMING
     private static final int BLACKOUT_DURATION_TICKS = 20 * 10; // ult time
     private static final int BLACKOUT_APPLY_EVERY_TICKS = 5;
-    private static final int BLACKOUT_FX_EVERY_TICKS = 1; // more frequent = smoother
+    private static final int BLACKOUT_FX_EVERY_TICKS = 3; //
 
     // VISUALS
-    private static final int BLACKOUT_RING_POINTS = 64;   // smooth circle
-    private static final int BLACKOUT_VERTICAL_LAYERS = 24;
+    private static final int BLACKOUT_RING_POINTS = 48;   // smooth circle
+    private static final int BLACKOUT_VERTICAL_LAYERS = 20;
     // interior particles
-    private static final int BLACKOUT_INNER_PARTICLES = 120; // density
+    private static final int BLACKOUT_INNER_PARTICLES = 100; // density
     private static final double BLACKOUT_INNER_SPREAD = BLACKOUT_RADIUS * 0.9;
 
     private static final DustParticleEffect BLACK_DUST =
@@ -537,10 +538,10 @@ public class DarknessPower implements Power {
                 w.playSound(
                         null,
                         victim.getBlockPos(),
-                        SoundEvents.ENTITY_WITHER_HURT,
+                        ModSounds.BACKSTAB,
                         attacker.getSoundCategory(),
-                        0.6f,
-                        1.4f
+                        0.9f,
+                        1.0f
                 );
 
                 w.spawnParticles(
@@ -575,83 +576,85 @@ public class DarknessPower implements Power {
                         0.1, 0.1, 0.1,
                         0.01
                 );
+            }
 
-                // ULTIMATE HIT FX
-                if (didUlt) {
+            // ULTIMATE
+            if (didUlt) {
 
-                    // deep void-like impact sound
-                    w.playSound(
-                            null,
-                            victim.getBlockPos(),
-                            SoundEvents.ENTITY_WITHER_BREAK_BLOCK,
-                            attacker.getSoundCategory(),
-                            0.7f,
-                            0.6f // low pitch = heavy/dark
-                    );
+                w.playSound(
+                        null,
+                        victim.getBlockPos(),
+                        ModSounds.BIGSTAB,
+                        attacker.getSoundCategory(),
+                        0.7f,
+                        1.2f
+                );
 
-                    // dark burst
-                    w.spawnParticles(
-                            ParticleTypes.SMOKE,
-                            victim.getX(),
-                            victim.getBodyY(0.5),
-                            victim.getZ(),
-                            20,
-                            0.4, 0.5, 0.4,
-                            0.04
-                    );
+                // dark burst
+                w.spawnParticles(
+                        ParticleTypes.SMOKE,
+                        victim.getX(),
+                        victim.getBodyY(0.5),
+                        victim.getZ(),
+                        20,
+                        0.4, 0.5, 0.4,
+                        0.04
+                );
 
-                    w.spawnParticles(
-                            ParticleTypes.LARGE_SMOKE,
-                            victim.getX(),
-                            victim.getBodyY(0.5),
-                            victim.getZ(),
-                            10,
-                            0.3, 0.4, 0.3,
-                            0.02
-                    );
+                w.spawnParticles(
+                        ParticleTypes.LARGE_SMOKE,
+                        victim.getX(),
+                        victim.getBodyY(0.5),
+                        victim.getZ(),
+                        10,
+                        0.3, 0.4, 0.3,
+                        0.02
+                );
 
-                    // YOUR CUSTOM BLACK DUST (key part)
+                // black dust
+                w.spawnParticles(
+                        BLACK_DUST,
+                        victim.getX(),
+                        victim.getBodyY(0.5),
+                        victim.getZ(),
+                        12,
+                        0.25, 0.3, 0.25,
+                        0.0
+                );
+
+                // inward "collapse" effect
+                Vec3d dir = attacker.getRotationVec(1.0f).normalize();
+
+                for (int i = 0; i < 8; i++) {
+                    double angle = w.random.nextDouble() * Math.PI * 2;
+                    double radius = 0.6;
+
+                    double px = victim.getX() + Math.cos(angle) * radius;
+                    double pz = victim.getZ() + Math.sin(angle) * radius;
+                    double py = victim.getBodyY(0.5);
+
                     w.spawnParticles(
                             BLACK_DUST,
-                            victim.getX(),
-                            victim.getBodyY(0.5),
-                            victim.getZ(),
-                            12,
-                            0.25, 0.3, 0.25,
-                            0.0
+                            px, py, pz,
+                            0,
+                            dir.x, 0.05, dir.z,
+                            1.0
                     );
-
-                    // inward "collapse" effect (super nice detail)
-                    for (int i = 0; i < 8; i++) {
-                        double angle = w.random.nextDouble() * Math.PI * 2;
-                        double radius = 0.6;
-
-                        double px = victim.getX() + Math.cos(angle) * radius;
-                        double pz = victim.getZ() + Math.sin(angle) * radius;
-                        double py = victim.getBodyY(0.5);
-
-                        w.spawnParticles(
-                                BLACK_DUST,
-                                px, py, pz,
-                                0,
-                                dir.x, 0.05, dir.z,
-                                1.0
-                        );
-                    }
                 }
             }
+
+            // COMBO
             if (didBackstab && didUlt) {
 
                 w.playSound(
                         null,
                         victim.getBlockPos(),
-                        SoundEvents.ENTITY_ENDER_DRAGON_GROWL,
+                        ModSounds.BIGSTAB,
                         attacker.getSoundCategory(),
-                        0.5f,
-                        1.6f
+                        0.9f,
+                        0.8f
                 );
 
-                // sharper burst
                 w.spawnParticles(
                         ParticleTypes.CRIT,
                         victim.getX(),

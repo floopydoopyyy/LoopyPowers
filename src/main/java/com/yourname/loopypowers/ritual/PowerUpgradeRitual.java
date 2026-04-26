@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.ritual;
 
 import com.yourname.loopypowers.manager.PowerManager;
+import com.yourname.loopypowers.network.CameraShake;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
@@ -33,28 +34,42 @@ public class PowerUpgradeRitual implements Ritual {
     private static final int   STAGE_2_DAMAGE_INTERVAL = 12;
     private static final float STAGE_2_MIN_HEALTH      = 1.0f;
 
+    // Camera shake — values ramp across the three stages.
+    // Stage 1: barely perceptible, just a tremor as the presence arrives.
+    // Stage 2: noticeable, the bond being strained.
+    // Stage 3: strong at the reforge burst, then easing out.
+    private static final int   SHAKE_RADIUS          = 6;
+    private static final int   SHAKE_STAGE_1_INTERVAL = 20;   // once per second — subtle
+    private static final int   SHAKE_STAGE_2_INTERVAL = 10;   // twice per second
+    private static final int   SHAKE_STAGE_3_INTERVAL = 5;    // four times per second at peak
+    private static final float SHAKE_STAGE_1_BASE     = 0.08f;
+    private static final float SHAKE_STAGE_2_BASE     = 0.16f;
+    private static final float SHAKE_STAGE_3_BASE     = 0.22f;
+    private static final float SHAKE_STAGE_3_PEAK     = 0.38f; // burst on t==1
+
     /* ============================================================
        PARTICLES
-       Visual language: blinding divine gold, radiant white, warm amber,
-       and a hint of the player's own power-light returning stronger.
-       No darkness, no corruption. Pure overwhelming presence.
+       Visual language: divine magenta-pink, deep connection purple,
+       holy white, and a soft violet highlight.
+       The god's presence is not golden fire — it is something stranger
+       and more ancient, felt in the bones before it is seen.
        ============================================================ */
 
-    // Divine gold — the god's raw presence
-    private static final DustParticleEffect DIVINE_GOLD =
-            new DustParticleEffect(new Vector3f(1.00f, 0.82f, 0.10f), 1.5f);
-    // Radiant pale gold — outer halo and ambient glow
-    private static final DustParticleEffect GOLD_PALE =
-            new DustParticleEffect(new Vector3f(1.00f, 0.95f, 0.60f), 1.2f);
-    // Holy white — the pure centre of the connection
+    // Vivid magenta pink — the raw divine contact, the god's touch
+    private static final DustParticleEffect DIVINE_PINK =
+            new DustParticleEffect(new Vector3f(0.95f, 0.15f, 0.70f), 1.5f);
+    // Soft blush pink — ambient glow, the outer edge of the presence
+    private static final DustParticleEffect BLUSH_PINK =
+            new DustParticleEffect(new Vector3f(1.00f, 0.62f, 0.88f), 1.2f);
+    // Deep connection purple — the bond itself, thick and resonant
+    private static final DustParticleEffect BOND_PURPLE =
+            new DustParticleEffect(new Vector3f(0.52f, 0.08f, 0.80f), 1.5f);
+    // Soft violet — the transition between the pink and purple, where they merge
+    private static final DustParticleEffect VIOLET_SOFT =
+            new DustParticleEffect(new Vector3f(0.75f, 0.35f, 0.95f), 1.3f);
+    // Holy white — the pure centre of the reforged connection
     private static final DustParticleEffect HOLY_WHITE =
-            new DustParticleEffect(new Vector3f(0.98f, 0.98f, 1.00f), 1.3f);
-    // Warm amber — the heat of divine power
-    private static final DustParticleEffect AMBER =
-            new DustParticleEffect(new Vector3f(1.00f, 0.55f, 0.05f), 1.4f);
-    // Ascension blue-white — the player's own power resonating upward
-    private static final DustParticleEffect ASCEND_BLUE =
-            new DustParticleEffect(new Vector3f(0.80f, 0.92f, 1.00f), 1.1f);
+            new DustParticleEffect(new Vector3f(0.96f, 0.94f, 1.00f), 1.3f);
 
     /* ============================================================
        STATE
@@ -133,9 +148,9 @@ public class PowerUpgradeRitual implements Ritual {
 
     /* ============================================================
        STAGE 1 — The presence descends.
-       Golden light falls from above; the ground beneath the player
+       Pink light falls from above; the ground beneath the player
        ignites with divine sigils. The god is turning its attention
-       toward this mortal.
+       toward this mortal. Camera shake: barely perceptible.
        ============================================================ */
 
     private void tickStage1(ServerPlayerEntity sp, ServerWorld world, int t) {
@@ -148,9 +163,15 @@ public class PowerUpgradeRitual implements Ritual {
 
         double progress = (double) t / STAGE_1_TICKS;
         Vec3d  pos      = sp.getPos();
-        long   time     = world.getTime();
 
-        // Gold light falling from directly above — a column of divine attention
+        // Soft tremor — barely felt, like something vast shifting its attention
+        if (t % SHAKE_STAGE_1_INTERVAL == 0) {
+            // Intensity ramps very gently within stage 1 itself
+            float intensity = SHAKE_STAGE_1_BASE + (float) progress * 0.04f;
+            CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
+        }
+
+        // Pink light falling from directly above — a column of divine attention
         // descending onto the player. Particles spawn high and drift down slowly.
         if (t % 2 == 0) {
             int columnCount = (int)(4 + progress * 8);
@@ -158,7 +179,7 @@ public class PowerUpgradeRitual implements Ritual {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = world.random.nextDouble() * 1.0;
                 double h     = 8.0 + world.random.nextDouble() * 6.0;  // spawn high above
-                DustParticleEffect col = world.random.nextBoolean() ? DIVINE_GOLD : GOLD_PALE;
+                DustParticleEffect col = world.random.nextBoolean() ? DIVINE_PINK : BLUSH_PINK;
                 world.spawnParticles(col,
                         pos.x + Math.cos(angle) * r,
                         pos.y + h,
@@ -167,15 +188,16 @@ public class PowerUpgradeRitual implements Ritual {
             }
         }
 
-        // Expanding divine ring on the ground — the god's footprint forming
-        // A new ring pulse every 15 ticks, each one racing outward
-        int pulseTimer  = t % 15;
-        double ringR    = pulseTimer * 0.32;
+        // Expanding divine ring on the ground — the god's footprint forming.
+        // A new ring pulse every 15 ticks, each one racing outward.
+        int    pulseTimer = t % 15;
+        double ringR      = pulseTimer * 0.32;
         if (ringR > 0.3 && t % 2 == 0) {
             int ringPoints = 16;
             for (int i = 0; i < ringPoints; i++) {
                 double angle = Math.PI * 2.0 * i / ringPoints;
-                DustParticleEffect col = (pulseTimer < 8) ? DIVINE_GOLD : GOLD_PALE;
+                // Inner pulse is deep purple; outer edge fades to blush
+                DustParticleEffect col = (pulseTimer < 8) ? BOND_PURPLE : BLUSH_PINK;
                 world.spawnParticles(col,
                         pos.x + Math.cos(angle) * ringR,
                         pos.y + 0.05,
@@ -184,13 +206,13 @@ public class PowerUpgradeRitual implements Ritual {
             }
         }
 
-        // Slow ambient gold wisps rising from near the player — their own power
+        // Slow ambient purple wisps rising from near the player — their own power
         // beginning to stir in response to the divine attention
         if (t % 5 == 0) {
             for (int i = 0; i < 3; i++) {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = 0.3 + world.random.nextDouble() * 1.2;
-                world.spawnParticles(GOLD_PALE,
+                world.spawnParticles(VIOLET_SOFT,
                         pos.x + Math.cos(angle) * r,
                         pos.y + 0.1 + world.random.nextDouble() * 2.0 * progress,
                         pos.z + Math.sin(angle) * r,
@@ -205,7 +227,7 @@ public class PowerUpgradeRitual implements Ritual {
                     8, 0.5, 0.6, 0.5, 1.4);
         }
 
-        // Glowstone dust sparks from the ground — divine heat touching the earth
+        // GLOW sparks from the ground — divine heat touching the earth
         if (t % 6 == 0 && progress > 0.3f) {
             for (int i = 0; i < 3; i++) {
                 double angle = world.random.nextDouble() * Math.PI * 2;
@@ -229,8 +251,7 @@ public class PowerUpgradeRitual implements Ritual {
        STAGE 2 — The bond is tested.
        The god examines the existing connection — and it hurts.
        Streams of the player's own power are pulled upward to be
-       inspected and judged. The player is momentarily blinded by
-       proximity to divine presence.
+       inspected and judged. Camera shake: noticeable and building.
        ============================================================ */
 
     private void tickStage2(ServerPlayerEntity sp, ServerWorld world, int t) {
@@ -245,8 +266,15 @@ public class PowerUpgradeRitual implements Ritual {
         Vec3d  pos      = sp.getPos();
         long   time     = world.getTime();
 
+        // Shake ramps up through the stage — starts at the stage 2 base and
+        // climbs toward stage 3 base by the end. Fires twice per second.
+        if (t % SHAKE_STAGE_2_INTERVAL == 0) {
+            float intensity = SHAKE_STAGE_2_BASE + (float) progress * (SHAKE_STAGE_3_BASE - SHAKE_STAGE_2_BASE);
+            CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
+        }
+
         // Power streams rising: the player's connection being pulled upward for inspection.
-        // Six streams, each mapping to a different facet of their power, rising steeply.
+        // Six streams, each mapping to a different facet of their power.
         if (t % 2 == 0) {
             int streamCount = 6;
             for (int s = 0; s < streamCount; s++) {
@@ -261,9 +289,9 @@ public class PowerUpgradeRitual implements Ritual {
                     double h     = pos.y + 0.3 + i * (0.8 + progress * 0.5);
                     double angle = spin + i * 0.08;
                     DustParticleEffect col = switch (s % 3) {
-                        case 0  -> DIVINE_GOLD;
+                        case 0  -> DIVINE_PINK;
                         case 1  -> HOLY_WHITE;
-                        default -> AMBER;
+                        default -> BOND_PURPLE;
                     };
                     if (i < steps - 1) {   // body of the stream
                         world.spawnParticles(col,
@@ -282,13 +310,14 @@ public class PowerUpgradeRitual implements Ritual {
             }
         }
 
-        // Falling gold rain intensifies — divine scrutiny pressing down
+        // Falling pink rain intensifies — divine scrutiny pressing down
         if (t % 2 == 0) {
             int rainCount = (int)(6 + progress * 10);
             for (int i = 0; i < rainCount; i++) {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = world.random.nextDouble() * 1.8;
-                world.spawnParticles(world.random.nextBoolean() ? DIVINE_GOLD : GOLD_PALE,
+                DustParticleEffect col = world.random.nextBoolean() ? DIVINE_PINK : VIOLET_SOFT;
+                world.spawnParticles(col,
                         pos.x + Math.cos(angle) * r,
                         pos.y + 6.0 + world.random.nextDouble() * 4.0,
                         pos.z + Math.sin(angle) * r,
@@ -296,7 +325,19 @@ public class PowerUpgradeRitual implements Ritual {
             }
         }
 
-        // Flash of GLOW particles — the test flaring bright at intervals
+        // Purple ring pulsing outward at waist height — the bond being stretched
+        if (t % 8 == 0) {
+            int ringPoints = 14;
+            for (int i = 0; i < ringPoints; i++) {
+                double angle = Math.PI * 2.0 * i / ringPoints;
+                double speed = 0.12 + progress * 0.06;
+                world.spawnParticles(BOND_PURPLE,
+                        pos.x + Math.cos(angle) * 0.4, pos.y + 1.0, pos.z + Math.sin(angle) * 0.4,
+                        1, Math.cos(angle) * speed, 0.01, Math.sin(angle) * speed, 0.0);
+            }
+        }
+
+        // GLOW flash — the test flaring bright at intervals
         if (t % 8 == 0) {
             world.spawnParticles(ParticleTypes.GLOW,
                     pos.x, pos.y + 1.0, pos.z,
@@ -327,8 +368,8 @@ public class PowerUpgradeRitual implements Ritual {
        STAGE 3 — Reforging.
        The god has judged the connection worthy of strengthening.
        Divine energy floods downward through the bond — overwhelming,
-       glorious, painful in its intensity. A supernova of golden light
-       erupts from the player as the Level 2 connection locks in.
+       glorious, painful in its intensity. Camera shake: peaks at the
+       reforge burst then eases as the bond settles.
        ============================================================ */
 
     private void tickStage3(ServerPlayerEntity sp, ServerWorld world, int t) {
@@ -338,18 +379,21 @@ public class PowerUpgradeRitual implements Ritual {
             world.playSound(null, sp.getBlockPos(),
                     SoundEvents.BLOCK_BEACON_POWER_SELECT,     SoundCategory.PLAYERS, 1.0f, 0.9f);
 
-            // Opening reforge burst: a sphere of divine gold and white fired outward —
+            // Peak shake — the reforge moment hits hardest
+            CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, SHAKE_STAGE_3_PEAK);
+
+            // Opening reforge burst: a sphere of pink, purple, and white fired outward —
             // the god's power flooding into the player all at once
             Vec3d pos = sp.getPos();
-            for (int d = 0; d < 32; d++) {
-                double theta = d * Math.PI * 2.0 / 32;
+            for (int d = 0; d < 36; d++) {
+                double theta = d * Math.PI * 2.0 / 36;
                 double phi   = Math.PI * 0.3 + world.random.nextDouble() * Math.PI * 0.4;
                 double speed = 0.20 + world.random.nextDouble() * 0.12;
                 DustParticleEffect col = switch (d % 4) {
-                    case 0  -> DIVINE_GOLD;
+                    case 0  -> DIVINE_PINK;
                     case 1  -> HOLY_WHITE;
-                    case 2  -> GOLD_PALE;
-                    default -> AMBER;
+                    case 2  -> BOND_PURPLE;
+                    default -> VIOLET_SOFT;
                 };
                 world.spawnParticles(col, pos.x, pos.y + 1.0, pos.z,
                         1,
@@ -357,6 +401,13 @@ public class PowerUpgradeRitual implements Ritual {
                         Math.cos(phi) * speed,
                         Math.sin(phi) * Math.sin(theta) * speed,
                         0.0);
+            }
+            // Ground shockwave ring from the burst
+            for (int i = 0; i < 18; i++) {
+                double angle = i * Math.PI * 2.0 / 18;
+                world.spawnParticles(BOND_PURPLE,
+                        pos.x + Math.cos(angle) * 0.4, pos.y + 0.15, pos.z + Math.sin(angle) * 0.4,
+                        1, Math.cos(angle) * 0.30, 0.01, Math.sin(angle) * 0.30, 0.0);
             }
             world.spawnParticles(ParticleTypes.FLASH,
                     pos.x, pos.y + 1.0, pos.z, 4, 0.3, 0.3, 0.3, 0);
@@ -367,6 +418,15 @@ public class PowerUpgradeRitual implements Ritual {
         Vec3d  pos      = sp.getPos();
         double progress = (double) t / STAGE_3_TICKS;
         long   time     = world.getTime();
+
+        // Shake decays as the reforge settles — from STAGE_3_BASE down toward STAGE_1_BASE
+        // by the end. Fires four times per second early, reducing to twice late.
+        int shakeInterval = (progress < 0.50) ? SHAKE_STAGE_3_INTERVAL : SHAKE_STAGE_2_INTERVAL;
+        if (t % shakeInterval == 0) {
+            float intensity = SHAKE_STAGE_3_BASE * (float)(1.0 - progress * 0.65);
+            intensity = Math.max(intensity, SHAKE_STAGE_1_BASE);
+            CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
+        }
 
         // Blindness during the reforge peak — the bond flooding bright
         if (progress < 0.60f) {
@@ -380,14 +440,15 @@ public class PowerUpgradeRitual implements Ritual {
                     StatusEffects.LEVITATION, 8, 0, true, false, false));
         }
 
-        // Falling divine column: dense gold rain straight down onto the player —
+        // Falling divine column: dense pink and white rain straight down —
         // the full weight of the god's blessing pressing through the bond
         if (t % 2 == 0) {
             int columnCount = (int)(10 + (1.0 - progress) * 14);
             for (int i = 0; i < columnCount; i++) {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = world.random.nextDouble() * 0.8;
-                world.spawnParticles(world.random.nextBoolean() ? DIVINE_GOLD : HOLY_WHITE,
+                DustParticleEffect col = world.random.nextBoolean() ? DIVINE_PINK : HOLY_WHITE;
+                world.spawnParticles(col,
                         pos.x + Math.cos(angle) * r,
                         pos.y + 7.0 + world.random.nextDouble() * 5.0,
                         pos.z + Math.sin(angle) * r,
@@ -403,9 +464,9 @@ public class PowerUpgradeRitual implements Ritual {
             double haloSpeed  = time * 0.12;
             for (int i = 0; i < haloPoints; i++) {
                 double angle = haloSpeed + i * Math.PI * 2.0 / haloPoints;
-                DustParticleEffect col = (i % 3 == 0) ? DIVINE_GOLD
+                DustParticleEffect col = (i % 3 == 0) ? DIVINE_PINK
                         : (i % 3 == 1) ? HOLY_WHITE
-                        : GOLD_PALE;
+                        : BOND_PURPLE;
                 world.spawnParticles(col,
                         pos.x + Math.cos(angle) * haloR,
                         pos.y + 1.85,
@@ -417,11 +478,11 @@ public class PowerUpgradeRitual implements Ritual {
         // Second inner halo spinning the opposite direction — layered halos
         if (t % 3 == 0) {
             int    innerPoints = 12;
-            double innerR      = (0.8 - progress * 0.25);
+            double innerR      = 0.8 - progress * 0.25;
             double innerSpeed  = -time * 0.09;
             for (int i = 0; i < innerPoints; i++) {
                 double angle = innerSpeed + i * Math.PI * 2.0 / innerPoints;
-                world.spawnParticles(AMBER,
+                world.spawnParticles(VIOLET_SOFT,
                         pos.x + Math.cos(angle) * innerR,
                         pos.y + 1.6,
                         pos.z + Math.sin(angle) * innerR,
@@ -447,9 +508,9 @@ public class PowerUpgradeRitual implements Ritual {
 
         // Calming: the light softens, the bond settled into the player
         if (progress > 0.72f) {
-            world.spawnParticles(GOLD_PALE,
+            world.spawnParticles(BLUSH_PINK,
                     pos.x, pos.y + 1.0, pos.z, 1, 0.5, 0.4, 0.5, 0.005);
-            world.spawnParticles(ASCEND_BLUE,
+            world.spawnParticles(HOLY_WHITE,
                     pos.x, pos.y + 1.0, pos.z, 1, 0.4, 0.3, 0.4, 0.004);
         }
 
@@ -486,13 +547,20 @@ public class PowerUpgradeRitual implements Ritual {
         // Heal — the god's blessing restored the cost of the test
         sp.heal(4.0f);
 
-        // Completion burst: radiant gold and white sphere, triumphant
+        // Final gentle shake — the connection locking into place with a satisfying thud
+        CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, 0.20f);
+
+        // Completion burst: pink, purple, and white sphere — triumphant
         Vec3d pos = sp.getPos();
-        for (int d = 0; d < 28; d++) {
+        for (int d = 0; d < 32; d++) {
             double theta = world.random.nextDouble() * Math.PI * 2;
             double phi   = world.random.nextDouble() * Math.PI;
             double speed = 0.16;
-            DustParticleEffect col = (d % 2 == 0) ? DIVINE_GOLD : HOLY_WHITE;
+            DustParticleEffect col = switch (d % 3) {
+                case 0  -> DIVINE_PINK;
+                case 1  -> HOLY_WHITE;
+                default -> BOND_PURPLE;
+            };
             world.spawnParticles(col, pos.x, pos.y + 1.0, pos.z,
                     1,
                     Math.sin(phi) * Math.cos(theta) * speed,
@@ -500,10 +568,11 @@ public class PowerUpgradeRitual implements Ritual {
                     Math.sin(phi) * Math.sin(theta) * speed,
                     0.0);
         }
-        world.spawnParticles(DIVINE_GOLD,  pos.x, pos.y + 1.0, pos.z, 18, 1.3, 1.1, 1.3, 0.09);
-        world.spawnParticles(GOLD_PALE,    pos.x, pos.y + 1.0, pos.z, 14, 1.1, 1.0, 1.1, 0.08);
+        world.spawnParticles(DIVINE_PINK,  pos.x, pos.y + 1.0, pos.z, 18, 1.3, 1.1, 1.3, 0.09);
+        world.spawnParticles(BOND_PURPLE,  pos.x, pos.y + 1.0, pos.z, 14, 1.1, 1.0, 1.1, 0.08);
         world.spawnParticles(HOLY_WHITE,   pos.x, pos.y + 1.0, pos.z, 12, 0.9, 0.8, 0.9, 0.07);
-        world.spawnParticles(ASCEND_BLUE,  pos.x, pos.y + 1.0, pos.z,  8, 0.7, 0.7, 0.7, 0.06);
+        world.spawnParticles(VIOLET_SOFT,  pos.x, pos.y + 1.0, pos.z, 10, 0.8, 0.8, 0.8, 0.07);
+        world.spawnParticles(BLUSH_PINK,   pos.x, pos.y + 1.0, pos.z,  8, 0.7, 0.7, 0.7, 0.06);
         world.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, pos.x, pos.y + 1.0, pos.z,
                 16, 1.0, 1.2, 1.0, 0.18);
         world.spawnParticles(ParticleTypes.GLOW, pos.x, pos.y + 1.0, pos.z,
@@ -522,7 +591,7 @@ public class PowerUpgradeRitual implements Ritual {
                 SoundCategory.PLAYERS, 0.8f, 1.4f);
 
         sp.sendMessage(
-                net.minecraft.text.Text.literal("§6Your connection has been strengthened to Level 2."),
+                net.minecraft.text.Text.literal("§dYour connection has been strengthened to Level 2."),
                 false
         );
     }

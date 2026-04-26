@@ -382,14 +382,14 @@ public class SoundPower implements Power {
         w.spawnEntity(bolt);
 
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_SCULK_SHRIEKER_SHRIEK,
-                player.getSoundCategory(), 0.6f, 1.6f);
+                ModSounds.BOLT,
+                player.getSoundCategory(), 0.4f, 1.2f);
     }
 
     // SECONDARY
     // stats
-    private static final int BD_PULSE_COUNT = 8;
-    private static final int BD_PULSE_GAP_TICKS = 4;     // spacing between pull pulses
+    private static final int BD_PULSE_COUNT = 6;
+    private static final int BD_PULSE_GAP_TICKS = 5;     // spacing between pull pulses
     private static final int BD_FINAL_DELAY_TICKS = 2;  // delay before big burst
 
     private static final double BD_PULL_RADIUS = 10.0;   // who gets pulled
@@ -489,7 +489,7 @@ public class SoundPower implements Power {
         List<LivingEntity> nearby = w.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != caster);
 
         // Bigger fx
-        w.playSound(null, caster.getBlockPos(), ModSounds.BASSDROP, caster.getSoundCategory(), 1.0f, 0.95f);
+        w.playSound(null, caster.getBlockPos(), ModSounds.BASSDROP, caster.getSoundCategory(), 1.0f, 1.00f);
         w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, cPos.x, cPos.y + 0.25, cPos.z, 1, 0, 0, 0, 0);
         w.spawnParticles(ParticleTypes.SONIC_BOOM, cPos.x, cPos.y + 1.0, cPos.z, 1, 0, 0, 0, 0);
 

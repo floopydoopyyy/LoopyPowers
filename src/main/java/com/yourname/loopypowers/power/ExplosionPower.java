@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
@@ -625,14 +626,14 @@ public class ExplosionPower implements Power {
         // explosion fx
         if (finisher) {
             w.playSound(null, player.getBlockPos(),
-                    SoundEvents.ENTITY_GENERIC_EXPLODE,
+                    ModSounds.EXPLODEBIG,
                     player.getSoundCategory(),
                     0.95f, 0.85f);
             CameraShake.shakeNearby(player, 14.0, 16, 1.55f);
         } else {
             float pitch = 1.05f + 0.12f * popIndex;
             w.playSound(null, player.getBlockPos(),
-                    SoundEvents.ENTITY_GENERIC_EXPLODE,
+                    ModSounds.EXPLODEBIG,
                     player.getSoundCategory(),
                     0.8f, pitch);
             CameraShake.shakeNearby(player, 9.0, 8, 0.9f);

@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.block.ModBlocks;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
@@ -144,16 +145,16 @@ public class NaturePower implements Power {
     public void activatePrimary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
 
-        // Spawn in front of player, but NOT too high (so ground mobs still overlap)
+        // Spawn in front of player
         Vec3d look = player.getRotationVec(1.0f).normalize();
         Vec3d spawn = player.getPos().add(look.multiply(1.2)).add(0, 0.6, 0);
 
-        // Create a deterministic gas instance (no AreaEffectCloudEntity involved)
+        // Create a deterministic gas instance
         int seed = (int)(w.getTime() ^ player.getUuid().getLeastSignificantBits());
         GAS.add(new GasInstance(player.getUuid(), w.getRegistryKey(), spawn, GAS_DURATION_TICKS, seed));
 
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_BREWING_STAND_BREW,
+                ModSounds.SPRAY,
                 player.getSoundCategory(),
                 0.8f, 0.9f);
 
@@ -169,7 +170,7 @@ public class NaturePower implements Power {
     }
 
     private static void tickGasWorld(ServerWorld w) {
-        // Ensure we process this world only once per tick (onTick runs per player)
+        // Ensure process this world only once per tick (onTick runs per player)
         long now = w.getTime();
         RegistryKey<World> key = w.getRegistryKey();
         Long last = GAS_LAST_TICK.get(key);
@@ -204,9 +205,7 @@ public class NaturePower implements Power {
             double minY = center.y - halfH;
             double maxY = center.y + halfH;
 
-            // =========================
-            // VISUALS: DENSE VOLUME FOG
-            // =========================
+            // VISUALS
             int count = (int) MathHelper.lerp(t, GAS_PARTICLES_MIN, GAS_PARTICLES_MAX);
 
             // thick core
@@ -229,7 +228,7 @@ public class NaturePower implements Power {
                 );
             }
 
-            // occasional puff (very noticeable)
+            // occasional particles
             if (((now + g.seed) % 10L) == 0L) {
                 w.spawnParticles(
                         GAS_DUST,
@@ -240,9 +239,7 @@ public class NaturePower implements Power {
                 );
             }
 
-            // =========================
-            // POISON: RELIABLE + CONSTANT
-            // =========================
+            // POISON
             if (((g.age + g.seed) % GAS_APPLY_INTERVAL_TICKS) != 0) continue;
 
             // Small vertical padding so it feels like “fog volume” not a razor slab
@@ -357,7 +354,7 @@ public class NaturePower implements Power {
 
         CAGES.put(player.getUuid(), state);
 
-        w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_GRASS_PLACE, player.getSoundCategory(), 0.9f, 1.0f);
+        w.playSound(null, player.getBlockPos(), ModSounds.ARENACREATE, player.getSoundCategory(), 0.9f, 1.0f);
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
@@ -462,7 +459,7 @@ public class NaturePower implements Power {
                 0.02
         );
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_GRASS_PLACE,
+                ModSounds.VINELASH,
                 player.getSoundCategory(),
                 1.0f, 0.8f);
 

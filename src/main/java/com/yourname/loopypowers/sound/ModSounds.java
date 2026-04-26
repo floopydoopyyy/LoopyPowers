@@ -34,6 +34,14 @@ public final class ModSounds {
     public static final Identifier LUNGESTART_ID     = new Identifier(Loopypowers.MOD_ID, "lungestart");
     public static final Identifier SHATTER_ID        = new Identifier(Loopypowers.MOD_ID, "shatter");
     public static final Identifier SHOCK_ID          = new Identifier(Loopypowers.MOD_ID, "shock");
+    public static final Identifier BACKSTAB_ID   = new Identifier(Loopypowers.MOD_ID, "backstab");
+    public static final Identifier BIGSTAB_ID    = new Identifier(Loopypowers.MOD_ID, "bigstab");
+    public static final Identifier BASSBURST_ID  = new Identifier(Loopypowers.MOD_ID, "bassburst");
+    public static final Identifier ARENACREATE_ID = new Identifier(Loopypowers.MOD_ID, "arenacreate");
+    public static final Identifier BOLT_ID        = new Identifier(Loopypowers.MOD_ID, "bolt");
+    public static final Identifier EXPLODEBIG_ID  = new Identifier(Loopypowers.MOD_ID, "explodebig");
+    public static final Identifier SPRAY_ID       = new Identifier(Loopypowers.MOD_ID, "spray");
+    public static final Identifier VINELASH_ID    = new Identifier(Loopypowers.MOD_ID, "vinelash");
 
     // SoundEvents
     public static final SoundEvent THUNDERCLAP     = SoundEvent.of(THUNDERCLAP_ID);
@@ -59,6 +67,14 @@ public final class ModSounds {
     public static final SoundEvent LUNGESTART     = SoundEvent.of(LUNGESTART_ID);
     public static final SoundEvent SHATTER        = SoundEvent.of(SHATTER_ID);
     public static final SoundEvent SHOCK          = SoundEvent.of(SHOCK_ID);
+    public static final SoundEvent BACKSTAB   = SoundEvent.of(BACKSTAB_ID);
+    public static final SoundEvent BIGSTAB    = SoundEvent.of(BIGSTAB_ID);
+    public static final SoundEvent BASSBURST  = SoundEvent.of(BASSBURST_ID);
+    public static final SoundEvent ARENACREATE = SoundEvent.of(ARENACREATE_ID);
+    public static final SoundEvent BOLT        = SoundEvent.of(BOLT_ID);
+    public static final SoundEvent EXPLODEBIG  = SoundEvent.of(EXPLODEBIG_ID);
+    public static final SoundEvent SPRAY       = SoundEvent.of(SPRAY_ID);
+    public static final SoundEvent VINELASH    = SoundEvent.of(VINELASH_ID);
 
     private ModSounds() {}
 
@@ -86,5 +102,14 @@ public final class ModSounds {
         Registry.register(Registries.SOUND_EVENT, LUNGESTART_ID, LUNGESTART);
         Registry.register(Registries.SOUND_EVENT, SHATTER_ID, SHATTER);
         Registry.register(Registries.SOUND_EVENT, SHOCK_ID, SHOCK);
+        Registry.register(Registries.SOUND_EVENT, BACKSTAB_ID, BACKSTAB);
+        Registry.register(Registries.SOUND_EVENT, BIGSTAB_ID, BIGSTAB);
+        Registry.register(Registries.SOUND_EVENT, BASSBURST_ID, BASSBURST);
+        Registry.register(Registries.SOUND_EVENT, ARENACREATE_ID, ARENACREATE);
+        Registry.register(Registries.SOUND_EVENT, BOLT_ID, BOLT);
+        Registry.register(Registries.SOUND_EVENT, EXPLODEBIG_ID, EXPLODEBIG);
+        Registry.register(Registries.SOUND_EVENT, SPRAY_ID, SPRAY);
+        Registry.register(Registries.SOUND_EVENT, VINELASH_ID, VINELASH);
+
     }
 } // doing this sucks

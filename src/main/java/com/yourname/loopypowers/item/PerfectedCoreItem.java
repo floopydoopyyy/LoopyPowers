@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.item;
 
 import com.yourname.loopypowers.manager.PowerManager;
+import com.yourname.loopypowers.ritual.RitualManager;
 import net.minecraft.client.item.TooltipContext;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -80,22 +81,7 @@ public class PerfectedCoreItem extends Item {
         }
 
         // apply it
-        PowerManager.setLevel(player, 3);
-
-        player.sendMessage(
-                Text.literal("§dYour connection has been strengthened to Level 3."),
-                false
-        );
-
-        // sound
-        world.playSound(
-                null,
-                player.getBlockPos(),
-                net.minecraft.sound.SoundEvents.ENTITY_PLAYER_LEVELUP,
-                player.getSoundCategory(),
-                1.0f,
-                1.2f
-        );
+        RitualManager.startRitual(player, RitualManager.RitualType.PERFECTED_UPGRADE);
 
         // consume item
         if (!player.getAbilities().creativeMode) {

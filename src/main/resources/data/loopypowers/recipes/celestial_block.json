@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "###",
+    "###",
+    "###"
+  ],
+  "key": {
+    "#": {
+      "item": "loopypowers:celestial_shard"
+    }
+  },
+  "result": {
+    "item": "loopypowers:celestial_block",
+    "count": 1
+  }
+}

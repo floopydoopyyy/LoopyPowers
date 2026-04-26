@@ -6,6 +6,7 @@ import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -15,6 +16,7 @@ import net.minecraft.util.math.*;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LightningEntity;
 import com.yourname.loopypowers.damage.ModDamageTypes;
+import org.joml.Vector3f;
 
 import java.util.Random;
 import java.util.List;
@@ -22,12 +24,26 @@ import java.util.List;
 public class LightningPower implements Power {
     private static final Random RNG = new Random();
 
+    /* ============================================================
+       PARTICLES — yellow dust added alongside vanilla spark types
+       ============================================================ */
+
+    // Bright lightning yellow — primary colour for FX
+    private static final DustParticleEffect LIGHTNING_YELLOW =
+            new DustParticleEffect(new Vector3f(1.00f, 0.88f, 0.05f), 1.4f);
+    // Pale arc gold — secondary highlight, outer edges of blasts
+    private static final DustParticleEffect ARC_GOLD =
+            new DustParticleEffect(new Vector3f(1.00f, 0.95f, 0.55f), 1.1f);
+    // White-yellow flash — used on the very hottest moments (hit centre, ult strike)
+    private static final DustParticleEffect BOLT_WHITE =
+            new DustParticleEffect(new Vector3f(1.00f, 1.00f, 0.82f), 1.6f);
+
     // TAGS N TIMERS CONSTANTS
     private static final String CHARGE_TICKS = "lt_charge_ticks_"; // PASSIVE
     private static final String CHARGE_LOCK = "lt_charge_lock_";   //
-    // PRIMARY
+
+    // PRIMARY — now omnidirectional, no cone
     private static final double CLAP_RANGE = 7.0;
-    private static final double CLAP_ANGLE_DEG = 60.0;
 
     private static final float CLAP_MAX_DAMAGE = 8.0f;   // close
     private static final float CLAP_MIN_DAMAGE = 2.5f;   // far
@@ -66,10 +82,9 @@ public class LightningPower implements Power {
             w.playSound(null, player.getBlockPos(),
                     SoundEvents.BLOCK_BEACON_POWER_SELECT,
                     player.getSoundCategory(), 0.8f, 1.6f);
-            // particles
-            w.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                    player.getX(), player.getY() + 1.0, player.getZ(),
-                    40, 0.6, 0.9, 0.6, 0.08);
+
+            // bigger full-charge notification — yellow ring burst + sparks
+            spawnChargeReadyBurst(w, player);
         }
 
         // If charge leaves tier 4
@@ -89,6 +104,30 @@ public class LightningPower implements Power {
     private static final int MIN_PROC_TICKS = 20 * 2; // must wait 2s without damaging to proc
     private static final String CHARGE_READY = "lt_charge_ready"; // marker, checks if charged
 
+    // ring burst when fully charged — much more noticeable than before
+    private static void spawnChargeReadyBurst(ServerWorld world, ServerPlayerEntity player) {
+        Vec3d pos = player.getPos();
+
+        // two concentric rings at ground + waist height
+        for (double yOffset : new double[]{ 0.15, 1.0 }) {
+            int points = 24;
+            for (int i = 0; i < points; i++) {
+                double angle = i * Math.PI * 2.0 / points;
+                double speed = 0.18;
+                world.spawnParticles(LIGHTNING_YELLOW,
+                        pos.x + Math.cos(angle) * 0.4, pos.y + yOffset, pos.z + Math.sin(angle) * 0.4,
+                        1, Math.cos(angle) * speed, 0.01, Math.sin(angle) * speed, 0.0);
+            }
+        }
+        // upward column of sparks
+        world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
+                player.getX(), player.getY() + 1.0, player.getZ(),
+                50, 0.5, 0.8, 0.5, 0.10);
+        world.spawnParticles(BOLT_WHITE,
+                player.getX(), player.getY() + 1.0, player.getZ(),
+                14, 0.4, 0.5, 0.4, 0.06);
+    }
+
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
         ServerWorld world = attacker.getServerWorld();
@@ -97,6 +136,9 @@ public class LightningPower implements Power {
         world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                 target.getX(), target.getY() + 1.0, target.getZ(),
                 6, 0.25, 0.35, 0.25, 0.02);
+        world.spawnParticles(ARC_GOLD,
+                target.getX(), target.getY() + 1.0, target.getZ(),
+                4, 0.15, 0.20, 0.15, 0.015);
         world.playSound(null, target.getBlockPos(),
                 SoundEvents.BLOCK_REDSTONE_TORCH_BURNOUT, // sound
                 attacker.getSoundCategory(), 0.25f, 1.6f);
@@ -124,7 +166,10 @@ public class LightningPower implements Power {
         // Lightning based on tiers
         spawnTierLightning(world, target, tier);
 
-        // PARTICLES
+        // yellow ring burst on the target — scales with tier
+        spawnHitRing(world, target, tier);
+
+        // PARTICLES — yellow dust added alongside sparks
         int sparks = switch (tier) {
             case 1 -> 18;
             case 2 -> 28;
@@ -135,10 +180,17 @@ public class LightningPower implements Power {
         world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                 target.getX(), target.getY() + 1.0, target.getZ(),
                 sparks, 0.45, 0.7, 0.45, 0.08);
+        world.spawnParticles(LIGHTNING_YELLOW,
+                target.getX(), target.getY() + 1.0, target.getZ(),
+                sparks / 2, 0.35, 0.55, 0.35, 0.07);
 
         world.playSound(null, target.getBlockPos(),
                 SoundEvents.ENTITY_LIGHTNING_BOLT_IMPACT,
-                attacker.getSoundCategory(), 0.6f, 1.2f + (tier * 0.1f));
+                attacker.getSoundCategory(), 0.4f, 1.2f + (tier * 0.1f));
+
+        world.playSound(null, target.getBlockPos(),
+                ModSounds.SHOCK,
+                attacker.getSoundCategory(), 0.9f, 1.00f);
 
         // Stun
         if (tier >= 3) {
@@ -183,10 +235,12 @@ public class LightningPower implements Power {
 
                 spawnChainTrail(world, a, b); // spawns chain effect
 
-
                 world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                         next.getX(), next.getY() + 1.0, next.getZ(),
                         14, 0.35, 0.5, 0.35, 0.06);
+                world.spawnParticles(LIGHTNING_YELLOW,
+                        next.getX(), next.getY() + 1.0, next.getZ(),
+                        8, 0.25, 0.35, 0.25, 0.05);
 
                 current = next;
             }
@@ -202,6 +256,23 @@ public class LightningPower implements Power {
 
         // Small lock
         setSingleTimerTag(attacker, CHARGE_LOCK, 2);
+    }
+
+    // yellow ring that expands outward from the target on a charged hit
+    private static void spawnHitRing(ServerWorld world, LivingEntity target, int tier) {
+        int points   = 8 + tier * 4;   // more points at higher tier
+        double speed = 0.12 + tier * 0.04;
+        double h     = target.getY() + 0.8;
+
+        for (int i = 0; i < points; i++) {
+            double angle = i * Math.PI * 2.0 / points;
+            DustParticleEffect col = (i % 2 == 0) ? LIGHTNING_YELLOW : BOLT_WHITE;
+            world.spawnParticles(col,
+                    target.getX() + Math.cos(angle) * 0.3,
+                    h,
+                    target.getZ() + Math.sin(angle) * 0.3,
+                    1, Math.cos(angle) * speed, 0.01, Math.sin(angle) * speed, 0.0);
+        }
     }
 
     private static int getChargeTier(int chargeTicks) {
@@ -254,26 +325,32 @@ public class LightningPower implements Power {
 
         Vec3d p = from;
         for (int i = 0; i <= steps; i++) {
-            world.spawnParticles(
-                    ParticleTypes.ELECTRIC_SPARK,
-                    p.x, p.y, p.z,
-                    1,
-                    0.04, 0.10, 0.8,
-                    0.0
-            );
+            // alternate yellow dust and sparks along the chain for a more vivid trail
+            if (i % 3 == 0) {
+                world.spawnParticles(LIGHTNING_YELLOW,
+                        p.x, p.y, p.z,
+                        1, 0.03, 0.08, 0.03, 0.0);
+            } else {
+                world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
+                        p.x, p.y, p.z,
+                        1, 0.04, 0.10, 0.8, 0.0);
+            }
             p = p.add(step);
         }
     }
 
-    // PRIMARY
+    /* ============================================================
+       PRIMARY — now hits everyone in range, not just the cone.
+       Damage still falls off with distance.
+       ============================================================ */
+
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
-        Vec3d origin = player.getEyePos();
-        Vec3d forward = player.getRotationVec(1.0f).normalize();
-        double cos = Math.cos(Math.toRadians(CLAP_ANGLE_DEG));
+        Vec3d origin = player.getPos().add(0, 1, 0);
 
+        // full sphere around the player — no angle check anymore
         Box box = new Box(player.getPos(), player.getPos()).expand(CLAP_RANGE, 2.5, CLAP_RANGE);
 
         List<LivingEntity> targets = world.getEntitiesByClass(
@@ -281,19 +358,17 @@ public class LightningPower implements Power {
                 box,
                 e -> e.isAlive() && e != player
         );
+
         //animations
         player.swingHand(Hand.MAIN_HAND, true);
 
-        // particles n sound
+        // radial shockwave burst — replaces the old cone since we're not directional anymore
+        spawnClapBurst(world, player);
+
         world.playSound(null, player.getBlockPos(),
                 ModSounds.THUNDERCLAP,
                 player.getSoundCategory(),
                 0.7f, 1.4f);
-
-        world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                player.getX(), player.getY() + 1.0, player.getZ(),
-                40, 0.8, 0.8, 0.8, 0.1);
-        spawnClapCone(world, player);
 
         int hits = 0;
 
@@ -302,14 +377,6 @@ public class LightningPower implements Power {
             double dist = to.length();
             if (dist < 0.001 || dist > CLAP_RANGE) continue;
 
-            Vec3d dir = to.normalize();
-
-            // cone check
-            if (forward.dotProduct(dir) < cos) continue;
-
-            // LOS
-            if (!player.canSee(target)) continue;
-
             // damage
             double t = 1.0 - (dist / CLAP_RANGE); // 1 near, 0 far
             float damage = (float) (CLAP_MIN_DAMAGE + t * (CLAP_MAX_DAMAGE - CLAP_MIN_DAMAGE));
@@ -317,6 +384,7 @@ public class LightningPower implements Power {
             target.damage(ModDamageTypes.thunderclap(player.getWorld(), player), damage);
 
             // knockback
+            Vec3d dir = to.normalize();
             double kb = CLAP_KB_MIN + t * (CLAP_KB_MAX - CLAP_KB_MIN);
             Vec3d push = dir.multiply(kb).add(0, 0.1 + t * 0.15, 0); // knockback (change constants above)
             target.addVelocity(push.x, push.y, push.z);
@@ -330,11 +398,16 @@ public class LightningPower implements Power {
                 ));
             }
 
-            // particles
+            // hit spark burst at each target, scaled by proximity
             world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                     target.getX(), target.getY() + 1.0, target.getZ(),
-                    (int) (8 + 20 * t),
-                    0.4, 0.6, 0.4, 0.06);
+                    (int)(8 + 20 * t), 0.4, 0.6, 0.4, 0.06);
+            world.spawnParticles(LIGHTNING_YELLOW,
+                    target.getX(), target.getY() + 1.0, target.getZ(),
+                    (int)(6 + 12 * t), 0.3, 0.4, 0.3, 0.05);
+            world.spawnParticles(BOLT_WHITE,
+                    target.getX(), target.getY() + 0.8, target.getZ(),
+                    (int)(3 + 6 * t), 0.2, 0.2, 0.2, 0.04);
 
             hits++;
         }
@@ -347,68 +420,62 @@ public class LightningPower implements Power {
         }
     }
 
-    private void spawnClapCone(ServerWorld world, ServerPlayerEntity player) {
-
+    // radial thunderclap shockwave: three expanding rings + a central spark column
+    private void spawnClapBurst(ServerWorld world, ServerPlayerEntity player) {
         Vec3d center = player.getPos();
-        Vec3d forward = player.getRotationVec(1.0f).normalize();
 
-        double halfAngle = Math.toRadians(CLAP_ANGLE_DEG / 1.2); //note
-        int radialSteps = 14;
-        int arcPoints = 35;
+        // three rings at different radii fired simultaneously — looks like a shockwave expanding
+        for (double ringFraction : new double[]{ 0.35, 0.65, 1.0 }) {
+            double r      = CLAP_RANGE * ringFraction;
+            int    points = (int)(16 + ringFraction * 20);
+            double speed  = 0.18 + ringFraction * 0.08;
 
-        for (int r = 1; r <= radialSteps; r++) {
+            for (int i = 0; i < points; i++) {
+                double angle = i * Math.PI * 2.0 / points;
 
-            double radius = CLAP_RANGE * ((double) r / radialSteps);
+                // inner ring: yellow; mid: arc gold; outer: mixed sparks + yellow
+                DustParticleEffect col = ringFraction < 0.5 ? BOLT_WHITE
+                        : ringFraction < 0.8 ? LIGHTNING_YELLOW
+                        : ARC_GOLD;
 
-            for (int i = 0; i <= arcPoints; i++) {
+                // small random jitter to break the perfect circle and look more electric
+                double jitter = (RNG.nextDouble() - 0.5) * 0.5;
+                world.spawnParticles(col,
+                        center.x + Math.cos(angle) * (r + jitter),
+                        center.y + 0.2 + RNG.nextDouble() * 2.2,
+                        center.z + Math.sin(angle) * (r + jitter),
+                        1, Math.cos(angle) * speed * 0.2, 0.01, Math.sin(angle) * speed * 0.2, 0.0);
 
-                double angle = -halfAngle + (2 * halfAngle) * ((double) i / arcPoints);
-
-                double cos = Math.cos(angle);
-                double sin = Math.sin(angle);
-
-                Vec3d dir = new Vec3d(
-                        forward.x * cos - forward.z * sin,
-                        0,
-                        forward.x * sin + forward.z * cos
-                ).normalize();
-
-                Vec3d pos = center.add(dir.multiply(radius + RNG.nextDouble() * 0.9)); // crackle effect
-
-                // random stuff
-                double x = pos.x + (RNG.nextDouble() - 0.5) * 0.35;
-                double y = center.y + 0.2 + (RNG.nextDouble() - 0.5) * 2.5; // increase multiplier to make cone more coney
-                double z = pos.z + (RNG.nextDouble() - 0.5) * 0.35;
-
-                if (RNG.nextFloat() < 0.75f) {
-
-                    var particle = switch (RNG.nextInt(3)) {
-                        case 0 -> ParticleTypes.ELECTRIC_SPARK;
-                        case 1 -> ParticleTypes.END_ROD;
-                        default -> ParticleTypes.FIREWORK;
-                    };
-
-                    world.spawnParticles(
-                            particle,
-                            x, y, z,
-                            1,
-                            0, 0, 0,
-                            0
-                    );
-
-                    if (RNG.nextFloat() < 0.12f) { //random lines
-                        world.spawnParticles(
-                                ParticleTypes.ELECTRIC_SPARK,
-                                pos.x, pos.y, pos.z,
-                                3,
-                                dir.x * 0.3,
-                                0.05,
-                                dir.z * 0.3,
-                                0.01
-                        );
-                    }
+                // sparse electric sparks layered on top of the outer ring
+                if (ringFraction >= 1.0 && RNG.nextFloat() < 0.40f) {
+                    world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
+                            center.x + Math.cos(angle) * r,
+                            center.y + 0.3 + RNG.nextDouble() * 2.0,
+                            center.z + Math.sin(angle) * r,
+                            1, Math.cos(angle) * 0.06, 0.02, Math.sin(angle) * 0.06, 0.01);
                 }
             }
+        }
+
+        // central upward column of sparks and yellow dust — the clap origin
+        world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
+                center.x, center.y + 1.0, center.z,
+                45, 0.8, 0.8, 0.8, 0.10);
+        world.spawnParticles(LIGHTNING_YELLOW,
+                center.x, center.y + 1.0, center.z,
+                20, 0.6, 0.7, 0.6, 0.08);
+        world.spawnParticles(BOLT_WHITE,
+                center.x, center.y + 1.0, center.z,
+                8, 0.3, 0.4, 0.3, 0.05);
+
+        // END_ROD spikes fired outward to represent actual arc paths
+        for (int i = 0; i < 12; i++) {
+            double angle = i * Math.PI * 2.0 / 12;
+            world.spawnParticles(ParticleTypes.END_ROD,
+                    center.x + Math.cos(angle) * 0.5,
+                    center.y + 0.5 + RNG.nextDouble() * 1.5,
+                    center.z + Math.sin(angle) * 0.5,
+                    1, Math.cos(angle) * 0.18, 0.03, Math.sin(angle) * 0.18, 0.0);
         }
     } // my head hurts
 
@@ -429,8 +496,65 @@ public class LightningPower implements Power {
 
         //used to be code to strike nearby entities with lightning but this was silly
 
-        // particles
+        spawnSuperchargeBurst(world, player);
+    }
+
+    // full supercharge FX: concentric rings, upward column, arc spikes, camera shake
+    private void spawnSuperchargeBurst(ServerWorld world, ServerPlayerEntity player) {
+        Vec3d center = player.getPos();
+
+        // tight charge ring at the feet
         spawnChargeRing(world, player);
+
+        // large expanding ring fired outward from the player
+        int outerPoints = 32;
+        double outerSpeed = 0.30;
+        for (int i = 0; i < outerPoints; i++) {
+            double angle = i * Math.PI * 2.0 / outerPoints;
+            DustParticleEffect col = (i % 3 == 0) ? BOLT_WHITE
+                    : (i % 3 == 1) ? LIGHTNING_YELLOW
+                    : ARC_GOLD;
+            world.spawnParticles(col,
+                    center.x + Math.cos(angle) * 0.4, center.y + 0.3, center.z + Math.sin(angle) * 0.4,
+                    1, Math.cos(angle) * outerSpeed, 0.01, Math.sin(angle) * outerSpeed, 0.0);
+        }
+
+        // dense spark + yellow upward column — the charge flooding into the player
+        world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
+                center.x, center.y + 0.5, center.z,
+                80, 0.7, 1.2, 0.7, 0.12);
+        world.spawnParticles(LIGHTNING_YELLOW,
+                center.x, center.y + 1.0, center.z,
+                40, 0.5, 1.0, 0.5, 0.09);
+        world.spawnParticles(BOLT_WHITE,
+                center.x, center.y + 1.0, center.z,
+                16, 0.3, 0.8, 0.3, 0.07);
+
+        // arc spikes around the player — 8 END_ROD bolts fired outward at body height
+        for (int i = 0; i < 8; i++) {
+            double angle = i * Math.PI * 2.0 / 8;
+            world.spawnParticles(ParticleTypes.END_ROD,
+                    center.x + Math.cos(angle) * 0.4,
+                    center.y + 0.8 + RNG.nextDouble() * 1.0,
+                    center.z + Math.sin(angle) * 0.4,
+                    1, Math.cos(angle) * 0.22, 0.04, Math.sin(angle) * 0.22, 0.0);
+        }
+
+        // cosmetic lightning around for chaos
+        for (int i = 0; i < 3; i++) {
+            Vec3d offset = new Vec3d(
+                    center.x + (RNG.nextDouble() - 0.5) * 2.5,
+                    center.y,
+                    center.z + (RNG.nextDouble() - 0.5) * 2.5);
+            spawnCosmeticLightning(world, offset);
+        }
+
+        // feels like a real charge-up
+        CameraShake.shakeNearby(player, 6, 10, 0.22f);
+
+        world.playSound(null, player.getBlockPos(),
+                SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER,
+                player.getSoundCategory(), 0.9f, 1.5f);
     }
 
     private void spawnChargeRing(ServerWorld world, ServerPlayerEntity player) {
@@ -470,9 +594,52 @@ public class LightningPower implements Power {
                 SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER,
                 player.getSoundCategory(), 1.2f, 0.8f);
 
-        w.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                player.getX(), player.getY() + 1.0, player.getZ(),
-                60, 1.0, 1.2, 1.0, 0.10);
+        // ult activation
+        spawnMaelstromOpenBurst(w, player);
+    }
+
+    // massive burst when ult activates — bigger than secondary
+    private static void spawnMaelstromOpenBurst(ServerWorld world, ServerPlayerEntity player) {
+        Vec3d center = player.getPos();
+
+        // four concentric rings at ground, waist, chest, head
+        for (double yOffset : new double[]{ 0.1, 0.6, 1.2, 1.9 }) {
+            int    points = 28;
+            double speed  = 0.35;
+            for (int i = 0; i < points; i++) {
+                double angle = i * Math.PI * 2.0 / points;
+                DustParticleEffect col = switch (i % 3) {
+                    case 0  -> BOLT_WHITE;
+                    case 1  -> LIGHTNING_YELLOW;
+                    default -> ARC_GOLD;
+                };
+                world.spawnParticles(col,
+                        center.x + Math.cos(angle) * 0.4, center.y + yOffset, center.z + Math.sin(angle) * 0.4,
+                        1, Math.cos(angle) * speed, 0.015, Math.sin(angle) * speed, 0.0);
+            }
+        }
+
+        // pillar of sparks and yellow
+        world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
+                center.x, center.y + 1.0, center.z,
+                100, 1.0, 1.5, 1.0, 0.12);
+        world.spawnParticles(LIGHTNING_YELLOW,
+                center.x, center.y + 1.0, center.z,
+                60, 0.8, 1.2, 0.8, 0.10);
+        world.spawnParticles(BOLT_WHITE,
+                center.x, center.y + 1.0, center.z,
+                20, 0.4, 0.8, 0.4, 0.07);
+
+        // cosmetic lightning storm on cast
+        for (int i = 0; i < 5; i++) {
+            Vec3d lPos = new Vec3d(
+                    center.x + (RNG.nextDouble() - 0.5) * 8.0,
+                    center.y,
+                    center.z + (RNG.nextDouble() - 0.5) * 8.0);
+            spawnCosmeticLightning(world, lPos);
+        }
+
+        CameraShake.shakeNearby(player, 12, 15, 0.38f);
     }
 
     private void tickMaelstrom(ServerPlayerEntity player) {
@@ -496,13 +663,16 @@ public class LightningPower implements Power {
                 e -> e.isAlive() && e != player
         );
 
-        // sparks
+        // spark + yellow flicker on targets while the storm is active
         if (!targets.isEmpty() && left % 3 == 0) {
             for (LivingEntity e : targets) {
                 if (RNG.nextFloat() < 0.10f) {
                     world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                             e.getX(), e.getY() + 1.0, e.getZ(),
                             1, 0.25, 0.35, 0.25, 0.02);
+                    world.spawnParticles(LIGHTNING_YELLOW,
+                            e.getX(), e.getY() + 1.0, e.getZ(),
+                            1, 0.15, 0.20, 0.15, 0.015);
                 }
             }
         }
@@ -546,29 +716,26 @@ public class LightningPower implements Power {
             double x = center.x + Math.cos(ang) * rad;
             double z = center.z + Math.sin(ang) * rad;
             double y = center.y + 6.0 + RNG.nextDouble() * 2.0;
+
             // cloud particles
             world.spawnParticles(ParticleTypes.CLOUD,
-                    x, y, z,
-                    2,
-                    0.55, 0.25, 0.55,
-                    0.01);
+                    x, y, z, 2, 0.55, 0.25, 0.55, 0.01);
             world.spawnParticles(ParticleTypes.SMOKE,
-                    x, y, z,
-                    2,
-                    0.55, 0.25, 0.55,
-                    0.01);
+                    x, y, z, 2, 0.55, 0.25, 0.55, 0.01);
             world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                    x, y, z,
-                    2,
-                    0.55, 0.25, 0.55,
-                    0.01);
+                    x, y, z, 2, 0.55, 0.25, 0.55, 0.01);
 
             if (RNG.nextFloat() < 0.35f) {
                 world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                        x, y - 0.8, z,
-                        1,
-                        0.2, 0.2, 0.2,
-                        0.0);
+                        x, y - 0.8, z, 1, 0.2, 0.2, 0.2, 0.0);
+            }
+            // yellow arc
+            if (RNG.nextFloat() < 0.30f) {
+                world.spawnParticles(LIGHTNING_YELLOW,
+                        x + (RNG.nextDouble() - 0.5) * 1.0,
+                        y - 0.4,
+                        z + (RNG.nextDouble() - 0.5) * 1.0,
+                        1, 0.15, 0.10, 0.15, 0.0);
             }
         }
     }
@@ -585,9 +752,27 @@ public class LightningPower implements Power {
                 StatusEffects.WEAKNESS, STORM_STUN_TICKS, STORM_STUN_AMP, true, true
         ));
 
+        // fx
+        spawnHitRing(world, target, 3);
+
         world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                 target.getX(), target.getY() + 1.0, target.getZ(),
-                18, 0.45, 0.7, 0.45, 0.07);
+                22, 0.45, 0.7, 0.45, 0.08);
+        world.spawnParticles(LIGHTNING_YELLOW,
+                target.getX(), target.getY() + 1.0, target.getZ(),
+                14, 0.35, 0.55, 0.35, 0.07);
+        world.spawnParticles(BOLT_WHITE,
+                target.getX(), target.getY() + 0.8, target.getZ(),
+                6, 0.20, 0.25, 0.20, 0.05);
+
+        for (int i = 0; i < 6; i++) {
+            double angle = i * Math.PI * 2.0 / 6;
+            world.spawnParticles(ParticleTypes.END_ROD,
+                    target.getX() + Math.cos(angle) * 0.3,
+                    target.getY() + 0.5 + RNG.nextDouble() * 1.5,
+                    target.getZ() + Math.sin(angle) * 0.3,
+                    1, Math.cos(angle) * 0.14, 0.06, Math.sin(angle) * 0.14, 0.0);
+        }
 
         world.playSound(null, target.getBlockPos(),
                 SoundEvents.ENTITY_LIGHTNING_BOLT_IMPACT,
@@ -678,6 +863,7 @@ public class LightningPower implements Power {
         }
         return -1;
     }
+
     private static void spawnCosmeticLightning(ServerWorld world, Vec3d pos) {
         LightningEntity bolt = EntityType.LIGHTNING_BOLT.create(world);
         if (bolt == null) return;
@@ -687,7 +873,7 @@ public class LightningPower implements Power {
         world.spawnEntity(bolt);
     }
 
-        /* ============================================================
+    /* ============================================================
        DISPLAY
        ============================================================ */
 
@@ -729,7 +915,7 @@ public class LightningPower implements Power {
 
     @Override
     public String getPrimaryDescription() {
-        return "Create a blast of sparks in front of you that damages and ignites entities in front of you.";
+        return "Release a burst of lightning around you, damaging and igniting all nearby entities. Damage falls off with distance.";
     }
 
     @Override
