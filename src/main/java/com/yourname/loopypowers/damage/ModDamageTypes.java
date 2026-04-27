@@ -56,6 +56,52 @@ public final class ModDamageTypes {
     // Healing
     public static final RegistryKey<DamageType> ABSORB =
             RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "absorb"));
+    public static final RegistryKey<DamageType> SMOOTHING =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "smoothing"));
+
+    // cosmic
+    public static final RegistryKey<DamageType> FATE =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "fate"));
+    public static final RegistryKey<DamageType> COSMIC_RAY =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "cosmic_ray"));
+    public static final RegistryKey<DamageType> SHOOTING_STAR =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "shooting_star"));
+    public static final RegistryKey<DamageType> BLACK_HOLE =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "black_hole"));
+
+    // darkness
+    public static final RegistryKey<DamageType> BACKSTAB =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "backstab"));
+    public static final RegistryKey<DamageType> ULTIMATE_STAB =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "darkult"));
+
+    // dimensional
+    public static final RegistryKey<DamageType> PHASE_BURST =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "phase_burst"));
+    public static final RegistryKey<DamageType> FRACTURE =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "fracture"));
+
+    // fortune
+    public static final RegistryKey<DamageType> BET =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "bet"));
+    public static final RegistryKey<DamageType> DUEL =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "duel"));
+    public static final RegistryKey<DamageType> HOUSE =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "house"));
+
+    // telekinesis
+    public static final RegistryKey<DamageType> WALL_COLLISION =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "wall_collision"));
+    public static final RegistryKey<DamageType> STRANGLE =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "strangle"));
+    public static final RegistryKey<DamageType> BLOCK_THROW =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "block_throw"));
+    public static final RegistryKey<DamageType> DEBRIS_ORBIT =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "debris_orbit"));
+
+    // misc
+    public static final RegistryKey<DamageType> RITUAL =
+            RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "ritual"));
 
     // BLOOD
     // bleed
@@ -164,6 +210,86 @@ public final class ModDamageTypes {
     // healing
     public static DamageSource absorb(World world) {
         var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(ABSORB);
+        return new DamageSource(entry);
+    }
+    public static DamageSource smoothing(World world) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(SMOOTHING);
+        return new DamageSource(entry);
+    }
+
+    // cosmic
+    public static DamageSource fate(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(FATE);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource cosmicRay(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(COSMIC_RAY);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource shootingStar(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(SHOOTING_STAR);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource blackHole(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BLACK_HOLE);
+        return new DamageSource(entry, attacker, attacker);
+    }
+
+    // darkness
+    public static DamageSource darknessBackstab(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BACKSTAB);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource darkUlt(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(ULTIMATE_STAB);
+        return new DamageSource(entry, attacker, attacker);
+    }
+
+    // dimensional
+    public static DamageSource phaseBurst(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(PHASE_BURST);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource fracture(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(FRACTURE);
+        return new DamageSource(entry, attacker, attacker);
+    }
+
+    // fortune
+    public static DamageSource bet(World world) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BET);
+        return new DamageSource(entry);
+    }
+    public static DamageSource duel(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(DUEL);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource house(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(HOUSE);
+        return new DamageSource(entry, attacker, attacker);
+    }
+
+    // tele
+    public static DamageSource wallCollision(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(WALL_COLLISION);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource strangle(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(STRANGLE);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource blockThrow(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BLOCK_THROW);
+        return new DamageSource(entry, attacker, attacker);
+    }
+    public static DamageSource debrisOrbit(World world, Entity attacker) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(DEBRIS_ORBIT);
+        return new DamageSource(entry, attacker, attacker);
+    }
+
+    // misc
+    public static DamageSource ritual(World world) {
+        var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(RITUAL);
         return new DamageSource(entry);
     }
 
