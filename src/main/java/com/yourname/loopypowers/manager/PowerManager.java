@@ -241,7 +241,7 @@ public class PowerManager {
 
     public static void useSecondary(ServerPlayerEntity player) {
         if (getLevel(player) < 2) {
-            player.sendMessage(Text.literal("§cYour connection is not strong enough to use this ability."), true);
+            CooldownUI.pushActionbarOverride(player, "§cYou must be connection level 2 to use your secondary.", 30);
             return;
         }
 
@@ -259,7 +259,7 @@ public class PowerManager {
 
     public static void useUltimate(ServerPlayerEntity player) {
         if (getLevel(player) < 3) {
-            player.sendMessage(Text.literal("§cYour connection is not strong enough to use this ability."), true);
+            CooldownUI.pushActionbarOverride(player, "§cYou must be connection level 3 to use your ultimate.", 30);
             return;
         }
 

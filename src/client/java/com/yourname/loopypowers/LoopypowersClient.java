@@ -3,6 +3,7 @@ package com.yourname.loopypowers;
 import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.client.HiddenPlayersClient;
 import com.yourname.loopypowers.entity.ModEntities;
+import com.yourname.loopypowers.manager.PassiveManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -32,6 +33,7 @@ public class LoopypowersClient implements ClientModInitializer {
 	public static KeyBinding PRIMARY_ABILITY_KEY;
 	public static KeyBinding SECONDARY_ABILITY_KEY;
 	public static KeyBinding ULTIMATE_ABILITY_KEY;
+	public static KeyBinding TOGGLE_PASSIVE_KEY;
 
 	@Override
 	public void onInitializeClient() {
@@ -72,6 +74,14 @@ public class LoopypowersClient implements ClientModInitializer {
 				new KeyBinding(
 						"key.loopypowers.ultimate",
 						GLFW.GLFW_KEY_Q,
+						"category.loopypowers"
+				)
+		);
+
+		TOGGLE_PASSIVE_KEY = KeyBindingHelper.registerKeyBinding(
+				new KeyBinding(
+						"key.loopypowers.toggle_passive",
+						GLFW.GLFW_KEY_APOSTROPHE,
 						"category.loopypowers"
 				)
 		);
@@ -136,6 +146,7 @@ public class LoopypowersClient implements ClientModInitializer {
 			while (PRIMARY_ABILITY_KEY.wasPressed()) sendPrimaryAbility();
 			while (SECONDARY_ABILITY_KEY.wasPressed()) sendSecondaryAbility();
 			while (ULTIMATE_ABILITY_KEY.wasPressed()) sendUltimateAbility();
+			while (TOGGLE_PASSIVE_KEY.wasPressed()) sendTogglePassive();
 
 			CameraShakeClient.tick(client);
 			HiddenPlayersClient.tick();
@@ -392,4 +403,12 @@ public class LoopypowersClient implements ClientModInitializer {
 				PacketByteBufs.empty()
 		);
 	}
+
+	public static void sendTogglePassive() {
+		ClientPlayNetworking.send(
+				AbilityPackets.TOGGLE_PASSIVE,
+				PacketByteBufs.empty()
+		);
+	}
 }
+

@@ -1,6 +1,8 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.block.ModBlocks;
+import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.manager.PassiveManager;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
@@ -119,6 +121,9 @@ public class FortunePower implements Power {
     }
 
     private static void addLuck(ServerPlayerEntity p, int add) {
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(p)) return;
+
         if (add <= 0) return;
 
         int cur = getLuck(p);
@@ -151,6 +156,9 @@ public class FortunePower implements Power {
     }
 
     private static void tryProcOnHit(ServerPlayerEntity attacker, LivingEntity target) {
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(attacker)) return;
+
         ServerWorld w = attacker.getServerWorld();
 
         int luck = getLuck(attacker);
@@ -270,7 +278,7 @@ public class FortunePower implements Power {
         // self damage
         float before = player.getHealth();
 
-        player.damage(player.getDamageSources().magic(), PRIM_SELF_DAMAGE);
+        player.damage(ModDamageTypes.bet(w), PRIM_SELF_DAMAGE); // bet damage
 
         float after = player.getHealth();
         float actuallyLost = Math.max(0.0f, before - after);
@@ -496,10 +504,16 @@ public class FortunePower implements Power {
         if (dv == null && da == null) return false;
 
         float mult;
+        DamageSource finalSource = source;
 
         if (dv != null) {
             // victim is in a duel, attacker is either their partner or someone else
-            mult = dv.contains(attacker.getUuid()) ? DUEL_VS_PARTNER_MULT : DUEL_VS_OTHERS_MULT;
+            if (dv.contains(attacker.getUuid())) {
+                mult = DUEL_VS_PARTNER_MULT;
+                finalSource = ModDamageTypes.duel(victim.getWorld(), attacker); // uses duel damage type
+            } else {
+                mult = DUEL_VS_OTHERS_MULT;
+            }
         } else {
             // victim not in a duel, but attacker is, attacker should deal reduced damage to others
             mult = DUEL_VS_OTHERS_MULT;
@@ -511,7 +525,7 @@ public class FortunePower implements Power {
         victim.getCommandTags().add(DUEL_GUARD);
         attacker.getCommandTags().add(DUEL_GUARD);
         try {
-            victim.damage(source, newAmount);
+            victim.damage(finalSource, newAmount);
         } finally {
             victim.getCommandTags().remove(DUEL_GUARD);
             attacker.getCommandTags().remove(DUEL_GUARD);
@@ -919,11 +933,12 @@ public class FortunePower implements Power {
         // per-rule ticking behavior
         if (st.rule == HouseRule.LIGHTNING_ROUND) {
             if ((w.getTime() % RULE_LIGHTNING_EVERY_TICKS) == 0L) {
+                Entity owner = w.getEntity(st.owner);
                 for (LivingEntity e : getHouseLiving(w, st)) {
                     w.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                             e.getX(), e.getY() + e.getHeight() * 0.6, e.getZ(),
                             6, 0.25, 0.25, 0.25, 0.0);
-                    e.damage(w.getDamageSources().magic(), RULE_LIGHTNING_DAMAGE);
+                    e.damage(ModDamageTypes.house(w, owner), RULE_LIGHTNING_DAMAGE); // house deals damage
                 }
             }
         } else if (st.rule == HouseRule.HOT_SEAT) {
@@ -1155,7 +1170,8 @@ public class FortunePower implements Power {
                 pick.getX(), pick.getY() + pick.getHeight() * 0.6, pick.getZ(),
                 16, 0.35, 0.35, 0.35, 0.08);
 
-        pick.damage(w.getDamageSources().magic(), RULE_ROULETTE_DAMAGE);
+        Entity owner = w.getEntity(st.owner);
+        pick.damage(ModDamageTypes.house(w, owner), RULE_ROULETTE_DAMAGE); // house deals damage
 
         if (pick instanceof ServerPlayerEntity sp) {
             sp.sendMessage(Text.literal("§cRoulette chose you!"), false);
@@ -1209,7 +1225,8 @@ public class FortunePower implements Power {
                 holder.getX(), holder.getY() + holder.getHeight() * 0.5, holder.getZ(),
                 18, 0.35, 0.25, 0.35, 0.03);
 
-        holder.damage(w.getDamageSources().magic(), RULE_HOTSEAT_DAMAGE);
+        Entity owner = w.getEntity(st.owner);
+        holder.damage(ModDamageTypes.house(w, owner), RULE_HOTSEAT_DAMAGE); // house deals damage
 
         st.hotSeatHolder = null;
         st.hotSeatFuse = 0;
@@ -1422,6 +1439,7 @@ public class FortunePower implements Power {
         }
 
         float mult = 1.0f;
+        DamageSource finalSource = source;
 
         // double or nothing damage boost
         if (hs != null && hs.rule == HouseRule.DOUBLE_OR_NOTHING) {
@@ -1444,6 +1462,7 @@ public class FortunePower implements Power {
             if (attacker != null && aIn && vIn) {
                 mult *= RULE_JACKPOT_MULT;
                 hs.jackpotArmed = false;
+                finalSource = ModDamageTypes.house(w, attacker); // uses house damage type for jackpot
 
                 w.spawnParticles(ParticleTypes.FIREWORK,
                         victim.getX(), victim.getY() + victim.getHeight() * 0.6, victim.getZ(),
@@ -1459,14 +1478,14 @@ public class FortunePower implements Power {
             mult *= getDuelMultiplier(victim, attacker);
         }
 
-        if (Math.abs(mult - 1.0f) < 1.0e-4f) return false;
+        if (Math.abs(mult - 1.0f) < 1.0e-4f && finalSource == source) return false;
 
         float newAmount = amount * mult;
 
         victim.getCommandTags().add(FORTUNE_DMG_GUARD);
         if (attacker != null) attacker.getCommandTags().add(FORTUNE_DMG_GUARD);
         try {
-            victim.damage(source, newAmount);
+            victim.damage(finalSource, newAmount);
         } finally {
             victim.getCommandTags().remove(FORTUNE_DMG_GUARD);
             if (attacker != null) attacker.getCommandTags().remove(FORTUNE_DMG_GUARD);
@@ -1759,15 +1778,20 @@ public class FortunePower implements Power {
 
     @Override
     public String getPassiveDescription() {
-        return "You have a hidden luck stat that increases when hitting entities and decreases when out of combat. This stat improves chances for jackpots on ability uses or hits"
-                + " (see ability for specific jackpots). On-hit jackpots are as follows: Favour: Get speed and absorption, Lucky Shot: Extra damage, Bad Beat: Weakness."
-                + " This stat is spent on jackpot and you will receive an actionbar alert to what jackpot was used.";
+        return "You have a hidden luck stat that increases when hitting entities and decreases when out of combat. This stat improves chances for jackpots on ability uses or hits. This stat is spent when a jackpot triggers, and you will receive an actionbar alert to what jackpot was used.\n\n"
+                + "On-hit Jackpots:\n"
+                + "• Favour: Grants you Speed and Absorption.\n"
+                + "• Lucky Shot: Deals extra damage to the target.\n"
+                + "• Bad Beat: Inflicts Weakness on the target.";
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Damage yourself and gain some strength and speed, you have a chance of hitting 1 of three jackpots: Raise: Extra strength, Draw No Bet: Regeneration, Double Time: Double duration on effects - "
-                + "see passive for more info.";
+        return "Damage yourself and gain Strength and Speed. You have a chance of hitting 1 of 3 jackpots (odds scale with your luck passive).\n\n"
+                + "Primary Jackpots:\n"
+                + "• Raise: Upgrades your buff to Strength II.\n"
+                + "• Draw No Bet: Grants you brief Regeneration.\n"
+                + "• Double Time: Doubles the duration of your base buffs.";
     }
 
     @Override
@@ -1778,11 +1802,28 @@ public class FortunePower implements Power {
 
     @Override
     public String getUltimateDescription() {
-        return "Summon a magical casino cage that falls into place, trapping anything inside for a short time.";
+        return "Summon a magical casino cage that quickly builds from your feet, trapping anything inside for a short time. Players can't build out of this but can break/teleport out. Every few seconds, a new House Rule is rolled.\n\n"
+                + "House Rules:\n"
+                + "• Loaded Dice: Owner gains Strength.\n"
+                + "• Free Drinks: Everyone gains Regeneration.\n"
+                + "• VIP Pass: Owner gains Regeneration.\n"
+                + "• No Running: Everyone gets Slowness.\n"
+                + "• No Fighting: Everyone gets Weakness.\n"
+                + "• Double or Nothing: Everyone deals and receives increased damage.\n"
+                + "• Shuffle: Everyone swaps positions.\n"
+                + "• Roulette: A random entity is damaged.\n"
+                + "• Lightning Round: Everyone takes periodic damage.\n"
+                + "• Hot Seat: Someone is marked; hit someone to pass it on before it detonates.\n"
+                + "• Chip Toss: Some people are launched into the air.\n"
+                + "• Wildcards: Random hostile entities are spawned.\n"
+                + "• Smoke Machine: Everyone is blinded.\n"
+                + "• Spotlight: Someone is marked to glow and takes extra damage.\n"
+                + "• Jackpot: The next hit in the room is heavily amplified.\n"
+                + "• Card Counter: Owner's luck is instantly set to the maximum.";
     }
 
     /* ============================================================
-       TAG HELPERS (same style you use elsewhere)
+       TAG HELPERS
        ============================================================ */
 
     private static void removeTagPrefix(Entity e, String prefix) {

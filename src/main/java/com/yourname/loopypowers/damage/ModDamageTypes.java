@@ -269,7 +269,7 @@ public final class ModDamageTypes {
         return new DamageSource(entry, attacker, attacker);
     }
 
-    // tele
+    // telekinesis
     public static DamageSource wallCollision(World world, Entity attacker) {
         var entry = world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(WALL_COLLISION);
         return new DamageSource(entry, attacker, attacker);

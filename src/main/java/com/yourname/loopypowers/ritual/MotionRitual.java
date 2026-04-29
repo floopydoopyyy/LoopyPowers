@@ -24,7 +24,6 @@ public class MotionRitual implements Ritual {
             SpeedPower::new,
             SoundPower::new,
             FlightPower::new
-            // AgilityPower::new, etc.
     );
 
     /* ============================================================

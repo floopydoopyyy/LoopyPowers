@@ -21,15 +21,13 @@ import java.util.function.Supplier;
 public class ElementalRitual implements Ritual {
 
     /* ============================================================
-       ELEMENTAL POWER POOL
-       Add new elemental powers here — nothing else needs changing.
+        POWER POOL
        ============================================================ */
 
     private static final List<Supplier<Power>> ELEMENTAL_POWERS = List.of(
             FirePower::new,
             IcePower::new,
             LightningPower::new
-            // NaturePower::new, StormPower::new, etc.
     );
 
     /* ============================================================

@@ -1,5 +1,7 @@
 package com.yourname.loopypowers.entity;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.power.CosmicPower;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
@@ -102,7 +104,7 @@ public class BlackHoleEntity extends Entity {
         Vec3d followTarget = owner.getPos().add(0, 0.4, 0); // offset up slightly to center on body
 
         Vec3d current = this.getPos();
-        double followSpeed = 0.2; // slightly snappier since there's no forward offset to lag behind
+        double followSpeed = 0.9; // slightly snappier since there's no forward offset to lag behind
         Vec3d newPos = current.add(followTarget.subtract(current).multiply(followSpeed));
         this.setPos(newPos.x, newPos.y, newPos.z);
 
@@ -132,7 +134,7 @@ public class BlackHoleEntity extends Entity {
 
             if (dist <= INNER_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, INNER_PULL);
-                applyInnerRingEffects(e);
+                applyInnerRingEffects(world, e);
 
             } else if (dist <= MID_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, MID_PULL);
@@ -169,12 +171,16 @@ public class BlackHoleEntity extends Entity {
         }
     }
 
-    private void applyInnerRingEffects(LivingEntity entity) {
-        // Direct damage every tick
-        entity.damage(entity.getDamageSources().magic(), INNER_DAMAGE_PER_TICK);
+    private void applyInnerRingEffects(ServerWorld world, LivingEntity entity) {
+        if (owner != null) {
+            entity.damage(
+                    ModDamageTypes.blackHole(world, owner),
+                    INNER_DAMAGE_PER_TICK
+            );
+        }
 
-        // quickly drain fate
-        com.yourname.loopypowers.power.CosmicPower.drainFateTimer(entity);
+        // drain fate
+        CosmicPower.drainFateTimer(entity);
     }
 
     /* ============================================================

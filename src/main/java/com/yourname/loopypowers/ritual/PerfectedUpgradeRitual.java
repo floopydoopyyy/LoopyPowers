@@ -18,11 +18,6 @@ public class PerfectedUpgradeRitual implements Ritual {
 
     /* ============================================================
        CONSTANTS
-       Four stages — longer and more involved than PowerUpgradeRitual.
-       Stage 1: the cosmos acknowledges, the ground cracks with light.
-       Stage 2: the god descends fully — halos stack, streams surge.
-       Stage 3: perfection fractures reality — everything at full stretch.
-       Stage 4: apotheosis — the bond completes, the player is remade.
        ============================================================ */
 
     private static final int STAGE_1_TICKS = 70;
@@ -33,15 +28,12 @@ public class PerfectedUpgradeRitual implements Ritual {
     private static final int TOTAL_TICKS =
             STAGE_1_TICKS + STAGE_2_TICKS + STAGE_3_TICKS + STAGE_4_TICKS;
 
-    // Stages 2–3 deal damage — the full connection being forced open costs more
     private static final float DAMAGE_PER_TICK = 0.35f;
     private static final int   DAMAGE_INTERVAL = 10;
     private static final float MIN_HEALTH      = 0.5f;
 
     /* ============================================================
        CAMERA SHAKE
-       Each stage escalates. Stage 4 peaks at the apotheosis burst
-       then decays cleanly.
        ============================================================ */
 
     private static final int   SHAKE_RADIUS            = 8;   // wider than upgrade ritual
@@ -52,41 +44,33 @@ public class PerfectedUpgradeRitual implements Ritual {
     private static final float SHAKE_STAGE_1_INTENSITY = 0.10f;
     private static final float SHAKE_STAGE_2_INTENSITY = 0.20f;
     private static final float SHAKE_STAGE_3_INTENSITY = 0.28f;
-    private static final float SHAKE_STAGE_4_BURST     = 0.50f;  // apotheosis hit
+    private static final float SHAKE_STAGE_4_BURST     = 0.50f;  //
     private static final float SHAKE_STAGE_4_BASE      = 0.30f;
 
     /* ============================================================
        PARTICLES
-       Same hue family as PowerUpgradeRitual but a fifth particle
-       added — TRANSCEND_WHITE — a larger, brighter white used only
-       in stage 4 and the completion burst to signal something new.
        ============================================================ */
 
-    // Vivid magenta pink — the god's direct touch
-    private static final DustParticleEffect DIVINE_PINK =
+    // magenta
+    private static final DustParticleEffect MAGENTA =
             new DustParticleEffect(new Vector3f(0.95f, 0.15f, 0.70f), 1.5f);
-    // Soft blush pink — outer ambient glow
-    private static final DustParticleEffect BLUSH_PINK =
+    // white pink
+    private static final DustParticleEffect PINK_WHITE =
             new DustParticleEffect(new Vector3f(1.00f, 0.62f, 0.88f), 1.2f);
-    // Deep connection purple — the bond at full power
-    private static final DustParticleEffect BOND_PURPLE =
+    // purple
+    private static final DustParticleEffect PURPLE =
             new DustParticleEffect(new Vector3f(0.52f, 0.08f, 0.80f), 1.5f);
-    // Soft violet — the merge point of pink and purple
-    private static final DustParticleEffect VIOLET_SOFT =
+    // violet
+    private static final DustParticleEffect VIOLET =
             new DustParticleEffect(new Vector3f(0.75f, 0.35f, 0.95f), 1.3f);
-    // Holy white — radiant centre of the reforged bond
-    private static final DustParticleEffect HOLY_WHITE =
+    // yellow white
+    private static final DustParticleEffect WHITE_YELLOW =
             new DustParticleEffect(new Vector3f(0.96f, 0.94f, 1.00f), 1.3f);
-    // Transcendence white — larger and brighter, unique to stage 4 and completion.
-    // Signals that something beyond the previous connection is being unlocked.
-    private static final DustParticleEffect TRANSCEND_WHITE =
+    // white
+    private static final DustParticleEffect WHITE =
             new DustParticleEffect(new Vector3f(1.00f, 0.98f, 1.00f), 1.8f);
 
-    /* ============================================================
-       SIGIL GEOMETRY
-       Eight spokes at uneven angles — more points than the Ruin/Severance
-       six, giving the sigil a more complex and complete sacred geometry feel.
-       ============================================================ */
+    // SIGIL GEOMETRY
 
     private static final double[] SIGIL_ANGLES = {
             0.0,
@@ -177,9 +161,7 @@ public class PerfectedUpgradeRitual implements Ritual {
     }
 
     /* ============================================================
-       SHARED — FALLING COLUMN
-       Dense downward rain of divinity used by multiple stages at
-       varying intensities. `count` and `radius` scale per stage.
+       SHARED HELPERS
        ============================================================ */
 
     private void spawnFallingColumn(ServerWorld world, Vec3d pos,
@@ -187,7 +169,7 @@ public class PerfectedUpgradeRitual implements Ritual {
         for (int i = 0; i < count; i++) {
             double angle = world.random.nextDouble() * Math.PI * 2;
             double r     = world.random.nextDouble() * radius;
-            DustParticleEffect col = world.random.nextBoolean() ? DIVINE_PINK : HOLY_WHITE;
+            DustParticleEffect col = world.random.nextBoolean() ? MAGENTA : WHITE_YELLOW;
             world.spawnParticles(col,
                     pos.x + Math.cos(angle) * r,
                     pos.y + minH + world.random.nextDouble() * (maxH - minH),
@@ -195,12 +177,6 @@ public class PerfectedUpgradeRitual implements Ritual {
                     1, 0.02, -0.10, 0.02, 0.004);
         }
     }
-
-    /* ============================================================
-       SHARED — HALO RING
-       Spawns a single rotating ring at a given height and radius.
-       Used by stages 2, 3, and 4 in stacking combinations.
-       ============================================================ */
 
     private void spawnHalo(ServerWorld world, Vec3d pos, double radius, double height,
                            double speed, int points,
@@ -217,12 +193,7 @@ public class PerfectedUpgradeRitual implements Ritual {
     }
 
     /* ============================================================
-       STAGE 1 — The cosmos acknowledges.
-       A sacred sigil ignites on the ground and slowly rotates.
-       Pink light begins falling from above. Faint tremors start.
-       This is larger in scope than the upgrade ritual's stage 1 —
-       the ground rings expand further and the falling light is
-       noticeably denser from the start.
+       STAGE 1
        ============================================================ */
 
     private void tickStage1(ServerPlayerEntity sp, ServerWorld world, int t) {
@@ -237,15 +208,12 @@ public class PerfectedUpgradeRitual implements Ritual {
         Vec3d  pos      = sp.getPos();
         long   time     = world.getTime();
 
-        // Faint tremor — a hint of what is coming, the ground recognising the ritual
         if (t % SHAKE_STAGE_1_INTERVAL == 0) {
             float intensity = SHAKE_STAGE_1_INTENSITY + (float) progress * 0.05f;
             CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
         }
 
-        // Eight-spoke sacred sigil rotating slowly on the ground.
-        // Each spoke grows outward over the stage — at t=1 only the inner
-        // portion exists; by t=STAGE_1_TICKS it reaches full extent (~5 blocks).
+        // sigil on ground
         double sigRotation = time * 0.020;
         double spokeReach  = 1.0 + progress * 4.0;
 
@@ -256,9 +224,9 @@ public class PerfectedUpgradeRitual implements Ritual {
                 for (int s = 0; s < steps; s++) {
                     double d = 0.3 + (double) s / steps * spokeReach;
                     // Inner spoke: deep purple; outer: violet then blush at the tip
-                    DustParticleEffect col = (s < 4) ? BOND_PURPLE
-                            : (s < 7) ? VIOLET_SOFT
-                            : BLUSH_PINK;
+                    DustParticleEffect col = (s < 4) ? PURPLE
+                            : (s < 7) ? VIOLET
+                            : PINK_WHITE;
                     double jitter = (world.random.nextDouble() - 0.5) * 0.14;
                     double perpX  = Math.cos(angle + Math.PI * 0.5) * jitter;
                     double perpZ  = Math.sin(angle + Math.PI * 0.5) * jitter;
@@ -269,9 +237,9 @@ public class PerfectedUpgradeRitual implements Ritual {
                             1, 0.01, 0.01, 0.01, 0.003);
                 }
 
-                // Spoke tip flares — bright pink pulse at the growing end
+                // tip
                 if (t % 5 == 0 && spokeReach > 1.0) {
-                    world.spawnParticles(DIVINE_PINK,
+                    world.spawnParticles(MAGENTA,
                             pos.x + Math.cos(angle) * spokeReach,
                             pos.y + 0.10,
                             pos.z + Math.sin(angle) * spokeReach,
@@ -279,12 +247,12 @@ public class PerfectedUpgradeRitual implements Ritual {
                 }
             }
 
-            // Outer ring joining spoke tips — drawn at full reach once large enough
+            // ring joining
             if (spokeReach > 1.5) {
                 int ringPoints = 32;
                 for (int i = 0; i < ringPoints; i++) {
                     double angle = Math.PI * 2.0 * i / ringPoints + sigRotation;
-                    DustParticleEffect col = (i % 3 == 0) ? DIVINE_PINK : BOND_PURPLE;
+                    DustParticleEffect col = (i % 3 == 0) ? MAGENTA : PURPLE;
                     world.spawnParticles(col,
                             pos.x + Math.cos(angle) * spokeReach,
                             pos.y + 0.06,
@@ -294,17 +262,17 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Falling divine column — wider spread than upgrade ritual, denser count
+        // column
         if (t % 2 == 0) {
             spawnFallingColumn(world, pos, (int)(3 + progress * 7), 1.4, 7.0, 13.0);
         }
 
-        // Rising wisps from the ground between spokes — divine energy seeping up
+        // fx rising
         if (t % 5 == 0) {
             for (int i = 0; i < 4; i++) {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = 0.5 + world.random.nextDouble() * spokeReach * 0.7;
-                world.spawnParticles(VIOLET_SOFT,
+                world.spawnParticles(VIOLET,
                         pos.x + Math.cos(angle) * r,
                         pos.y + 0.1 + world.random.nextDouble() * 2.5 * progress,
                         pos.z + Math.sin(angle) * r,
@@ -312,14 +280,14 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Enchant particles — broader spread than upgrade ritual
+        // extra fx
         if (t % 14 == 0) {
             world.spawnParticles(ParticleTypes.ENCHANT,
                     pos.x, pos.y + 1.0, pos.z,
                     12, 0.8, 0.8, 0.8, 1.6);
         }
 
-        // GLOW sparks at spoke tips
+        // glow at tips
         if (t % 7 == 0 && progress > 0.25f) {
             double spokeAngle = SIGIL_ANGLES[world.random.nextInt(SIGIL_ANGLES.length)] + sigRotation;
             world.spawnParticles(ParticleTypes.GLOW,
@@ -337,10 +305,7 @@ public class PerfectedUpgradeRitual implements Ritual {
     }
 
     /* ============================================================
-       STAGE 2 — The god descends fully.
-       The sigil lifts off the ground and rises toward the player.
-       Three stacked halos orbit. Eight power streams climb into the
-       sky. Camera shake becomes noticeable and rhythmic.
+       STAGE 2
        ============================================================ */
 
     private void tickStage2(ServerPlayerEntity sp, ServerWorld world, int t) {
@@ -355,16 +320,15 @@ public class PerfectedUpgradeRitual implements Ritual {
         Vec3d  pos      = sp.getPos();
         long   time     = world.getTime();
 
-        // Shake ramps up from stage 2 base toward stage 3 base
+        // shake
         if (t % SHAKE_STAGE_2_INTERVAL == 0) {
             float intensity = SHAKE_STAGE_2_INTENSITY + (float) progress * 0.06f;
             CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
         }
 
-        // Sigil rising: the eight spokes now fully extend and slowly lift off the ground,
-        // rotating faster. By the end of this stage the sigil floats at chest height.
-        double sigRotation = time * 0.035;   // faster than stage 1
-        double sigilY      = pos.y + progress * 1.2;   // rises from ground to ~chest
+        // rise and rotate sigil
+        double sigRotation = time * 0.035;   // faster
+        double sigilY      = pos.y + progress * 1.2;   // rises to chest
 
         if (t % 2 == 0) {
             for (double baseAngle : SIGIL_ANGLES) {
@@ -372,9 +336,9 @@ public class PerfectedUpgradeRitual implements Ritual {
                 int    steps = 9;
                 for (int s = 0; s < steps; s++) {
                     double d   = 0.3 + (double) s / steps * 5.0;
-                    DustParticleEffect col = (s < 3) ? BOND_PURPLE
-                            : (s < 6) ? VIOLET_SOFT
-                            : DIVINE_PINK;
+                    DustParticleEffect col = (s < 3) ? PURPLE
+                            : (s < 6) ? VIOLET
+                            : MAGENTA;
                     world.spawnParticles(col,
                             pos.x + Math.cos(angle) * d,
                             sigilY,
@@ -387,7 +351,7 @@ public class PerfectedUpgradeRitual implements Ritual {
             int ringPoints = 36;
             for (int i = 0; i < ringPoints; i++) {
                 double angle = Math.PI * 2.0 * i / ringPoints + sigRotation;
-                DustParticleEffect col = (i % 2 == 0) ? BOND_PURPLE : BLUSH_PINK;
+                DustParticleEffect col = (i % 2 == 0) ? PURPLE : PINK_WHITE;
                 world.spawnParticles(col,
                         pos.x + Math.cos(angle) * 5.0,
                         sigilY,
@@ -396,24 +360,21 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Three stacked halos orbiting at different speeds and heights.
-        // Outer halo (wide, slow), mid halo (medium, reverse spin),
-        // inner halo (tight, fast). Together they look like a gyroscope.
+        // three halos at varied sizes
         if (t % 2 == 0) {
             // Outer — pink, slow clockwise
-            spawnHalo(world, pos, 2.4, 1.6, time * 0.07, 24, DIVINE_PINK, VIOLET_SOFT);
+            spawnHalo(world, pos, 2.4, 1.6, time * 0.07, 24, MAGENTA, VIOLET);
         }
         if (t % 2 == 0) {
             // Mid — purple, counter-clockwise
-            spawnHalo(world, pos, 1.7, 1.9, -time * 0.10, 18, BOND_PURPLE, HOLY_WHITE);
+            spawnHalo(world, pos, 1.7, 1.9, -time * 0.10, 18, PURPLE, WHITE_YELLOW);
         }
         if (t % 3 == 0) {
             // Inner — white, fast clockwise
-            spawnHalo(world, pos, 1.0, 2.2, time * 0.14, 12, HOLY_WHITE, VIOLET_SOFT);
+            spawnHalo(world, pos, 1.0, 2.2, time * 0.14, 12, WHITE_YELLOW, VIOLET);
         }
 
-        // Eight power streams surging straight upward from each sigil spoke —
-        // the god drinking in the player's connection to read its quality
+        // beams from each sigil spoke
         if (t % 2 == 0) {
             for (double baseAngle : SIGIL_ANGLES) {
                 double angle = baseAngle + sigRotation;
@@ -423,9 +384,9 @@ public class PerfectedUpgradeRitual implements Ritual {
                 for (int s = 0; s < steps; s++) {
                     double h   = pos.y + 0.3 + s * (0.6 + progress * 0.4);
                     DustParticleEffect col = switch (s % 3) {
-                        case 0  -> DIVINE_PINK;
-                        case 1  -> BOND_PURPLE;
-                        default -> HOLY_WHITE;
+                        case 0  -> MAGENTA;
+                        case 1  -> PURPLE;
+                        default -> WHITE_YELLOW;
                     };
                     world.spawnParticles(col,
                             cx + (world.random.nextDouble() - 0.5) * 0.20,
@@ -436,18 +397,18 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Dense falling column — the god pressing down with full weight
+        // column
         if (t % 2 == 0) {
             spawnFallingColumn(world, pos, (int)(6 + progress * 10), 1.0, 7.0, 14.0);
         }
 
-        // Blindness begins mid-stage — proximity to divinity overwhelms sight
+        // blindness
         if (progress > 0.35f && progress < 0.92f) {
             sp.addStatusEffect(new StatusEffectInstance(
                     StatusEffects.BLINDNESS, 15, 0, true, false, false));
         }
 
-        // Damage — the full connection being forced open has a cost
+        // damage
         if (t % DAMAGE_INTERVAL == 0) {
             float health = sp.getHealth();
             if (health > MIN_HEALTH + DAMAGE_PER_TICK) {
@@ -462,10 +423,7 @@ public class PerfectedUpgradeRitual implements Ritual {
     }
 
     /* ============================================================
-       STAGE 3 — Perfection fractures reality.
-       The sigil compresses and engulfs the player. The halos collapse
-       inward. Power is pulled from every direction at once. The camera
-       shake becomes urgent. This is the threshold before apotheosis.
+       STAGE 3
        ============================================================ */
 
     private void tickStage3(ServerPlayerEntity sp, ServerWorld world, int t) {
@@ -482,15 +440,14 @@ public class PerfectedUpgradeRitual implements Ritual {
         Vec3d  pos      = sp.getPos();
         long   time     = world.getTime();
 
-        // Shake: fires every 6 ticks and ramps toward stage 4 base by stage end
+        // shake
         if (t % SHAKE_STAGE_3_INTERVAL == 0) {
             float intensity = SHAKE_STAGE_3_INTENSITY
                     + (float) progress * (SHAKE_STAGE_4_BASE - SHAKE_STAGE_3_INTENSITY);
             CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
         }
 
-        // Sigil compresses: spoke reach collapses from 5 blocks down to 0.8 —
-        // the sacred geometry crushing inward around the player
+        // compress sigil
         double sigRotation = time * 0.055;   // fastest the sigil spins
         double shrink      = 1.0 - progress * 0.84;
         double sigR        = 5.0 * shrink + 0.8;
@@ -502,7 +459,7 @@ public class PerfectedUpgradeRitual implements Ritual {
                 int    steps = 8;
                 for (int s = 0; s < steps; s++) {
                     double d   = 0.2 + (double) s / steps * sigR;
-                    DustParticleEffect col = (s % 2 == 0) ? BOND_PURPLE : DIVINE_PINK;
+                    DustParticleEffect col = (s % 2 == 0) ? PURPLE : MAGENTA;
                     world.spawnParticles(col,
                             pos.x + Math.cos(angle) * d,
                             sigY,
@@ -512,22 +469,20 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Halos collapsing inward — radius shrinks, speed increases
+        // halos shrinking
         double haloShrink = 1.0 - progress * 0.55;
         if (t % 2 == 0) {
             spawnHalo(world, pos, 2.4 * haloShrink, 1.6,  time * (0.07 + progress * 0.08), 24,
-                    DIVINE_PINK, VIOLET_SOFT);
+                    MAGENTA, VIOLET);
             spawnHalo(world, pos, 1.7 * haloShrink, 1.9, -time * (0.10 + progress * 0.08), 18,
-                    BOND_PURPLE, HOLY_WHITE);
+                    PURPLE, WHITE_YELLOW);
         }
         if (t % 2 == 0) {
             spawnHalo(world, pos, 1.0 * haloShrink, 2.2,  time * (0.14 + progress * 0.12), 12,
-                    HOLY_WHITE, VIOLET_SOFT);
+                    WHITE_YELLOW, VIOLET);
         }
 
-        // Omnidirectional implosion pull — particles streaming inward from a wide sphere.
-        // Aimed at the player's centre and given toward velocity, same technique
-        // as the Space ritual's singularity but pointed at the body, not above it.
+        // particle pull
         if (t % 2 == 0) {
             int pullCount = (int)(10 + progress * 18);
             for (int i = 0; i < pullCount; i++) {
@@ -543,24 +498,23 @@ public class PerfectedUpgradeRitual implements Ritual {
                         .multiply(0.10 + progress * 0.07);
 
                 DustParticleEffect col = switch (i % 4) {
-                    case 0  -> DIVINE_PINK;
-                    case 1  -> BOND_PURPLE;
-                    case 2  -> VIOLET_SOFT;
-                    default -> HOLY_WHITE;
+                    case 0  -> MAGENTA;
+                    case 1  -> PURPLE;
+                    case 2  -> VIOLET;
+                    default -> WHITE_YELLOW;
                 };
                 world.spawnParticles(col, fromX, fromY, fromZ,
                         1, toward.x, toward.y, toward.z, 0.010);
             }
         }
 
-        // Outward power eruptions — the bond fighting back as it reaches its limit,
-        // fragments of connection bursting outward between the inward pulls
+        // outward eruptions
         if (t % 4 == 0) {
             for (int i = 0; i < 6; i++) {
                 double theta = world.random.nextDouble() * Math.PI * 2;
                 double phi   = world.random.nextDouble() * Math.PI * 0.5;
                 double speed = 0.10 + progress * 0.05;
-                DustParticleEffect col = (i % 2 == 0) ? DIVINE_PINK : HOLY_WHITE;
+                DustParticleEffect col = (i % 2 == 0) ? MAGENTA : WHITE_YELLOW;
                 world.spawnParticles(col,
                         pos.x, pos.y + 1.0, pos.z,
                         1,
@@ -571,12 +525,12 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Dense falling column — maximum before stage 4
+        // column
         if (t % 2 == 0) {
             spawnFallingColumn(world, pos, (int)(10 + progress * 10), 0.7, 8.0, 15.0);
         }
 
-        // Blindness and nausea — the threshold is overwhelming every sense
+        // effects
         sp.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.BLINDNESS, 15, 0, true, false, false));
         if (progress > 0.40f) {
@@ -592,7 +546,6 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Enchant at full blast — the universe fully committed to this moment
         if (t % 8 == 0) {
             world.spawnParticles(ParticleTypes.ENCHANT,
                     pos.x, pos.y + 1.0, pos.z, 10, 0.6, 0.7, 0.6, 1.8);
@@ -611,12 +564,7 @@ public class PerfectedUpgradeRitual implements Ritual {
     }
 
     /* ============================================================
-       STAGE 4 — Apotheosis.
-       The sigil, the halos, the pull — everything collapses into the
-       player simultaneously. A supernova of pink, purple, and white
-       erupts outward. TRANSCEND_WHITE appears for the first time.
-       Levitation carries the player briefly skyward. Then: silence,
-       light, and the perfected bond settles.
+       STAGE 4
        ============================================================ */
 
     private void tickStage4(ServerPlayerEntity sp, ServerWorld world, int t) {
@@ -628,22 +576,20 @@ public class PerfectedUpgradeRitual implements Ritual {
             world.playSound(null, sp.getBlockPos(),
                     SoundEvents.BLOCK_BEACON_POWER_SELECT,     SoundCategory.PLAYERS, 1.0f, 0.80f);
 
-            // PEAK SHAKE — the apotheosis moment
             CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, SHAKE_STAGE_4_BURST);
 
-            // True supernova: all five particle types fired outward in a full sphere
-            // with directional velocity. The densest opening burst in any ritual.
+            // shoot particles out
             Vec3d pos = sp.getPos();
             for (int d = 0; d < 48; d++) {
                 double theta = d * Math.PI * 2.0 / 48;
                 double phi   = world.random.nextDouble() * Math.PI;
                 double speed = 0.22 + world.random.nextDouble() * 0.16;
                 DustParticleEffect col = switch (d % 5) {
-                    case 0  -> DIVINE_PINK;
-                    case 1  -> HOLY_WHITE;
-                    case 2  -> BOND_PURPLE;
-                    case 3  -> VIOLET_SOFT;
-                    default -> TRANSCEND_WHITE;
+                    case 0  -> MAGENTA;
+                    case 1  -> WHITE_YELLOW;
+                    case 2  -> PURPLE;
+                    case 3  -> VIOLET;
+                    default -> WHITE;
                 };
                 world.spawnParticles(col, pos.x, pos.y + 1.0, pos.z,
                         1,
@@ -653,13 +599,13 @@ public class PerfectedUpgradeRitual implements Ritual {
                         0.0);
             }
 
-            // Three concentric ground shockwave rings fired simultaneously
+            // shockwave rings
             for (double ringScale : new double[]{ 0.5, 1.0, 1.6 }) {
                 int ringPoints = 20;
                 for (int i = 0; i < ringPoints; i++) {
                     double angle = i * Math.PI * 2.0 / ringPoints;
                     world.spawnParticles(
-                            ringScale < 1.0 ? TRANSCEND_WHITE : BOND_PURPLE,
+                            ringScale < 1.0 ? WHITE : PURPLE,
                             pos.x + Math.cos(angle) * ringScale * 0.4,
                             pos.y + 0.15,
                             pos.z + Math.sin(angle) * ringScale * 0.4,
@@ -681,8 +627,7 @@ public class PerfectedUpgradeRitual implements Ritual {
         double progress = (double) t / STAGE_4_TICKS;
         long   time     = world.getTime();
 
-        // Shake decays from peak — still powerful but easing, four times per second
-        // until 60% progress, then halves in frequency as calm sets in
+        // decay shake
         int shakeInterval = (progress < 0.60) ? SHAKE_STAGE_4_INTERVAL : SHAKE_STAGE_3_INTERVAL;
         if (t % shakeInterval == 0) {
             float intensity = SHAKE_STAGE_4_BASE * (float)(1.0 - progress * 0.70);
@@ -690,44 +635,37 @@ public class PerfectedUpgradeRitual implements Ritual {
             CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
         }
 
-        // Levitation — the player is physically lifted by the connection completing
-        if (progress < 0.50f) {
-            sp.addStatusEffect(new StatusEffectInstance(
-                    StatusEffects.LEVITATION, 8, 1, true, false, false));
-        }
 
-        // Blindness — the apotheosis light is absolute
+        // blindness
         if (progress < 0.72f) {
             sp.addStatusEffect(new StatusEffectInstance(
                     StatusEffects.BLINDNESS, 15, 0, true, false, false));
         }
 
-        // Dense falling column — at peak intensity, then easing off
+        // dense column
         if (t % 2 == 0 && progress < 0.70f) {
             spawnFallingColumn(world, pos,
                     (int)(14 + (1.0 - progress) * 10), 0.6, 8.0, 16.0);
         }
 
-        // Three halos reconstructed at full speed and tightened radius —
-        // the perfected bond locking in. They tighten further as progress increases.
+        // fast halos
         double finalShrink = 0.7 - progress * 0.25;
         if (t % 2 == 0 && progress < 0.80f) {
             spawnHalo(world, pos, Math.max(0.3, 2.4 * finalShrink), 1.6,
-                    time * 0.18, 24, DIVINE_PINK, TRANSCEND_WHITE);
+                    time * 0.18, 24, MAGENTA, WHITE);
             spawnHalo(world, pos, Math.max(0.3, 1.7 * finalShrink), 1.9,
-                    -time * 0.22, 18, BOND_PURPLE, HOLY_WHITE);
+                    -time * 0.22, 18, PURPLE, WHITE_YELLOW);
             spawnHalo(world, pos, Math.max(0.2, 1.0 * finalShrink), 2.2,
-                    time * 0.28, 12, TRANSCEND_WHITE, VIOLET_SOFT);
+                    time * 0.28, 12, WHITE, VIOLET);
         }
 
-        // TRANSCEND_WHITE eruptions — appear throughout stage 4 as the new
-        // connection writes itself into the player. Unlike any previous stage.
+        // more particles bursting out
         if (t % 3 == 0) {
             for (int i = 0; i < 4; i++) {
                 double theta = world.random.nextDouble() * Math.PI * 2;
                 double phi   = world.random.nextDouble() * Math.PI * 0.7;
                 double speed = 0.08 + (1.0 - progress) * 0.06;
-                world.spawnParticles(TRANSCEND_WHITE,
+                world.spawnParticles(WHITE,
                         pos.x, pos.y + 1.0, pos.z,
                         1,
                         Math.sin(phi) * Math.cos(theta) * speed,
@@ -737,7 +675,7 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // TOTEM stream rising — the connection permanently elevated
+        // totem stuff
         if (t % 3 == 0) {
             for (int i = 0; i < 3; i++) {
                 world.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING,
@@ -752,15 +690,15 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        // Calming: TRANSCEND_WHITE and BLUSH_PINK settle gently
+        // calming
         if (progress > 0.75f) {
-            world.spawnParticles(TRANSCEND_WHITE,
+            world.spawnParticles(WHITE,
                     pos.x, pos.y + 1.0, pos.z, 1, 0.5, 0.4, 0.5, 0.004);
-            world.spawnParticles(BLUSH_PINK,
+            world.spawnParticles(PINK_WHITE,
                     pos.x, pos.y + 1.0, pos.z, 1, 0.4, 0.3, 0.4, 0.003);
         }
 
-        // Enchant at full throughout stage 4
+        // Enchant throughout stage
         if (t % 8 == 0) {
             world.spawnParticles(ParticleTypes.ENCHANT,
                     pos.x, pos.y + 1.0, pos.z, 10, 0.6, 0.8, 0.6, 2.0);
@@ -775,7 +713,7 @@ public class PerfectedUpgradeRitual implements Ritual {
     }
 
     /* ============================================================
-       COMPLETION — perfected, the bond now absolute
+       COMPLETION
        ============================================================ */
 
     private void onComplete(ServerPlayerEntity sp, ServerWorld world) {
@@ -789,25 +727,22 @@ public class PerfectedUpgradeRitual implements Ritual {
         sp.setVelocity(Vec3d.ZERO);
         sp.velocityModified = true;
 
-        // Heal fully — the perfected bond restores the cost of the ordeal
+        // Heal
         sp.heal(6.0f);
 
-        // Final shake: decisive, single hit — the bond locking into place
         CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, 0.28f);
 
         Vec3d pos = sp.getPos();
 
-        // Grand completion burst: full sphere with TRANSCEND_WHITE dominant,
-        // plus a rotating eight-point star fired outward at the sigil's final angles
         for (int d = 0; d < 40; d++) {
             double theta = world.random.nextDouble() * Math.PI * 2;
             double phi   = world.random.nextDouble() * Math.PI;
             double speed = 0.18;
             DustParticleEffect col = switch (d % 4) {
-                case 0  -> TRANSCEND_WHITE;
-                case 1  -> DIVINE_PINK;
-                case 2  -> BOND_PURPLE;
-                default -> HOLY_WHITE;
+                case 0  -> WHITE;
+                case 1  -> MAGENTA;
+                case 2  -> PURPLE;
+                default -> WHITE_YELLOW;
             };
             world.spawnParticles(col, pos.x, pos.y + 1.0, pos.z,
                     1,
@@ -817,10 +752,10 @@ public class PerfectedUpgradeRitual implements Ritual {
                     0.0);
         }
 
-        // Eight-point sigil star fired one last time as a farewell
+        // Eight-point sigil star fired
         for (double angle : SIGIL_ANGLES) {
             for (double d = 0.5; d <= 4.0; d += 0.6) {
-                world.spawnParticles(d < 2.0 ? TRANSCEND_WHITE : DIVINE_PINK,
+                world.spawnParticles(d < 2.0 ? WHITE : MAGENTA,
                         pos.x + Math.cos(angle) * d,
                         pos.y + 0.1,
                         pos.z + Math.sin(angle) * d,
@@ -830,11 +765,11 @@ public class PerfectedUpgradeRitual implements Ritual {
             }
         }
 
-        world.spawnParticles(TRANSCEND_WHITE, pos.x, pos.y + 1.0, pos.z, 22, 1.5, 1.2, 1.5, 0.10);
-        world.spawnParticles(DIVINE_PINK,     pos.x, pos.y + 1.0, pos.z, 18, 1.3, 1.1, 1.3, 0.09);
-        world.spawnParticles(BOND_PURPLE,     pos.x, pos.y + 1.0, pos.z, 16, 1.1, 1.0, 1.1, 0.08);
-        world.spawnParticles(HOLY_WHITE,      pos.x, pos.y + 1.0, pos.z, 14, 1.0, 0.9, 1.0, 0.07);
-        world.spawnParticles(VIOLET_SOFT,     pos.x, pos.y + 1.0, pos.z, 12, 0.9, 0.8, 0.9, 0.07);
+        world.spawnParticles(WHITE, pos.x, pos.y + 1.0, pos.z, 22, 1.5, 1.2, 1.5, 0.10);
+        world.spawnParticles(MAGENTA,     pos.x, pos.y + 1.0, pos.z, 18, 1.3, 1.1, 1.3, 0.09);
+        world.spawnParticles(PURPLE,     pos.x, pos.y + 1.0, pos.z, 16, 1.1, 1.0, 1.1, 0.08);
+        world.spawnParticles(WHITE_YELLOW,      pos.x, pos.y + 1.0, pos.z, 14, 1.0, 0.9, 1.0, 0.07);
+        world.spawnParticles(VIOLET,     pos.x, pos.y + 1.0, pos.z, 12, 0.9, 0.8, 0.9, 0.07);
         world.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, pos.x, pos.y + 1.0, pos.z,
                 24, 1.2, 1.5, 1.2, 0.22);
         world.spawnParticles(ParticleTypes.GLOW, pos.x, pos.y + 1.0, pos.z,
@@ -844,7 +779,7 @@ public class PerfectedUpgradeRitual implements Ritual {
 
         world.playSound(null, sp.getBlockPos(),
                 SoundEvents.UI_TOAST_CHALLENGE_COMPLETE,
-                SoundCategory.PLAYERS, 1.0f, 1.5f);   // highest pitch of all rituals
+                SoundCategory.PLAYERS, 1.0f, 1.5f);
         world.playSound(null, sp.getBlockPos(),
                 SoundEvents.ENTITY_PLAYER_LEVELUP,
                 SoundCategory.PLAYERS, 1.0f, 1.4f);
@@ -853,10 +788,10 @@ public class PerfectedUpgradeRitual implements Ritual {
                 SoundCategory.PLAYERS, 1.0f, 1.6f);
         world.playSound(null, sp.getBlockPos(),
                 SoundEvents.ENTITY_ELDER_GUARDIAN_CURSE,
-                SoundCategory.PLAYERS, 0.6f, 2.0f);   // a high, otherworldly cry
+                SoundCategory.PLAYERS, 0.6f, 2.0f);
 
         sp.sendMessage(
-                net.minecraft.text.Text.literal("§dYour connection is perfected. Level 3."),
+                net.minecraft.text.Text.literal("§dYour connection has been perfected to Level 3."),
                 false
         );
     }

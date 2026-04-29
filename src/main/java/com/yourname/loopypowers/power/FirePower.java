@@ -2,6 +2,7 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.entity.ModEntities;
 
 import com.yourname.loopypowers.entity.PowerFireballEntity;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
@@ -32,17 +33,22 @@ public class FirePower implements Power {
     public void onTick(ServerPlayerEntity player) {
         // PASSIVES:
         // FIRE RESI
-        StatusEffectInstance fireRes =
-                player.getStatusEffect(StatusEffects.FIRE_RESISTANCE);
 
-        if (fireRes == null || fireRes.getDuration() < 100) {
-            player.addStatusEffect(new StatusEffectInstance(
-                    StatusEffects.FIRE_RESISTANCE,
-                    600,
-                    0,
-                    true,
-                    false
-            ));
+        // only if passive on
+        if (!PassiveManager.isEnabled(player)) {
+
+            StatusEffectInstance fireRes =
+                    player.getStatusEffect(StatusEffects.FIRE_RESISTANCE);
+
+            if (fireRes == null || fireRes.getDuration() < 100) {
+                player.addStatusEffect(new StatusEffectInstance(
+                        StatusEffects.FIRE_RESISTANCE,
+                        600,
+                        0,
+                        true,
+                        false
+                ));
+            }
         }
         // SECONDARY:
         if (player.getCommandTags().contains("fire_hover"))
@@ -58,6 +64,8 @@ public class FirePower implements Power {
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
         // sets the target on fire
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(attacker)) return;
         target.setOnFireFor(4);
     }
 

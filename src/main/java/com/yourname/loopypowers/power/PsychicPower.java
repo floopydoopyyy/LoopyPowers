@@ -1,6 +1,8 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.entity.PuppetryEntity;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
@@ -30,8 +32,6 @@ public class PsychicPower implements Power {
     private static final String ULT_CONTROL_TAG = "psy_ult_ctrl_";
     private static final String ATTACK_CD_TAG   = "psy_atk_cd_";
     private static final String LEECH_CD_TAG = "psy_leech_cd_";
-
-    private static final int MARK_DURATION = 80;
 
     // Passive tuning
     private static final float LEECH_HEAL    = 1.0f;
@@ -100,6 +100,8 @@ public class PsychicPower implements Power {
 
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
+        // dodge if passive off
+        if (!PassiveManager.isEnabled(attacker)) return;
 
         // internal cooldown check
         if (hasTag(attacker, LEECH_CD_TAG)) return;
@@ -204,6 +206,7 @@ public class PsychicPower implements Power {
     public static void applyCompel(LivingEntity target) {
         removeTagPrefix(target, COMPEL_TAG);
         target.getCommandTags().add(COMPEL_TAG + COMPEL_DURATION);
+        target.addStatusEffect(new StatusEffectInstance(ModEffects.COMPELLED, COMPEL_DURATION, 0, false, false, true));
     }
 
     private void handleCompel(ServerPlayerEntity player) {
@@ -540,6 +543,7 @@ public class PsychicPower implements Power {
 
         removeTagPrefix(target, ULT_CONTROL_TAG);
         target.getCommandTags().add(ULT_CONTROL_TAG + ULT_CONTROL_DURATION);
+        target.addStatusEffect(new StatusEffectInstance(ModEffects.POSSESSED, ULT_CONTROL_DURATION, 0, false, false, true));
 
         //  sound to nearby players
         if (target.getWorld() instanceof ServerWorld world) {

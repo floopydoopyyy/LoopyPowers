@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -257,6 +258,9 @@ public class SpeedPower implements Power { // SPEED
 
     /** Keeps passive swiftness topped up every tick. */
     private void tickPassiveSpeed(ServerPlayerEntity player) {
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(player)) return;
+
         StatusEffectInstance speed = player.getStatusEffect(StatusEffects.SPEED);
         if (speed == null || speed.getDuration() < 5) {
             player.addStatusEffect(

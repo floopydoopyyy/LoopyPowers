@@ -1,6 +1,8 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.effect.ModEffects;
+import com.yourname.loopypowers.manager.PassiveManager;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -51,6 +53,8 @@ public class BloodPower implements Power {
     private static final int BLEED_TICK_INTERVAL = 15;       // how often it is applied
 
     public void tryApplyBleed(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(attacker)) return;
 
         // do nothing to self
         if (target == attacker) return;
@@ -66,6 +70,8 @@ public class BloodPower implements Power {
                 || source.getTypeRegistryEntry().matchesKey(ModDamageTypes.BIND)) {
             return;
         }
+
+        target.addStatusEffect(new StatusEffectInstance(ModEffects.BLEED, BLEED_DURATION_TICKS, 0, true, false)); // visual, no logic attached to effect
 
         // take a percentage of damage
         float totalBleed = amount * BLEED_FRACTION;
@@ -834,6 +840,9 @@ public class BloodPower implements Power {
     }
 
     private void spawnTetherParticles(ServerWorld w, LivingEntity a, LivingEntity b) { // tether
+        //  visual effect
+        b.addStatusEffect(new StatusEffectInstance(ModEffects.BLOODBOUND, 5, 0, true, false));
+
         Vec3d start = a.getPos().add(0, a.getHeight() * 0.6, 0);
         Vec3d end   = b.getPos().add(0, b.getHeight() * 0.6, 0);
 

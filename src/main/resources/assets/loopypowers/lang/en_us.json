@@ -55,6 +55,11 @@
   "subtitles.loopypowers.explodebig": "Big explosion",
   "subtitles.loopypowers.spray": "Gas spray",
   "subtitles.loopypowers.vinelash": "Vines lash",
+  "subtitles.loopypowers.blizzardloop": "Blizzard howls",
+  "subtitles.loopypowers.spikecast": "Ice spell cast",
+  "subtitles.loopypowers.darknessloop": "Darkness hums",
+  "subtitles.loopypowers.icebeamloop": "Ice beam hums",
+  "subtitles.loopypowers.icebeamcharge": "Ice energy charges",
 
   "death.attack.loopypowers_bleed": "%1$s bled out",
   "death.attack.loopypowers_bleed.player": "%1$s bled out from a wound inflicted by %2$s",
@@ -86,22 +91,40 @@
   "death.attack.loopypowers_rush_collision": "%1$s couldn't handle the impact.",
   "death.attack.loopypowers_rush_collision.player": "%1$s couldn't handle %2$s's impact.",
   "death.attack.loopypowers_absorb": "%1$s couldn't take it all in.",
-
   "death.attack.loopypowers_smoothing": "%1$s couldn't adapt quick enough.",
-  "death.attack.loopypowers_backstab": "%1$s was assassinated by %2$s.",
-  "death.attack.loopypowers_darkult": "%1$s was cut to bits by %2$s.",
   "death.attack.loopypowers_fate": "%1$s was destined to die by the hands of %2$s",
   "death.attack.loopypowers_cosmic_ray": "%1$s got super cancer %2$s's cosmic ray.",
   "death.attack.loopypowers_shooting_star": "%1$s got blasted in %2$s's blaze of glory.",
   "death.attack.loopypowers_black_hole": "%2$s's black hole spaghettified %1$s",
+  "death.attack.loopypowers_backstab": "%1$s was assassinated by %2$s.",
+  "death.attack.loopypowers_darkult": "%1$s was cut to bits by %2$s.",
   "death.attack.loopypowers_phase_burst": "%1$s couldn't handle %2$s's entry",
   "death.attack.loopypowers_fracture": "%1$s was spread across multiple worlds by %2$s'",
   "death.attack.loopypowers_bet": "%1$s lost their own bet",
-  "death.attack.loopypowers_duel": "%1$s couldn't handle %2$s's pressure.",
-  "death.attack.loopypowers_house": "%1$s lost to the house.",
+  "death.attack.loopypowers_duel": "%1$s couldn't handle %2$s's skill.",
+  "death.attack.loopypowers_house": "The house always wins against %1$s.",
   "death.attack.loopypowers_wall_collision": "%1$s was used to pain %2$s's wall.",
   "death.attack.loopypowers_strangle": "%2$s force-choked %1$s.",
   "death.attack.loopypowers_block_throw": "%1$s was crushed by debris launched by %2$s",
   "death.attack.loopypowers_debris_orbit": "%1$s was torn apart by orbiting debris",
-  "death.attack.loopypowers_ritual": "%1$s somehow sacrificed themself."
+  "death.attack.loopypowers_ritual": "%1$s somehow sacrificed themself.",
+
+  "effect.loopypowers.fate": "Fate",
+  "effect.loopypowers.bloodbound": "Bloodbound",
+  "effect.loopypowers.bleed": "Bleed",
+  "effect.loopypowers.exposed": "Exposed",
+  "effect.loopypowers.tethered": "Tethered",
+  "effect.loopypowers.stunned": "Stunned",
+  "effect.loopypowers.fractured": "Fractured",
+  "effect.loopypowers.compelled": "Compelled",
+  "effect.loopypowers.possessed": "Possessed",
+  "effect.loopypowers.grounded": "Grounded",
+
+  "key.loopypowers.primary": "Primary Ability",
+  "key.loopypowers.secondary": "Secondary Ability",
+  "key.loopypowers.ultimate": "Ultimate Ability",
+  "key.loopypowers.toggle_passive": "Toggle Passive",
+
+  "category.loopypowers": "Loopy's Powers"
+
 }

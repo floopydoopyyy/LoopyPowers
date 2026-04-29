@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
@@ -39,6 +40,9 @@ TeleportPower implements Power {
      * if this code breaks again im going to jump
      */
     public boolean tryDodge(ServerPlayerEntity player) {
+        // do not dodge if passive off
+        if (!PassiveManager.isEnabled(player)) return false;
+
         // leave if cooldown is active
         if (hasTagPrefix(player, "tp_dodge_cd_")) return false;
 

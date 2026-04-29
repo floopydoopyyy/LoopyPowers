@@ -1,5 +1,7 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.manager.PassiveManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -43,6 +45,14 @@ public class TelekinesisPower implements Power {
 
     private static final Map<UUID, Vec3d> prevVelocity = new HashMap<>();
 
+    // Maps a thrown/yanked entity's UUID to the UUID of the player who caused it.
+    // Populated in markForImpactTracking, consumed in handleImpactDamage.
+    private final Map<UUID, UUID> impactOwner = new HashMap<>();
+
+    // Maps a suspended/choked entity's UUID to the UUID of the player who applied it.
+    // Populated in activateSecondary, consumed in handleSuspendAndChoke.
+    private final Map<UUID, UUID> suspendOwner = new HashMap<>();
+
     // ── Passive — Forceful Strikes ──────────────────────────────
     private static final double PASSIVE_KB_MULT     = 1.8;
     private static final double PASSIVE_KB_VERTICAL = 0.2;
@@ -71,7 +81,7 @@ public class TelekinesisPower implements Power {
     private static final double CHOKE_ORBIT_RADIUS_START = 1.0; // particle orbit start radius
     private static final double CHOKE_ORBIT_RADIUS_END   = 0.2; // tightens to this by end
 
-    // ── Impact system ─────────────────────────────
+    // ── Impact system ──
     private static final int    TK_AIRBORNE_TICKS   = 40;
 
     private static final double IMPACT_MIN_SPEED_H  = 0.6;
@@ -84,7 +94,7 @@ public class TelekinesisPower implements Power {
     private static final float  IMPACT_FLOOR_SCALE  = 1.8f;
 
     // ── Ultimate ──────────────────────────────────
-    private static final int    DEBRIS_MAX_BLOCKS            = 16;   // max orbiting blocks
+    private static final int    DEBRIS_MAX_BLOCKS            = 25;   // max orbiting blocks
     private static final double DEBRIS_HARVEST_RADIUS        = 10.0; // radius to harvest blocks from
     private static final int    DEBRIS_ORBIT_TICKS           = 260;  // how long ult lasts
     private static final double DEBRIS_ORBIT_RADIUS          = 4.5;  // orbit radius around player
@@ -95,15 +105,15 @@ public class TelekinesisPower implements Power {
     private static final double DEBRIS_PULL_STRENGTH         = 0.07;
     private static final float  DEBRIS_PULL_DAMAGE           = 0.1f;
     private static final int    DEBRIS_THROW_COOLDOWN        = 8;    // ticks between throws
-    private static final int    DEBRIS_THROW_COUNT           = 3;    // blocks per throw
+    private static final int    DEBRIS_THROW_COUNT           = 5;    // blocks per throw
     private static final float  DEBRIS_THROW_DAMAGE          = 7.0f;
     private static final double DEBRIS_THROW_SPEED           = 2.4;
-    private static final double DEBRIS_THROW_SPREAD          = 0.18; // shotgun spread per extra block
+    private static final double DEBRIS_THROW_SPREAD          = 0.6; // shotgun spread per extra block
     private static final double DEBRIS_THROW_EXPLOSION_RADIUS = 4.0;
     // block regen
-    private static final int    DEBRIS_REGEN_DELAY_TICKS = 40;  // no swing time before regen starts
+    private static final int    DEBRIS_REGEN_DELAY_TICKS = 25;  // no swing time before regen starts
     private static final int    DEBRIS_REGEN_INTERVAL    = 20;  // ticks per block regen
-    private static final int    DEBRIS_REGEN_AMOUNT      = 1;   // blocks per regen tick
+    private static final int    DEBRIS_REGEN_AMOUNT      = 5;   // blocks per regen tick
 
     private final Map<UUID, Double> orbitAngles = new HashMap<>();
     private int debrisFieldTicksRemaining = 0;
@@ -268,13 +278,16 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(attacker)) return;
+
         lastSwingTime.put(attacker.getUuid(), attacker.getServerWorld().getTime());
 
         Vec3d look = attacker.getRotationVec(1.0f);
         target.addVelocity(look.x * PASSIVE_KB_MULT, PASSIVE_KB_VERTICAL, look.z * PASSIVE_KB_MULT);
         target.velocityModified = true;
 
-        markForImpactTracking(target, target.getVelocity());
+        markForImpactTracking(target, target.getVelocity(), attacker.getUuid());
 
         ServerWorld world = attacker.getServerWorld();
         spawnImpactRing(world, target.getPos(), 10, 0.3);
@@ -283,16 +296,19 @@ public class TelekinesisPower implements Power {
 
     // IMPACT DAMAGE
 
-    private static void markForImpactTracking(LivingEntity entity, Vec3d launchVelocity) {
+    // attackerUuid is who caused the entity to become airborne, used for death messages
+    private void markForImpactTracking(LivingEntity entity, Vec3d launchVelocity, UUID attackerUuid) {
         removeTagPrefix(entity, TK_AIRBORNE_TAG);
         entity.getCommandTags().add(TK_AIRBORNE_TAG + TK_AIRBORNE_TICKS);
 
         prevVelocity.put(entity.getUuid(), launchVelocity);
+        impactOwner.put(entity.getUuid(), attackerUuid);
     }
 
     private void handleImpactDamage(LivingEntity entity, ServerWorld world) {
         if (!hasTag(entity, TK_AIRBORNE_TAG)) {
             prevVelocity.remove(entity.getUuid());
+            impactOwner.remove(entity.getUuid());
             return;
         }
 
@@ -314,11 +330,14 @@ public class TelekinesisPower implements Power {
                     prev.y < -IMPACT_MIN_SPEED_V &&
                             entity.isOnGround();
 
+            // Resolve the player who caused this entity to become airborne
+            Entity attacker = resolveOwner(impactOwner.get(entity.getUuid()), world);
+
             if (wallStopped) {
                 float damage = IMPACT_WALL_DAMAGE +
                         (float)(prevH - IMPACT_MIN_SPEED_H) * IMPACT_WALL_SCALE;
 
-                entity.damage(entity.getDamageSources().magic(), damage);
+                entity.damage(ModDamageTypes.wallCollision(world, attacker), damage);
 
                 spawnWallImpact(world, entity.getPos().add(0, 0.8, 0));
 
@@ -328,6 +347,7 @@ public class TelekinesisPower implements Power {
 
                 removeTagPrefix(entity, TK_AIRBORNE_TAG);
                 prevVelocity.remove(entity.getUuid());
+                impactOwner.remove(entity.getUuid());
                 return;
             }
 
@@ -335,7 +355,7 @@ public class TelekinesisPower implements Power {
                 float damage = IMPACT_FLOOR_DAMAGE +
                         (float)(-prev.y - IMPACT_MIN_SPEED_V) * IMPACT_FLOOR_SCALE;
 
-                entity.damage(entity.getDamageSources().magic(), damage);
+                entity.damage(ModDamageTypes.wallCollision(world, attacker), damage);
 
                 spawnFloorImpact(world, entity.getPos());
 
@@ -345,6 +365,7 @@ public class TelekinesisPower implements Power {
 
                 removeTagPrefix(entity, TK_AIRBORNE_TAG);
                 prevVelocity.remove(entity.getUuid());
+                impactOwner.remove(entity.getUuid());
                 return;
             }
         }
@@ -377,7 +398,7 @@ public class TelekinesisPower implements Power {
             e.setVelocity(launchVel);
             e.velocityModified = true;
 
-            markForImpactTracking(e, launchVel);
+            markForImpactTracking(e, launchVel, player.getUuid());
             spawnImpactRing(world, e.getPos(), 8, 0.25);
             hitAnything = true;
         }
@@ -411,6 +432,10 @@ public class TelekinesisPower implements Power {
             removeTagPrefix(e, TK_SUSPEND_TAG);
             removeTagPrefix(e, TK_CHOKE_TAG);
             e.getCommandTags().add(TK_SUSPEND_TAG + SUSPEND_TICKS);
+
+            // Record who cast this suspend so choke damage is attributed correctly
+            suspendOwner.put(e.getUuid(), player.getUuid());
+
             spawnImpactRing(world, e.getPos(), 10, 0.3);
             grabbed++;
         }
@@ -445,7 +470,11 @@ public class TelekinesisPower implements Power {
 
         // ------ Choke phase ------------
         boolean choking = tickTag(e, TK_CHOKE_TAG);
-        if (!choking) return;
+        if (!choking) {
+            // Choke fully expired — no further attribution needed
+            suspendOwner.remove(e.getUuid());
+            return;
+        }
 
         int chokeRemaining = getTagValue(e, TK_CHOKE_TAG);
         float chokeProgress = 1.0f - ((float) chokeRemaining / CHOKE_TICKS);
@@ -464,7 +493,11 @@ public class TelekinesisPower implements Power {
 
         if (e.age % CHOKE_DAMAGE_INTERVAL == 0) {
             float damage = CHOKE_DAMAGE_PER_TICK * (0.5f + chokeProgress);
-            e.damage(e.getDamageSources().magic(), damage);
+
+            // Attribute to whoever applied the original suspend
+            Entity attacker = resolveOwner(suspendOwner.get(e.getUuid()), world);
+            e.damage(ModDamageTypes.strangle(world, attacker), damage);
+
             world.playSound(null, e.getBlockPos(),
                     SoundEvents.ENTITY_PLAYER_HURT_SWEET_BERRY_BUSH, e.getSoundCategory(),
                     0.4f + chokeProgress * 0.3f, 0.9f);
@@ -498,7 +531,7 @@ public class TelekinesisPower implements Power {
             e.setVelocity(throwVel);
             e.velocityModified = true;
 
-            markForImpactTracking(e, throwVel);
+            markForImpactTracking(e, throwVel, player.getUuid());
 
             removeTagPrefix(e, TK_AIRBORNE_TAG);
             e.getCommandTags().add(TK_AIRBORNE_TAG + TK_AIRBORNE_TICKS);
@@ -739,7 +772,7 @@ public class TelekinesisPower implements Power {
         toRemove.forEach(orbitAngles::remove);
         // below should not use blocks at all
 
-    // pull and damage
+        // pull and damage
         double contactRadius = DEBRIS_ORBIT_RADIUS_INNER * 1.2;
 
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class,
@@ -757,9 +790,9 @@ public class TelekinesisPower implements Power {
             e.addVelocity(pull.x, pull.y * 0.3, pull.z);
             e.velocityModified = true;
 
-            // damage if close
+            // damage if close — attributed to the player running the ult
             if (dist <= contactRadius && world.getTime() % 10 == 0) {
-                e.damage(player.getDamageSources().magic(), DEBRIS_PULL_DAMAGE);
+                e.damage(ModDamageTypes.debrisOrbit(world, player), DEBRIS_PULL_DAMAGE);
             }
 
             if (world.getTime() % 4 == 0) {
@@ -855,6 +888,7 @@ public class TelekinesisPower implements Power {
                 block.setVelocity(vel);
                 block.velocityModified = true;
 
+                // Store the throwing player so triggerDebrisExplosion can attribute correctly
                 scheduledExplosions.put(uuid, player.getUuid());
 
                 spawnImpactRing(world, block.getPos(), 8, 0.25);
@@ -958,14 +992,14 @@ public class TelekinesisPower implements Power {
 
             // damage falloff
             float damage = DEBRIS_THROW_DAMAGE * (float)(1.0 - dist / DEBRIS_THROW_EXPLOSION_RADIUS);
-            e.damage(player.getDamageSources().magic(), damage);
+            e.damage(ModDamageTypes.blockThrow(world, player), damage);
 
             // knockback
             Vec3d knockback = e.getPos().subtract(pos).normalize().multiply(0.8);
             e.addVelocity(knockback.x, 0.4, knockback.z);
             e.velocityModified = true;
 
-            markForImpactTracking(e, e.getVelocity());
+            markForImpactTracking(e, e.getVelocity(), player.getUuid());
         }
 
         // fx
@@ -1068,9 +1102,9 @@ public class TelekinesisPower implements Power {
     @Override
     public String getSecondaryDescription() {
         return "Suspend a group of entities in front of you, disabling their movement and floating them into the air. You then have two choices for actions to take:" +
-                " /nSwing your hand in any direction and launch the suspended entities in the direction you were looking, entities will take increased wall damage or bonus damage when colliding" +
+                " /nSwing your hand in any direction and launch the suspended entities in the direction you were looking, entities will take increased fall damage or bonus damage when colliding" +
                 " with a wall." +
-                " /nDo not swing your hand while they are suspended and begin to choke the entities, dealing slight damage over a few seconds.";
+                " /nDo not swing your hand while they are suspended and will begin to choke them, losing the ability to throw them and dealing damage over time.";
     }
 
     @Override
@@ -1085,6 +1119,12 @@ public class TelekinesisPower implements Power {
     /* ============================================================
        HELPERS
        ============================================================ */
+
+    // Resolve the player entity from a stored UUID — returns null if they've logged off
+    private static Entity resolveOwner(UUID ownerUuid, ServerWorld world) {
+        if (ownerUuid == null) return null;
+        return world.getServer().getPlayerManager().getPlayer(ownerUuid);
+    }
 
     public static boolean hasTag(LivingEntity entity, String prefix) {
         for (String tag : entity.getCommandTags()) {

@@ -1,7 +1,9 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.network.CameraShake;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -14,7 +16,6 @@ import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 
 import java.util.List;
-
 import java.util.Random;
 
 public class FlightPower implements Power {
@@ -28,7 +29,6 @@ public class FlightPower implements Power {
     private static final String FLIGHT_ACTIVE = "fl_flight_active";      // is flying
 
     //timer stuff
-    private static final String HURT_LOCK_TICKS = "fl_hurt_lock_";       // stop from reentering flight
     private static final String FLIGHT_STALL_TICKS = "fl_stall_";        // stall
 
     // Loop timers for FX cadence
@@ -91,7 +91,6 @@ public class FlightPower implements Power {
     @Override
     public void onTick(ServerPlayerEntity player) {
         // timers
-        int lockLeft = tickSingleTimer(player, HURT_LOCK_TICKS);
         tickSingleTimer(player, FLIGHT_STALL_TICKS);
 
         // enforce wings
@@ -104,7 +103,7 @@ public class FlightPower implements Power {
         tickSonicBoomUltimate(player);
 
         // while flying tick
-        tickPassiveFlight(player, lockLeft);
+        tickPassiveFlight(player);
 
         // speed boost after dash
         tickGustEmpowerment(player);
@@ -124,7 +123,8 @@ public class FlightPower implements Power {
         player.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
         player.velocityModified = true;
 
-        setSingleTimerTag(player, HURT_LOCK_TICKS, HURT_LOCK_DURATION);
+        // Apply visual Grounded effect instead of command tags
+        player.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
 
         // Clear flight marker
         player.getCommandTags().remove(FLIGHT_ACTIVE);
@@ -245,7 +245,7 @@ public class FlightPower implements Power {
             player.sendMessage(net.minecraft.text.Text.literal("§7You must be on the ground to use updraft."), true);
             return false;
         }
-        if (hasTagPrefix(player, HURT_LOCK_TICKS)) {
+        if (player.hasStatusEffect(ModEffects.GROUNDED)) {
             player.sendMessage(net.minecraft.text.Text.literal("§7You're grounded."), true);
             return false;
         }
@@ -464,11 +464,11 @@ public class FlightPower implements Power {
        ============================================================ */
     private static final String GLIDE_REQUEST = "fl_glide_req"; // marker tag (no number)
 
-    private void tickPassiveFlight(ServerPlayerEntity player, int lockLeft) {
+    private void tickPassiveFlight(ServerPlayerEntity player) {
         if (player.isCreative() || player.isSpectator()) return;
 
         // force flight cancel if hurt
-        if (lockLeft > 0) {
+        if (player.hasStatusEffect(ModEffects.GROUNDED)) {
             if (player.isFallFlying()) player.stopFallFlying();
             player.getCommandTags().remove(FLIGHT_ACTIVE);
             return;
@@ -683,7 +683,7 @@ public class FlightPower implements Power {
             e.velocityModified = true;
         }
         // knock them out of flight
-        setSingleTimerTag(player, HURT_LOCK_TICKS, BOOM_KNOCKOUT_DURATION);
+        player.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, BOOM_KNOCKOUT_DURATION, 0, false, false, true));
         // stop all speed
         player.setVelocity(0, Math.min(player.getVelocity().y, -0.25), 0);
         player.velocityModified = true;

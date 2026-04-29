@@ -2,12 +2,11 @@ package com.yourname.loopypowers;
 
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
-
 import java.util.*;
-
 import com.yourname.loopypowers.manager.AbilityTypes;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.power.Power;
+import com.yourname.loopypowers.manager.PassiveManager;
 
 
 // now just displays cooldowns to the user. actual cooldowns handled by power manager.
@@ -66,8 +65,12 @@ public final class CooldownUI {
 
     // query
     public static Map<String, CooldownInfo> getCooldownSnapshot(ServerPlayerEntity player) {
-        Map<String, Entry> map = COOLDOWNS.get(player.getUuid());
-        if (map == null || map.isEmpty()) return Collections.emptyMap();
+        UUID id = player.getUuid();
+
+        Map<String, Entry> map = COOLDOWNS.get(id);
+        if (map == null || map.isEmpty()) {
+            return Collections.emptyMap();
+        }
 
         long now = System.currentTimeMillis();
         Map<String, CooldownInfo> out = new LinkedHashMap<>();
@@ -78,6 +81,7 @@ public final class CooldownUI {
                 out.put(e.getKey(), new CooldownInfo(remaining, e.getValue().suffix));
             }
         }
+
         return out;
     }
 
@@ -210,20 +214,31 @@ public final class CooldownUI {
         UUID id = player.getUuid();
         long now = System.currentTimeMillis();
 
-        // 1) OVERRIDE wins, always (even if suppress_actionbar tag is present)
+        // 1) OVERRIDE wins
         OverrideEntry ov = OVERRIDES.get(id);
         if (ov != null && ov.endMs > now && ov.message != null && !ov.message.isBlank()) {
             player.sendMessage(Text.literal(ov.message), true);
             return;
         }
 
-        // 2) allow global suppression of normal cooldown bar
+        // 2) suppression
         if (player.getCommandTags().contains("suppress_actionbar")) return;
 
         Map<String, Entry> map = COOLDOWNS.get(id);
-        if (map == null || map.isEmpty()) return;
+        boolean hasCooldowns = map != null && !map.isEmpty();
+
+        // passive state
+        boolean passiveOff = !PassiveManager.isEnabled(player);
+
+        // ❗ ONLY show anything if cooldowns exist
+        if (!hasCooldowns) return;
 
         StringBuilder bar = new StringBuilder();
+
+        // ✅ Add passive indicator ONLY when OFF
+        if (passiveOff) {
+            bar.append("§8[§cPassive OFF§8] §8| ");
+        }
 
         for (var entry : map.entrySet()) {
             Entry e = entry.getValue();

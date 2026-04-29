@@ -2,9 +2,11 @@ package com.yourname.loopypowers;
 
 import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.generation.ModOreGeneration;
 import com.yourname.loopypowers.item.ModItems;
 import com.yourname.loopypowers.manager.AbilityTypes;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PlayerDataStore;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.AbilityPackets;
@@ -24,11 +26,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.ActionResult;
-import net.minecraft.util.math.Box;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.yourname.loopypowers.power.SoundPower.tickStun;
 import static com.yourname.loopypowers.power.TelekinesisPower.hasTag;
 
 public class Loopypowers implements ModInitializer {
@@ -39,11 +39,6 @@ public class Loopypowers implements ModInitializer {
     @Override
     public void onInitialize() {
         registerSystems();
-        registerPlayerEvents();
-        registerCombatEvents();
-        registerTickEvents();
-        ModOreGeneration.generateOres();
-
         LOGGER.info("Loopypowers loaded!");
     }
 
@@ -59,6 +54,11 @@ public class Loopypowers implements ModInitializer {
         ModItems.register();
         ModBlocks.init();
         ModDamageTypes.init();
+        ModEffects.register();
+        registerPlayerEvents();
+        registerCombatEvents();
+        registerTickEvents();
+        ModOreGeneration.generateOres();
     }
 
     /* ============================================================
@@ -67,44 +67,25 @@ public class Loopypowers implements ModInitializer {
 
     private void registerPlayerEvents() {
 
-        // ── JOIN ─────────────────────────────────────────────────────────────
-        // Load power/level/cooldowns from disk every time a player connects.
-        // This covers: first login, re-join after disconnect, and server restart.
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayerEntity player = handler.player;
             PlayerDataStore.load(player);
         });
 
-        // ── DISCONNECT ───────────────────────────────────────────────────────
-        // Save to disk whenever a player leaves cleanly.
-        // This is the primary save path for normal gameplay.
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayerEntity player = handler.player;
             PlayerDataStore.save(player);
         });
 
-        // ── RESPAWN / DIMENSION CHANGE ────────────────────────────────────────
-        // Fabric fires COPY_FROM for both death+respawn AND dimension travel.
-        // We copy the in-memory state from old → new entity, then save immediately
-        // so the file reflects the respawned player.
         ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> {
-
-            // Copy power
             Power oldPower = PowerManager.getPower(oldPlayer);
             if (oldPower != null) {
                 PowerManager.setPower(newPlayer, oldPower);
-                // Note: setPower calls onAssign and saves, so no extra save needed
-                // for the power itself. We still copy level + cooldowns below.
             }
 
-            // Copy level (setPower resets to 1, so we must restore it after)
             int level = PowerManager.getLevel(oldPlayer);
             PowerManager.setLevel(newPlayer, level);
-
-            // Copy cooldowns
             PowerManager.copyCooldowns(oldPlayer, newPlayer);
-
-            // Persist the newly assembled state for the respawned player
             PlayerDataStore.save(newPlayer);
         });
     }
@@ -118,11 +99,6 @@ public class Loopypowers implements ModInitializer {
         registerDamageHook();
     }
 
-    /**
-     * Fires when a player lands a melee hit.
-     * Calls onHit() on the attacker's power — powers use this for
-     * passive procs that don't need to know the exact damage value.
-     */
     private void registerMeleeHitCallback() {
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (world.isClient()) return ActionResult.PASS;
@@ -136,11 +112,6 @@ public class Loopypowers implements ModInitializer {
         });
     }
 
-    /**
-     * Fires on every damage event, before it is applied.
-     * Return false to cancel the original damage.
-     * Return true to let it through unchanged.
-     */
     private void registerDamageHook() {
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((victim, source, amount) -> {
 
@@ -162,12 +133,17 @@ public class Loopypowers implements ModInitializer {
 
                 if (attackerPower instanceof CosmicPower
                         && source.getSource() == attacker
-                        && !CosmicPower.isApplyingReducedDamage()) {
+                        && !CosmicPower.isApplyingReducedDamage()
+                        && PassiveManager.isEnabled(attacker)) {
 
-                    CosmicPower.applyMeleeFate(victim, amount);
+                    if (source.isOf(ModDamageTypes.FATE) || (source.isOf(ModDamageTypes.BLACK_HOLE))) return true;
+
+                    CosmicPower.applyMeleeFate(attacker, victim, amount);
+
                     CosmicPower.applyingReducedDamage = true;
                     victim.damage(source, amount * 0.4f);
                     CosmicPower.applyingReducedDamage = false;
+
                     return false;
                 }
             }
@@ -204,18 +180,32 @@ public class Loopypowers implements ModInitializer {
             }
 
             if (victimPower instanceof HealingPower hp) {
+
                 HealingPower.resetPassiveDelay(victimPlayer);
 
-                float smoothing = hp.getSmoothing(victimPlayer);
-                if (smoothing > 0f) {
-                    if (source.getTypeRegistryEntry().matchesKey(ModDamageTypes.ABSORB)) return true;
+                if (source.isOf(ModDamageTypes.ABSORB) ||
+                        source.isOf(ModDamageTypes.SMOOTHING)) {
+                    return true;
+                }
 
-                    victimPlayer.damage(
-                            victimPlayer.getDamageSources().create(ModDamageTypes.ABSORB),
-                            amount * (1.0f - smoothing)
-                    );
+                if (HealingPower.handleAbsorbDamage(victimPlayer, amount)) {
                     return false;
                 }
+
+                float smoothing = hp.getSmoothing(victimPlayer);
+
+                if (smoothing > 0f) {
+                    float reduced = amount * (1.0f - smoothing);
+
+                    victimPlayer.damage(
+                            ModDamageTypes.smoothing(victimPlayer.getWorld()),
+                            reduced
+                    );
+
+                    return false;
+                }
+
+                return true;
             }
 
             if (victimPower instanceof DimensionalPower) {
@@ -256,21 +246,11 @@ public class Loopypowers implements ModInitializer {
         }
     }
 
-    /**
-     * Per-player tick — runs every server tick for each online player.
-     */
     private void tickPlayer(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
         CooldownUI.tick(player);
-        tickStun(player);
         RitualManager.tick(world);
-
-        Box nearbyBox = new Box(player.getPos(), player.getPos()).expand(32, 16, 32);
-        for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class, nearbyBox,
-                ent -> ent.isAlive() && !(ent instanceof ServerPlayerEntity))) {
-            SoundPower.tickStunEntity(e);
-        }
 
         Power power = PowerManager.getPower(player);
         if (power == null) return;

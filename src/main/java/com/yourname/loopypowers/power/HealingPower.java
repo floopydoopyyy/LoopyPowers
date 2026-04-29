@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.manager.PassiveManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -32,10 +33,28 @@ public class HealingPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        // remove any existing passive tags (safety)
+        // remove any existing tags (safety cleanup)
         removeTagPrefix(player, PASSIVE_TAG);
+        removeTagPrefix(player, ABSORB_TAG);
+        removeTagPrefix(player, ABSORB_STORED);
+        removeTagPrefix(player, ULT_TAG);
+        removeTagPrefix(player, ULT_PHASE);
+        removeTagPrefix(player, LS_TAG);
+        removeTagPrefix(player, SMOOTH_TAG);
+
         // enable passive
         player.getCommandTags().add(PASSIVE_TAG + PASSIVE_DELAY);
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        removeTagPrefix(player, PASSIVE_TAG);
+        removeTagPrefix(player, ABSORB_TAG);
+        removeTagPrefix(player, ABSORB_STORED);
+        removeTagPrefix(player, ULT_TAG);
+        removeTagPrefix(player, ULT_PHASE);
+        removeTagPrefix(player, LS_TAG);
+        removeTagPrefix(player, SMOOTH_TAG);
     }
 
     @Override
@@ -61,6 +80,9 @@ public class HealingPower implements Power {
     private static final float HEALING = 0.25f; // amount healed per tick
 
     private void handlePassive(ServerPlayerEntity player) {
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(player)) return;
+
         Iterator<String> it = player.getCommandTags().iterator();
         String newTag = null;
 
@@ -355,7 +377,7 @@ public class HealingPower implements Power {
 
         double radius = BURST_RADIUS;
 
-       // VISUAL SCALING
+        // VISUAL SCALING
 
         int particleCount = VFX_BASE_PARTICLES + (int)(capped * VFX_PARTICLES_PER_STORED);
         if (particleCount > VFX_MAX_PARTICLES) particleCount = VFX_MAX_PARTICLES;
@@ -454,7 +476,7 @@ public class HealingPower implements Power {
         // clear stored
         removeTagPrefix(player, ABSORB_STORED);
 
-       //SOUND SCALING
+        //SOUND SCALING
         float pitch = 0.9f + (capped * 0.02f);
         if (pitch > 1.5f) pitch = 1.5f;
 
@@ -578,9 +600,9 @@ public class HealingPower implements Power {
 
     public static boolean handleAbsorbDamage(ServerPlayerEntity player, float amount) {
 
-        // check if absorb is active
+        // check if absorb is active (prevent stored damage tag overlap)
         for (String tag : player.getCommandTags()) {
-            if (tag.startsWith(ABSORB_TAG)) {
+            if (tag.startsWith(ABSORB_TAG) && !tag.startsWith(ABSORB_STORED)) {
 
                 // split damage
                 float absorbed = amount * 0.8f;
@@ -591,7 +613,7 @@ public class HealingPower implements Power {
 
                 // uses custom damage type to avoid recursion
                 player.damage(
-                        player.getDamageSources().create(ModDamageTypes.ABSORB),
+                        ModDamageTypes.absorb(player.getWorld()),
                         applied
                 );
 
@@ -683,7 +705,13 @@ public class HealingPower implements Power {
                     );
                 }
 
-                if (ticks <= 0) return;
+                if (ticks <= 0) {
+                    // FULL CLEANUP SO STATS DON'T PERSIST FOREVER
+                    removeTagPrefix(player, LS_TAG);
+                    removeTagPrefix(player, SMOOTH_TAG);
+                    removeTagPrefix(player, ULT_PHASE);
+                    return;
+                }
 
                 newTag = ULT_TAG + ticks;
 

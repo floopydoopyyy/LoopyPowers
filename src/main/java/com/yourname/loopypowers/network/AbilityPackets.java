@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.network;
 
 import com.yourname.loopypowers.Loopypowers;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.power.FlightPower;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -20,6 +21,8 @@ public class AbilityPackets {
             new Identifier(Loopypowers.MOD_ID, "camera_shake");
     public static final Identifier FLIGHT_GLIDE_REQUEST =
             new Identifier(Loopypowers.MOD_ID, "flight_glide_request");
+    public static final Identifier TOGGLE_PASSIVE =
+            new Identifier(Loopypowers.MOD_ID, "toggle_passive");
 
     // CLIENT PACKETS
     public static final Identifier RESONANCE_TRAIL =
@@ -64,6 +67,8 @@ public class AbilityPackets {
                 }
         );
 
+
+
         ServerPlayNetworking.registerGlobalReceiver(FLIGHT_GLIDE_REQUEST, (server, player, handler, buf, responseSender) -> {
             server.execute(() -> {
                 // only attempt if they have flight
@@ -74,5 +79,14 @@ public class AbilityPackets {
                 player.getCommandTags().add("fl_glide_req");
             });
         });
+
+        ServerPlayNetworking.registerGlobalReceiver(
+                AbilityPackets.TOGGLE_PASSIVE,
+                (server, player, handler, buf, responseSender) -> {
+                    server.execute(() -> {
+                        PassiveManager.toggle(player);
+                    });
+                }
+        );
     }
 }

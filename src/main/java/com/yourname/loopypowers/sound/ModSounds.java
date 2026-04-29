@@ -42,6 +42,11 @@ public final class ModSounds {
     public static final Identifier EXPLODEBIG_ID  = new Identifier(Loopypowers.MOD_ID, "explodebig");
     public static final Identifier SPRAY_ID       = new Identifier(Loopypowers.MOD_ID, "spray");
     public static final Identifier VINELASH_ID    = new Identifier(Loopypowers.MOD_ID, "vinelash");
+    public static final Identifier BLIZZARDLOOP_ID   = new Identifier(Loopypowers.MOD_ID, "blizzardloop");
+    public static final Identifier SPIKECAST_ID      = new Identifier(Loopypowers.MOD_ID, "spikecast");
+    public static final Identifier DARKNESSLOOP_ID   = new Identifier(Loopypowers.MOD_ID, "darknessloop");
+    public static final Identifier ICEBEAMLOOP_ID    = new Identifier(Loopypowers.MOD_ID, "icebeamloop");
+    public static final Identifier ICEBEAMCHARGE_ID  = new Identifier(Loopypowers.MOD_ID, "icebeamcharge");
 
     // SoundEvents
     public static final SoundEvent THUNDERCLAP     = SoundEvent.of(THUNDERCLAP_ID);
@@ -75,6 +80,11 @@ public final class ModSounds {
     public static final SoundEvent EXPLODEBIG  = SoundEvent.of(EXPLODEBIG_ID);
     public static final SoundEvent SPRAY       = SoundEvent.of(SPRAY_ID);
     public static final SoundEvent VINELASH    = SoundEvent.of(VINELASH_ID);
+    public static final SoundEvent BLIZZARDLOOP  = SoundEvent.of(BLIZZARDLOOP_ID);
+    public static final SoundEvent SPIKECAST     = SoundEvent.of(SPIKECAST_ID);
+    public static final SoundEvent DARKNESSLOOP  = SoundEvent.of(DARKNESSLOOP_ID);
+    public static final SoundEvent ICEBEAMLOOP   = SoundEvent.of(ICEBEAMLOOP_ID);
+    public static final SoundEvent ICEBEAMCHARGE = SoundEvent.of(ICEBEAMCHARGE_ID);
 
     private ModSounds() {}
 
@@ -110,6 +120,11 @@ public final class ModSounds {
         Registry.register(Registries.SOUND_EVENT, EXPLODEBIG_ID, EXPLODEBIG);
         Registry.register(Registries.SOUND_EVENT, SPRAY_ID, SPRAY);
         Registry.register(Registries.SOUND_EVENT, VINELASH_ID, VINELASH);
+        Registry.register(Registries.SOUND_EVENT, BLIZZARDLOOP_ID, BLIZZARDLOOP);
+        Registry.register(Registries.SOUND_EVENT, SPIKECAST_ID, SPIKECAST);
+        Registry.register(Registries.SOUND_EVENT, DARKNESSLOOP_ID, DARKNESSLOOP);
+        Registry.register(Registries.SOUND_EVENT, ICEBEAMLOOP_ID, ICEBEAMLOOP);
+        Registry.register(Registries.SOUND_EVENT, ICEBEAMCHARGE_ID, ICEBEAMCHARGE);
 
     }
 } // doing this sucks

@@ -35,6 +35,9 @@ public abstract class EntityExplodeResistMixin {
         // only if player currently has ExplosionPower
         if (!(PowerManager.getPower(player) instanceof ExplosionPower)) return amount;
 
+        // and must have passive on
+        if (!(PowerManager.getPower(player) instanceof ExplosionPower)) return amount;
+
         return amount * EXPLOSION_MULT;
     }
 }

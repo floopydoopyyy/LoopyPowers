@@ -21,14 +21,12 @@ public class MindRitual implements Ritual {
 
     /* ============================================================
        MIND POWER POOL
-       Add new mind powers here — nothing else needs changing.
        ============================================================ */
 
     private static final List<Supplier<Power>> MIND_POWERS = List.of(
             PsychicPower::new,
             DarknessPower::new,
             TelekinesisPower::new
-            // TelepathyPower::new, etc.
     );
 
     /* ============================================================

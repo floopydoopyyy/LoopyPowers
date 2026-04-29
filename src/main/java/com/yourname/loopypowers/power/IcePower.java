@@ -1,6 +1,8 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.block.ModBlocks;
+import com.yourname.loopypowers.effect.ModEffects;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.block.BlockState;
@@ -28,7 +30,6 @@ import net.minecraft.world.Heightmap;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
-import net.minecraft.particle.BlockStateParticleEffect;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 
 import java.util.*;
@@ -65,6 +66,9 @@ public class IcePower implements Power {
 
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
+        // dodge if passive off
+        if (!PassiveManager.isEnabled(attacker)) return;
+
         if (!tryShatter(attacker, target)) {
             applyFreezePoints(attacker, target, FRZ_POINTS_MELEE);
         }
@@ -95,20 +99,16 @@ public class IcePower implements Power {
     private static final int FRZ_DECAY_POINTS_STEP = 5;   // how many points decay
     // Shatter
     private static final int   FRZ_IMMUNE_TICKS = 100;     // time of ice immunity after shatter
-    private static final float SHATTER_BONUS_DAMAGE = 6.0f; // damage on shatter
+    private static final float SHATTER_BONUS_DAMAGE = 8.0f; // damage on shatter
 
-    // How many points abilities add (tune freely)
-    private static final int FRZ_POINTS_MELEE = 12;  // melee hits
+    // How many points abilities add
+    private static final int FRZ_POINTS_MELEE = 7;  // melee hits
 
     // particles
     private static final DustParticleEffect FRZ_BLUE_DUST =
             new DustParticleEffect(new Vector3f(0.25f, 0.65f, 1.00f), 0.75f);
     private static final DustParticleEffect FRZ_SHIMMER_DUST =
             new DustParticleEffect(new Vector3f(0.75f, 0.95f, 1.00f), 0.45f);
-    private static final BlockStateParticleEffect SHATTER_ICE_SHARDS =
-            new BlockStateParticleEffect(ParticleTypes.BLOCK, Blocks.ICE.getDefaultState());
-    private static final BlockStateParticleEffect SHATTER_FROSTED_SHARDS =
-            new BlockStateParticleEffect(ParticleTypes.BLOCK, Blocks.FROSTED_ICE.getDefaultState());
 
     // Track entities with freeze state
     private static final List<FrozenRef> FROZEN = new ArrayList<>();
@@ -152,10 +152,9 @@ public class IcePower implements Power {
         // Reset decay timer: they only start thawing after a short delay
         setSingleTimerTag(target, FRZ_DECAY, FRZ_DECAY_DELAY_TICKS);
 
-        // Make sure this entity is ticked for stage FX and decay
+        // tick frozen
         trackFrozen(target);
 
-        // Optional: tiny immediate feedback
         ServerWorld w = caster.getServerWorld();
         spawnFreezeStageParticles(w, target, getFreezeStage(next));
     }
@@ -188,7 +187,7 @@ public class IcePower implements Power {
         CameraShake.shakeNearby(caster,
                 6,
                 8,
-                0.25f);
+                0.35f);
 
         // Clear freeze + grant immunity
         clearFreeze(target);
@@ -206,7 +205,7 @@ public class IcePower implements Power {
         w.spawnParticles(FRZ_BLUE_DUST, p.x, p.y, p.z, 24, 0.25, 0.20, 0.25, 0.00);
         w.spawnParticles(FRZ_SHIMMER_DUST, p.x, p.y, p.z, 16, 0.22, 0.18, 0.22, 0.00);
 
-        w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_GLASS_BREAK, SoundCategory.PLAYERS, 1.1f, 1.15f);
+        w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_GLASS_BREAK, SoundCategory.PLAYERS, 0.9f, 1.15f);
         w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE, SoundCategory.PLAYERS, 0.9f, 1.55f);
     }
 
@@ -214,9 +213,9 @@ public class IcePower implements Power {
         removeTagPrefix(e, FRZ_POINTS);
         removeTagPrefix(e, FRZ_DECAY);
 
-        // No longer “refreshing” our stage effects next ticks, so they fall off quickly.
-        // Also clear the vanilla frozen overlay
+        // set ticks 0
         e.setFrozenTicks(0);
+        e.removeStatusEffect(ModEffects.DEEPFREEZE); // clear visual indicator
     }
 
     private static void trackFrozen(LivingEntity e) {
@@ -304,6 +303,7 @@ public class IcePower implements Power {
             // “can barely move” + mining fatigue stronger
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, T, 4, true, false));        // very slow
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.MINING_FATIGUE, T, 2, true, false));  // heavy mining fatigue
+            e.addStatusEffect(new StatusEffectInstance(ModEffects.DEEPFREEZE, T, 0, false, false, true));  // visual indicator
 
             // extra movement clamp (feels frozen even if they have speed boosts etc.)
             Vec3d v = e.getVelocity();
@@ -410,7 +410,7 @@ public class IcePower implements Power {
     private static final double SPIKES_MAX_Y_VEL = 1.65;
     private static final float SPIKES_DAMAGE = 3.5f;
     private static final double SPIKES_KNOCKUP_Y = 0.75;
-    private static final int SPIKES_FREEZE_STACKS = 30;
+    private static final int SPIKES_FREEZE_STACKS = 15;
 
     private static final double SPIKES_TRAVEL_SPEED = 0.9;
     private static final int SPIKES_TRAVEL_MIN_TICKS = 6;
@@ -511,8 +511,8 @@ public class IcePower implements Power {
         int seed = (int) (w.getTime() ^ player.getUuid().getLeastSignificantBits());
         SPIKE_CASTS.add(new SpikeCast(player.getUuid(), w.getRegistryKey(), start, target, travel, seed, yHint));
 
-        w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME,
-                player.getSoundCategory(), 0.8f, 1.35f);
+        w.playSound(null, player.getBlockPos(), ModSounds.SPIKECAST,
+                player.getSoundCategory(), 0.7f, 1.00f);
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
@@ -878,19 +878,19 @@ public class IcePower implements Power {
     private static final String BEAM_CHARGE = "ice_bchg_";
     private static final String BEAM_FIRE   = "ice_bfir_";
 
-    private static final int BEAM_CHARGE_TICKS = 16;
-    private static final int BEAM_FIRE_TICKS   = 55;
+    private static final int BEAM_CHARGE_TICKS = 22;
+    private static final int BEAM_FIRE_TICKS   = 125;
 
-    private static final double BEAM_RANGE = 18.0;
+    private static final double BEAM_RANGE = 34.0;
     private static final double BEAM_WIDTH = 0.75;
 
     private static final int BEAM_APPLY_EVERY = 2;
-    private static final int BEAM_STACKS_PER_APPLY = 5;
+    private static final int BEAM_STACKS_PER_APPLY = 3;
     private static final int BEAM_SLOW_AMP = 1;
     private static final int BEAM_SLOW_TICKS = 12;
 
-    private static final int BEAM_DAMAGE_EVERY = 5;
-    private static final float BEAM_DAMAGE = 0.5f;
+    private static final int BEAM_DAMAGE_EVERY = 2;
+    private static final float BEAM_DAMAGE = 0.25f;
 
     private static final int BEAM_PARTICLE_DENSITY = 10;
     private static final double BEAM_SPIRAL_RADIUS = 0.15;
@@ -910,9 +910,9 @@ public class IcePower implements Power {
 
         ServerWorld w = player.getServerWorld();
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_AMETHYST_CLUSTER_HIT,
+                ModSounds.ICEBEAMCHARGE,
                 player.getSoundCategory(),
-                0.8f, 1.35f);
+                0.8f, 1.00f);
 
         player.swingHand(Hand.MAIN_HAND, true);
     }
@@ -939,7 +939,7 @@ public class IcePower implements Power {
                 setSingleTimerTag(player, BEAM_FIRE, BEAM_FIRE_TICKS);
 
                 w.playSound(null, player.getBlockPos(),
-                        SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE,
+                        ModSounds.ICEBEAMLOOP,
                         player.getSoundCategory(),
                         0.9f, 1.55f);
             }
@@ -961,7 +961,7 @@ public class IcePower implements Power {
             Vec3d muzzle = getBeamMuzzlePos(player, dir);
             Vec3d maxEnd = muzzle.add(dir.multiply(BEAM_RANGE));
 
-            // --- NEW: block collision so it DOES NOT pierce solids ---
+            // block collision
             BlockHitResult blockHit = raycastBlocks(w, player, muzzle, maxEnd);
             Vec3d end = (blockHit.getType() == HitResult.Type.BLOCK)
                     ? blockHit.getPos().subtract(dir.multiply(BEAM_BLOCK_EPS))
@@ -970,12 +970,12 @@ public class IcePower implements Power {
             // particles
             spawnBeamLineParticles(w, muzzle, end);
 
-            // --- NEW: snow at floor impact (only if we hit the TOP face) ---
+            // leave snow
             if (blockHit.getType() == HitResult.Type.BLOCK && (player.age % BEAM_SNOW_PLACE_EVERY) == 0) {
                 tryLeaveSnowAtBeamImpact(w, blockHit);
             }
 
-            // --- NEW: freeze water touched by the beam ---
+            // freeze water
             if ((player.age % BEAM_WATER_FREEZE_EVERY) == 0) {
                 freezeWaterAlongBeam(w, muzzle, end, BEAM_MAX_WATER_FREEZES_PER_TICK);
             }
@@ -983,6 +983,14 @@ public class IcePower implements Power {
             // apply effects
             if ((player.age % BEAM_APPLY_EVERY) == 0) {
                 applyBeamToEntities(w, player, muzzle, end);
+            }
+
+            // play sounds
+            if ((player.age % 15) == 0) {
+                w.playSound(null, player.getBlockPos(),
+                        ModSounds.ICEBEAMLOOP,
+                        player.getSoundCategory(),
+                        0.9f, 1.05f);
             }
 
             // DPS
@@ -1235,18 +1243,18 @@ public class IcePower implements Power {
     private static final int ULT_SNOW_MAX_LAYERS = 2;           // vanilla max
 
     // Shockwave
-    private static final int ULT_WAVE_INTERVAL = 18;
-    private static final double ULT_WAVE_SPEED = 0.95;
-    private static final double ULT_WAVE_MAX_RADIUS = 13.0;
+    private static final int ULT_WAVE_INTERVAL = 16;
+    private static final double ULT_WAVE_SPEED = 1.25;
+    private static final double ULT_WAVE_MAX_RADIUS = 14.0;
     private static final double ULT_WAVE_THICKNESS = 0.80;
 
     private static final double ULT_WAVE_HEIGHT_OFFSET = 0.10;
     private static final double ULT_WAVE_JUMP_CLEARANCE = 0.55;
 
-    private static final float ULT_WAVE_DAMAGE = 2.0f;
-    private static final double ULT_WAVE_KB = 0.65;
+    private static final float ULT_WAVE_DAMAGE = 3.0f;
+    private static final double ULT_WAVE_KB = 0.45;
     private static final double ULT_WAVE_UP = 0.10;
-    private static final int ULT_WAVE_FREEZE_STACKS = 2;
+    private static final int ULT_WAVE_FREEZE_STACKS = 35;
     private static final int ULT_WAVE_SLOW_TICKS = 14;
     private static final int ULT_WAVE_SLOW_AMP = 1;
 
@@ -1319,7 +1327,7 @@ public class IcePower implements Power {
             spreadSnowCover(w, player, (int)Math.ceil(ULT_BLIZZARD_RADIUS), ULT_SNOW_COVER_ATTEMPTS);
         }
 
-        // --- NEW: frost-walker style water freezing around caster ---
+        // freeze around caster
         if ((player.age % ULT_FROST_EVERY) == 0) {
             freezeWaterAroundCaster(w, player, ULT_FROST_RADIUS, ULT_FROST_MAX_PER_TICK);
         }
@@ -1337,6 +1345,11 @@ public class IcePower implements Power {
                     0.8f, 0.85f);
         } else if (pulseLeft < 0) {
             setSingleTimerTag(player, ULT_PULSE, ULT_WAVE_INTERVAL);
+        }
+
+        // Play blizzard loop every n ticks
+        if (player.age % 45 == 0) {
+            playBlizzardLoop(w, player);
         }
 
         tickUltWavesWorld(w);
@@ -1591,6 +1604,24 @@ public class IcePower implements Power {
             e.setVelocity(v.x + pushX, newY, v.z + pushZ);
             e.velocityModified = true;
             e.fallDistance = 0.0f;
+        }
+    }
+
+    private static void playBlizzardLoop(ServerWorld world, ServerPlayerEntity caster) {
+        double radius = ULT_BLIZZARD_RADIUS;
+
+        for (ServerPlayerEntity p : world.getPlayers()) {
+            if (p.squaredDistanceTo(caster) <= radius * radius) {
+
+                world.playSound(
+                        null, // send to all nearby (including the player)
+                        p.getBlockPos(),
+                        ModSounds.BLIZZARDLOOP,
+                        p.getSoundCategory(),
+                        0.4f,
+                        1.0f
+                );
+            }
         }
     }
 

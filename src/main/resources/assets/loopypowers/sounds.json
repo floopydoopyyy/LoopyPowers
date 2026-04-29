@@ -54,9 +54,9 @@
 		"category": "player",
 		"subtitle": "subtitles.loopypowers.rushloop",
 		"sounds": [
-			{ "name": "loopypowers:rushloop", "volume": 0.75, "pitch": 1.00, "stream": false },
-			{ "name": "loopypowers:rushloop", "volume": 0.65, "pitch": 1.03, "stream": false },
-			{ "name": "loopypowers:rushloop", "volume": 0.60, "pitch": 0.97, "stream": false }
+			{ "name": "loopypowers:rushloop", "volume": 0.75, "pitch": 1.00, "stream": true },
+			{ "name": "loopypowers:rushloop", "volume": 0.65, "pitch": 1.03, "stream": true },
+			{ "name": "loopypowers:rushloop", "volume": 0.60, "pitch": 0.97, "stream": true }
 		]
 	},
 
@@ -74,9 +74,9 @@
 		"category": "player",
 		"subtitle": "subtitles.loopypowers.overdriveloop",
 		"sounds": [
-			{ "name": "loopypowers:overdriveloop", "volume": 0.15, "pitch": 1.05, "stream": false },
-			{ "name": "loopypowers:overdriveloop", "volume": 0.25, "pitch": 1.00, "stream": false },
-			{ "name": "loopypowers:overdriveloop", "volume": 0.20, "pitch": 0.98, "stream": false }
+			{ "name": "loopypowers:overdriveloop", "volume": 0.15, "pitch": 1.05, "stream": true },
+			{ "name": "loopypowers:overdriveloop", "volume": 0.25, "pitch": 1.00, "stream": true },
+			{ "name": "loopypowers:overdriveloop", "volume": 0.20, "pitch": 0.98, "stream": true }
 		]
 	},
 
@@ -320,6 +320,56 @@
 			{ "name": "loopypowers:vinelash", "volume": 0.65, "pitch": 1.00 },
 			{ "name": "loopypowers:vinelash", "volume": 0.7, "pitch": 1.08 },
 			{ "name": "loopypowers:vinelash", "volume": 0.6, "pitch": 0.92 }
+		]
+	},
+
+	"blizzardloop": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.blizzardloop",
+		"sounds": [
+			{ "name": "loopypowers:blizzardloop", "volume": 0.7, "pitch": 1.00, "stream": true },
+			{ "name": "loopypowers:blizzardloop", "volume": 0.65, "pitch": 1.03, "stream": true },
+			{ "name": "loopypowers:blizzardloop", "volume": 0.6, "pitch": 0.97, "stream": true }
+		]
+	},
+
+	"spikecast": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.spikecast",
+		"sounds": [
+			{ "name": "loopypowers:spikecast", "volume": 1.0, "pitch": 1.00 },
+			{ "name": "loopypowers:spikecast", "volume": 1.1, "pitch": 1.05 },
+			{ "name": "loopypowers:spikecast", "volume": 0.9, "pitch": 0.95 }
+		]
+	},
+
+	"darknessloop": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.darknessloop",
+		"sounds": [
+			{ "name": "loopypowers:darknessloop", "volume": 0.5, "pitch": 1.00, "stream": true },
+			{ "name": "loopypowers:darknessloop", "volume": 0.45, "pitch": 1.02, "stream": true },
+			{ "name": "loopypowers:darknessloop", "volume": 0.4, "pitch": 0.98, "stream": true }
+		]
+	},
+
+	"icebeamloop": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.icebeamloop",
+		"sounds": [
+			{ "name": "loopypowers:icebeamloop", "volume": 0.6, "pitch": 1.00, "stream": true },
+			{ "name": "loopypowers:icebeamloop", "volume": 0.55, "pitch": 1.04, "stream": true },
+			{ "name": "loopypowers:icebeamloop", "volume": 0.5, "pitch": 0.96, "stream": true }
+		]
+	},
+
+	"icebeamcharge": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.icebeamcharge",
+		"sounds": [
+			{ "name": "loopypowers:icebeamcharge", "volume": 1.0, "pitch": 1.00 },
+			{ "name": "loopypowers:icebeamcharge", "volume": 1.1, "pitch": 1.08 },
+			{ "name": "loopypowers:icebeamcharge", "volume": 0.9, "pitch": 0.92 }
 		]
 	}
 }

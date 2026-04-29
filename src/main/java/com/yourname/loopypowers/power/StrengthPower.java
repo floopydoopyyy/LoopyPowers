@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.manager.AbilityTypes;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.sound.ModSounds;
@@ -78,6 +79,9 @@ public class StrengthPower implements Power {
     @Override
     public void onTick(ServerPlayerEntity player) {
         // Keep passive running
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(player)) return;
+
         StatusEffectInstance strength = player.getStatusEffect(StatusEffects.STRENGTH);
         if (strength == null || strength.getDuration() < 5) {
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 200, 0, true, false));

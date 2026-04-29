@@ -20,11 +20,11 @@ public class PowerRitual implements Ritual {
        CONSTANTS
        ============================================================ */
 
-    // timers
-    private static final int STAGE_1_TICKS = 80;   // frozen, particles encircle
-    private static final int STAGE_2_TICKS = 60;   // levitation, ramping particles + shine appears
-    private static final int STAGE_3_TICKS = 50;   // shine descends toward player
-    private static final int STAGE_4_TICKS = 80;   // blinded, DoT, power granted at end
+    // timer
+    private static final int STAGE_1_TICKS = 80;
+    private static final int STAGE_2_TICKS = 60;
+    private static final int STAGE_3_TICKS = 50;
+    private static final int STAGE_4_TICKS = 80;
 
     private static final int TOTAL_TICKS =
             STAGE_1_TICKS + STAGE_2_TICKS + STAGE_3_TICKS + STAGE_4_TICKS;

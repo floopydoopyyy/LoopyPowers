@@ -1,6 +1,8 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.block.ModBlocks;
+import com.yourname.loopypowers.effect.ModEffects;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
@@ -51,7 +53,10 @@ public class NaturePower implements Power {
     @Override
     public void onTick(ServerPlayerEntity player) {
         // PASSIVE
-        tickPhotosynthesis(player);
+        // only if passive on
+        if (PassiveManager.isEnabled(player)) {
+            tickPhotosynthesis(player);
+        }
 
         // PRIMARY expanding gas
         tickExpandingGas(player);
@@ -74,7 +79,7 @@ public class NaturePower implements Power {
     private static void tickPhotosynthesis(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
 
-        // refresh rhythm (cheaper than checking every tick)
+        // refresh rhythm
         if (player.age % PASSIVE_REFRESH_TICKS != 0) return;
 
         boolean inWater = player.isTouchingWater();
@@ -95,11 +100,11 @@ public class NaturePower implements Power {
        PRIMARY
        ============================================================ */
     // duration
-    private static final int GAS_DURATION_TICKS = 200;
+    private static final int GAS_DURATION_TICKS = 280;
 
     // range
-    private static final float GAS_RADIUS_START = 1.4f;
-    private static final float GAS_RADIUS_MAX   = 4.0f;
+    private static final float GAS_RADIUS_START = 1.8f;
+    private static final float GAS_RADIUS_MAX   = 6.6f;
 
     // vertical volume
     private static final float GAS_HEIGHT_START = 1.8f;
@@ -389,9 +394,9 @@ public class NaturePower implements Power {
        ============================================================ */
     // tuning
     private static final int VINE_DURATION_TICKS = 200; // time stuck
-    private static final double VINE_RANGE = 18.0;
+    private static final double VINE_RANGE = 22.0;
     private static final int VINE_MAX_TARGETS = 8;
-    private static final double VINE_CONE_DOT = 0.70; // cone degrees
+    private static final double VINE_CONE_DOT = 0.80; // cone degrees
     // tether behavior
     private static final double VINE_TETHER_RADIUS = 5.5;     // how far they can roam from the anchor
     private static final double VINE_PULL_MIN = 0.06;         // smallest pull when just outside
@@ -651,6 +656,8 @@ public class NaturePower implements Power {
             // effects
             if (((b.age + b.seed) % VINE_SLOW_REFRESH) == 0) {
                 le.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, VINE_SLOW_TICKS, VINE_SLOW_AMP, true, false));
+                le.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 15, 0, true, false));
+                le.addStatusEffect(new StatusEffectInstance(ModEffects.TETHERED, 5, 0, true, false));
             }
 
             //soft tether
@@ -899,7 +906,7 @@ public class NaturePower implements Power {
 
     @Override
     public String getUltimateDescription() {
-        return "Conjure many vines in front of you. Any enemies close and in direct line of site will be hit by these vines and tethered to their current location, which" +
+        return "Shoot many vines in front of you. Any enemies close and in direct line of site will be hit by these vines and tethered to their current location, which" +
                 " will keep them trapped in that location, dealing periodic damage and slowing them. When near a tethered energy, the caster becomes empowered with speed and haste.";
     }
 

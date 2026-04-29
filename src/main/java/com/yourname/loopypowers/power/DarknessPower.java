@@ -1,5 +1,8 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.effect.ModEffects;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.RenderPackets;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
@@ -66,6 +69,11 @@ public class DarknessPower implements Power {
      * This checks whether the attacker is generally in the victim's rear arc.
      */
     private static boolean isBehindTarget(LivingEntity attacker, LivingEntity victim) {
+        // they are never behind the enemy if passive is off
+        if (attacker instanceof ServerPlayerEntity player) {
+            if (!PassiveManager.isEnabled(player)) return false;
+        }
+
         Vec3d victimForward = victim.getRotationVec(1.0f);
         Vec3d toAttacker = attacker.getPos().subtract(victim.getPos());
 
@@ -353,6 +361,10 @@ public class DarknessPower implements Power {
             if ((now % BLACKOUT_FX_EVERY_TICKS) == 0L) {
                 spawnBlackoutFx(w, st);
             }
+
+            if ((now % 25L) == 0L) {
+                playDarknessLoop(w, st);
+            }
         }
 
         for (UUID owner : toRemove) {
@@ -384,6 +396,7 @@ public class DarknessPower implements Power {
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 40, 0, true, false));
+            e.addStatusEffect(new StatusEffectInstance(ModEffects.EXPOSED, 20, 0, true, false)); // visual one
         }
     }
 
@@ -481,6 +494,29 @@ public class DarknessPower implements Power {
                 25, 1.0, 0.6, 1.0, 0.03);
     }
 
+    private static void playDarknessLoop(ServerWorld world, BlackoutState st) {
+        double radius = BLACKOUT_RADIUS;
+        double radiusSq = radius * radius;
+
+        for (ServerPlayerEntity p : world.getPlayers()) {
+
+            double dx = p.getX() - st.center.x;
+            double dz = p.getZ() - st.center.z;
+
+            if ((dx * dx + dz * dz) > radiusSq) continue;
+
+            // play locally for each player inside
+            world.playSound(
+                    null,
+                    p.getBlockPos(),
+                    ModSounds.DARKNESSLOOP,
+                    p.getSoundCategory(),
+                    0.6f,
+                    1.0f
+            );
+        }
+    }
+
     /* ============================================================
        DAMAGE HOOK
        ============================================================ */
@@ -505,11 +541,13 @@ public class DarknessPower implements Power {
         float mult = 1.0f;
         boolean didBackstab = false;
         boolean didUlt = false;
+        DamageSource finalSource = source;
 
         // backstab
         if (isBehindTarget(attacker, victim)) {
             mult *= BACKSTAB_BONUS_MULT;
             didBackstab = true;
+            finalSource = ModDamageTypes.darknessBackstab(w, attacker);
         }
 
         // ULTIMATE
@@ -518,11 +556,12 @@ public class DarknessPower implements Power {
             if (st != null && st.worldKey.equals(w.getRegistryKey()) && isInsideBlackout(st, victim)) {
                 mult *= BLACKOUT_DAMAGE_MULT;
                 didUlt = true;
+                finalSource = ModDamageTypes.darkUlt(w, attacker); // overrides backstab type if both occur
             }
         }
 
         // no change - let normal damage happen
-        if (Math.abs(mult - 1.0f) < 1.0e-4f) return false;
+        if (Math.abs(mult - 1.0f) < 1.0e-4f && finalSource == source) return false;
 
         float newAmount = amount * mult;
 
@@ -530,7 +569,7 @@ public class DarknessPower implements Power {
         victim.getCommandTags().add(DARKNESS_DMG_GUARD);
         attacker.getCommandTags().add(DARKNESS_DMG_GUARD);
         try {
-            victim.damage(source, newAmount);
+            victim.damage(finalSource, newAmount);
 
             // BACKSTAB FX
             if (didBackstab) {
@@ -540,7 +579,7 @@ public class DarknessPower implements Power {
                         victim.getBlockPos(),
                         ModSounds.BACKSTAB,
                         attacker.getSoundCategory(),
-                        0.9f,
+                        0.7f,
                         1.0f
                 );
 
@@ -586,7 +625,7 @@ public class DarknessPower implements Power {
                         victim.getBlockPos(),
                         ModSounds.BIGSTAB,
                         attacker.getSoundCategory(),
-                        0.7f,
+                        0.5f,
                         1.2f
                 );
 

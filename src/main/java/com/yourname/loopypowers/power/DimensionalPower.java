@@ -1,7 +1,10 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.entity.DisplaceEntity;
 import com.yourname.loopypowers.entity.ModEntities;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.RenderPackets;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
@@ -70,9 +73,6 @@ public class DimensionalPower implements Power {
     public void onAssign(ServerPlayerEntity player) {}
 
     @Override
-    public void onRemove(ServerPlayerEntity player) {}
-
-    @Override
     public void onTick(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
@@ -91,11 +91,6 @@ public class DimensionalPower implements Power {
         }
     }
 
-    @Override
-    public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
-
-    }
-
     /* ============================================================
        PASSIVE
        ============================================================ */
@@ -106,6 +101,8 @@ public class DimensionalPower implements Power {
 
     private void handlePassive(ServerPlayerEntity player) {
         if (hasTag(player, PHASE_SHIFT_TAG)) return;
+        // dodge passive if passive off
+        if (!PassiveManager.isEnabled(player)) return;
 
         ServerWorld world = player.getServerWorld();
 
@@ -309,7 +306,7 @@ public class DimensionalPower implements Power {
                 en -> en.isAlive() && en != player)) {
 
             // damage
-            e.damage(world.getDamageSources().magic(), EXIT_DAMAGE);
+            e.damage(ModDamageTypes.phaseBurst(world, player), EXIT_DAMAGE);
 
             // direction vectors
             Vec3d fromPlayer = e.getPos().subtract(player.getPos());
@@ -524,10 +521,6 @@ public class DimensionalPower implements Power {
     private static final double ULT_CRACK_SEGMENT_LENGTH = 2.3;  // length of each segment
     private static final double ULT_CRACK_JAGGED_ANGLE   = 0.6;  // max angle deviation (radians)
     private static final double ULT_CRACK_WIDTH          = 0.9;  // proximity to crack that triggers damage
-    private static final float  ULT_CRACK_DAMAGE         = 2.5f; // damage on contact
-    private static final int    ULT_CRACK_SLOW_TICKS     = 35;   // ticks of slowness on contact
-    private static final int    ULT_CRACK_SLOW_AMP       = 2;    // slowness amplifier
-    private static final int    ULT_CRACK_DMG_COOLDOWN   = 15;   // ticks between damage hits per entity
     private static final double ULT_WALL_PARTICLE_HEIGHT = 3.0;  // how tall the particle wall rises
     private static final int    ULT_WALL_PARTICLE_DENSITY = 1;   // particles per crack point per interval
     private static final int    ULT_PARTICLE_INTERVAL    = 8;    // ticks between aura particle spawns
@@ -539,7 +532,6 @@ public class DimensionalPower implements Power {
     private static final double MAX_STEP_DOWN = 2.5;  // how much it can drop
     private static final int SEARCH_DOWN = 6;         // how far down to search
     private static final int SEARCH_UP = 2;           // how upward it can correct
-    private static final String ULT_CRACK_DMG_CD_TAG     = "int_crack_cd_";
 
     // Stores crack line points — built on cast, read every tick
     // Each crack is a list of Vec3d points; stored as instance field since this is per-player
@@ -688,30 +680,13 @@ public class DimensionalPower implements Power {
                 player.getBoundingBox().expand(ULT_RIFT_RADIUS + 2),
                 en -> en.isAlive() && en != player)) {
 
-            if (hasTag(e, ULT_CRACK_DMG_CD_TAG)) {
-                tickTag(e, ULT_CRACK_DMG_CD_TAG);
-                continue;
-            }
-
             if (isNearAnyCrack(e.getPos()) || isNearAnyRing(e.getPos())) {
-
-                e.damage(player.getDamageSources().magic(), ULT_CRACK_DAMAGE);
-
                 e.addStatusEffect(new StatusEffectInstance(
-                        StatusEffects.SLOWNESS,
-                        ULT_CRACK_SLOW_TICKS,
-                        ULT_CRACK_SLOW_AMP,
+                        ModEffects.FRACTURED,
+                        40,
+                        0,
                         false, true, true
                 ));
-
-                removeTagPrefix(e, ULT_CRACK_DMG_CD_TAG);
-                e.getCommandTags().add(ULT_CRACK_DMG_CD_TAG + ULT_CRACK_DMG_COOLDOWN);
-
-                world.spawnParticles(
-                        CRACK_BRIGHT,
-                        e.getX(), e.getBodyY(0.5), e.getZ(),
-                        6, 0.3, 0.4, 0.3, 0.04
-                );
             }
         }
     }
