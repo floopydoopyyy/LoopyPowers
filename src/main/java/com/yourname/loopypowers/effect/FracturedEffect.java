@@ -2,6 +2,7 @@ package com.yourname.loopypowers.effect;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.network.RenderPackets;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -12,6 +13,7 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
 import org.joml.Vector3f;
 
 public class FracturedEffect extends StatusEffect {
@@ -22,7 +24,7 @@ public class FracturedEffect extends StatusEffect {
         this.addAttributeModifier(
                 EntityAttributes.GENERIC_MOVEMENT_SPEED,
                 "7101b44b-4b2a-4a2a-8b1b-1b2b3b4b5b6b",
-                -0.90f,
+                -0.50f,
                 EntityAttributeModifier.Operation.MULTIPLY_TOTAL
         );
     }
@@ -60,6 +62,15 @@ public class FracturedEffect extends StatusEffect {
                 world.spawnParticles(brightBlue, x, y, z, 8, 0.4, 0.6, 0.4, 0.02);
                 world.spawnParticles(midBlue, x, y, z, 5, 0.3, 0.5, 0.3, 0.01);
                 world.spawnParticles(darkBlue, x, y, z, 2, 0.2, 0.3, 0.2, 0.01);
+
+                // Play random flicker sound
+                net.minecraft.sound.SoundEvent flickerSound = switch (world.random.nextInt(3)) {
+                    case 0 -> ModSounds.FLICKER;
+                    case 1 -> ModSounds.FLICKER2;
+                    default -> ModSounds.FLICKER3;
+                };
+
+                world.playSound(null, entity.getBlockPos(), flickerSound, SoundCategory.PLAYERS, 0.5f, 1.0f);
             }
         }
     }

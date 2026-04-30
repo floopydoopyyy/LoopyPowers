@@ -119,9 +119,9 @@ public class DarknessPower implements Power {
         w.spawnEntity(proj);
 
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_ENDERMAN_TELEPORT,
+                ModSounds.DARKNESSTELEPORT,
                 player.getSoundCategory(),
-                0.8f, 0.5f);
+                0.6f, 1.4f);
 
         player.swingHand(Hand.MAIN_HAND, true);
     }
@@ -156,9 +156,9 @@ public class DarknessPower implements Power {
 
         // initial particles
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_ENDER_DRAGON_FLAP,
+                ModSounds.MISTENTER,
                 player.getSoundCategory(),
-                0.9f, 0.4f);
+                1.0f, 1.0f);
 
         w.spawnParticles(
                 DARK_DUST,
@@ -197,6 +197,17 @@ public class DarknessPower implements Power {
 
                 // particles
                 spawnMistTrail(player);
+
+                // mist loop sound
+                if (ticks % 18 == 0) {
+                    player.getServerWorld().playSound(
+                            null,
+                            player.getBlockPos(),
+                            com.yourname.loopypowers.sound.ModSounds.MISTLOOP,
+                            net.minecraft.sound.SoundCategory.PLAYERS,
+                            1.0f, 2.0f
+                    );
+                }
 
                 // remove slow effects
                 player.removeStatusEffect(StatusEffects.SLOWNESS);

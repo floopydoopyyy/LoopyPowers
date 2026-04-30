@@ -1,5 +1,7 @@
 package com.yourname.loopypowers.entity;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -7,7 +9,6 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
@@ -17,7 +18,6 @@ import net.minecraft.world.World;
 import net.minecraft.particle.ParticleTypes;
 import java.util.List;
 import net.minecraft.particle.DustParticleEffect;
-import net.minecraft.util.math.MathHelper;
 
 public class ShadowStepEntity extends net.minecraft.entity.Entity {
 
@@ -108,16 +108,16 @@ public class ShadowStepEntity extends net.minecraft.entity.Entity {
             // TELEPORT
             teleportBehind(target);
 
-            // damage
+            // custom backstab damage
             target.damage(
-                    world.getDamageSources().playerAttack(owner),
+                    ModDamageTypes.darknessBackstab(world, owner),
                     6.0f
             );
             target.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 40, 0, true, false));
 
-            // FX
+            // FX - Custom Teleport 2 Sound
             world.playSound(null, target.getBlockPos(),
-                    SoundEvents.ENTITY_ENDERMAN_TELEPORT,
+                    ModSounds.DARKNESSTELEPORT2,
                     owner.getSoundCategory(),
                     0.8f, 1.2f);
 

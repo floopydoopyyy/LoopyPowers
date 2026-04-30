@@ -71,7 +71,7 @@ public class PowerManager {
         PLAYER_POWERS.put(player.getUuid(), power);
         power.onAssign(player);
 
-        setLevel(player, 1);
+        //setLevel(player, 1);
         syncClientFlags(player);
 
         // Persist immediately so admin commands survive crashes

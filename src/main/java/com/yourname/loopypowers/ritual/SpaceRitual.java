@@ -1,7 +1,9 @@
 package com.yourname.loopypowers.ritual;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.power.*;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
@@ -97,6 +99,12 @@ public class SpaceRitual implements Ritual {
         ticks++;
         if (ticks > TOTAL_TICKS) return true;
 
+        // ambient loop plays evenly throughout the entire ritual
+        if (ticks == 1 || ticks % 28 == 0) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALLOOP, SoundCategory.PLAYERS, 0.5f, 0.7f);
+        }
+
         int stage     = currentStage();
         int stageTick = stageLocalTick();
 
@@ -181,8 +189,8 @@ public class SpaceRitual implements Ritual {
        ============================================================ */
 
     private void spawnArmsFlat(ServerWorld world, Vec3d pos, double tMax,
-                                     double armY, double cloudWidth,
-                                     double rotation, boolean dim) {
+                               double armY, double cloudWidth,
+                               double rotation, boolean dim) {
         int steps = Math.max(3, (int)(ARM_STEPS * (tMax / ARM_T_MAX)));
 
         for (int arm = 0; arm < 2; arm++) {
@@ -223,6 +231,9 @@ public class SpaceRitual implements Ritual {
 
     private void tickStage1(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALSTART, SoundCategory.PLAYERS, 1.0f, 1.0f);
+
             world.playSound(null, sp.getBlockPos(),
                     SoundEvents.BLOCK_BEACON_AMBIENT, SoundCategory.PLAYERS, 0.7f, 0.35f);
         }
@@ -275,7 +286,7 @@ public class SpaceRitual implements Ritual {
     private void tickStage2(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
             world.playSound(null, sp.getBlockPos(),
-                    SoundEvents.ENTITY_ELDER_GUARDIAN_AMBIENT, SoundCategory.PLAYERS, 0.7f, 0.45f);
+                    ModSounds.DARKNESSTELEPORT2, SoundCategory.PLAYERS, 0.7f, 0.45f);
         }
 
         double progress = (double) t / STAGE_2_TICKS;
@@ -526,7 +537,8 @@ public class SpaceRitual implements Ritual {
         if (t % STAGE_4_DAMAGE_INTERVAL == 0) {
             float health = sp.getHealth();
             if (health > STAGE_4_MIN_HEALTH + STAGE_4_DAMAGE_PER_TICK) {
-                sp.damage(world.getDamageSources().magic(), STAGE_4_DAMAGE_PER_TICK);
+                // Apply Custom Ritual Damage Type
+                sp.damage(ModDamageTypes.ritual(world), STAGE_4_DAMAGE_PER_TICK);
             }
         }
 
@@ -603,11 +615,10 @@ public class SpaceRitual implements Ritual {
             }
         }
 
-        if (t % 7 == 0) {
+        if (t % 4 == 0) {
             world.playSound(null, sp.getBlockPos(),
-                    SoundEvents.BLOCK_BEACON_ACTIVATE,
-                    SoundCategory.PLAYERS,
-                    0.35f + (float) progress * 0.3f, 0.4f + (float) progress * 0.9f);
+                    ModSounds.DARKNESSLOOP,
+                    SoundCategory.PLAYERS,  0.6f, 0.7f);
         }
     }
 

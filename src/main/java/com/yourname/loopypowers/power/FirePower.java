@@ -1,8 +1,10 @@
 package com.yourname.loopypowers.power;
-import com.yourname.loopypowers.entity.ModEntities;
 
+import com.yourname.loopypowers.entity.ModEntities;
 import com.yourname.loopypowers.entity.PowerFireballEntity;
+import com.yourname.loopypowers.manager.AbilityTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
@@ -75,9 +77,9 @@ public class FirePower implements Power {
 
         // Fireball features
         float speed = 2.6f;          // higher = faster travel
-        float directDamage = 8.0f;   // damage on direct hit
-        int explosionPower = 4;      // damage to world
-        float explosionDamage = 6.0f; // AoE damage
+        float directDamage = 2.0f;   // damage on direct hit
+        int explosionPower = 2;      // damage to world
+        float explosionDamage = 4.0f; // AoE damage
 
         shootFireball(world, player, speed, directDamage, explosionPower, explosionDamage);
     }
@@ -126,6 +128,9 @@ public class FirePower implements Power {
         player.getCommandTags().add("fire_hover_ticks_100");
 
         CameraShake.shakeNearby(player, 20, 10, 1.0f);
+
+        // Refresh Primary (Fireball) Cooldown
+        PowerManager.clearAbilityCooldown(player, AbilityTypes.PRIMARY);
     }
 
     private void launchExplosion(ServerPlayerEntity player) {
@@ -194,8 +199,10 @@ public class FirePower implements Power {
 
     private void tickHover(ServerPlayerEntity player) {
 
-        if (player.isOnGround()) { // dodges method if not floating
+        // Cancel if they hit the ground or crouched
+        if (player.isOnGround() || player.isSneaking()) {
             player.getCommandTags().remove("fire_hover");
+            player.getCommandTags().removeIf(tag -> tag.startsWith("fire_hover_ticks_"));
             return;
         }
 
@@ -552,9 +559,9 @@ public class FirePower implements Power {
         );
     }
     private void applyLOSExplosionDamage( // without this, it would just kill everything
-            ServerPlayerEntity sourcePlayer, // essentially this just scales the maxdamage with LOS
-            float radius,
-            float maxDamage
+                                          ServerPlayerEntity sourcePlayer, // essentially this just scales the maxdamage with LOS
+                                          float radius,
+                                          float maxDamage
     ) {
 
         ServerWorld world = sourcePlayer.getServerWorld();
@@ -645,7 +652,7 @@ public class FirePower implements Power {
     @Override
     public String getPassiveName() {
         return "Heart of fire";
-    } // i just suck at namers huh
+    } // i just suck at names huh
 
     @Override
     public String getPassiveDescription() {
@@ -659,7 +666,7 @@ public class FirePower implements Power {
 
     @Override
     public String getSecondaryDescription() {
-        return "Make an explosion at your feet and shoot up in the air, you will now be levitating using fire for a few seconds. You will not take fall damage when you " +
+        return "Make an explosion at your feet and shoot up in the air, you will now be levitating using fire for a few seconds and your fireball cooldown will be refreshed. You will not take fall damage when you " +
                 "land. This is supposed to keep you at range from others. You can cancel the levitation by sneaking. This can also be used for movement during your ultimate.";
     }
 

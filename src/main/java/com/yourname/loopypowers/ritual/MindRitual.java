@@ -1,7 +1,9 @@
 package com.yourname.loopypowers.ritual;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.power.*;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
@@ -89,6 +91,12 @@ public class MindRitual implements Ritual {
         ticks++;
         if (ticks > TOTAL_TICKS) return true;
 
+        // ambient loop plays evenly throughout the entire ritual
+        if (ticks == 1 || ticks % 28 == 0) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALLOOP, SoundCategory.PLAYERS, 0.5f, 0.7f);
+        }
+
         int stage     = currentStage();
         int stageTick = stageLocalTick();
 
@@ -147,6 +155,9 @@ public class MindRitual implements Ritual {
 
     private void tickStage1(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALSTART, SoundCategory.PLAYERS, 1.0f, 1.0f);
+
             world.playSound(null, sp.getBlockPos(),
                     SoundEvents.ENTITY_ENDERMAN_AMBIENT, SoundCategory.PLAYERS, 0.6f, 0.6f);
         }
@@ -210,7 +221,7 @@ public class MindRitual implements Ritual {
     private void tickStage2(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
             world.playSound(null, sp.getBlockPos(),
-                    SoundEvents.BLOCK_ENCHANTMENT_TABLE_USE, SoundCategory.PLAYERS, 0.8f, 0.7f);
+                    ModSounds.DARKNESSTELEPORT2, SoundCategory.PLAYERS, 0.8f, 0.7f);
         }
 
         double progress     = (double) t / STAGE_2_TICKS;
@@ -385,7 +396,8 @@ public class MindRitual implements Ritual {
         if (t % STAGE_4_DAMAGE_INTERVAL == 0) {
             float health = sp.getHealth();
             if (health > STAGE_4_MIN_HEALTH + STAGE_4_DAMAGE_PER_TICK) {
-                sp.damage(world.getDamageSources().magic(), STAGE_4_DAMAGE_PER_TICK);
+                // Apply Custom Ritual Damage Type
+                sp.damage(ModDamageTypes.ritual(world), STAGE_4_DAMAGE_PER_TICK);
             }
         }
 

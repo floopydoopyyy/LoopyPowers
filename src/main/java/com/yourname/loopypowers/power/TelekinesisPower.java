@@ -2,6 +2,7 @@ package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -64,9 +65,9 @@ public class TelekinesisPower implements Power {
     private static final double YANK_VERTICAL       = 0.3;
 
     // ── Secondary Suspend / throw phase ─────────────────────────────
-    private static final int    SUSPEND_TICKS         = 40;
+    private static final int    SUSPEND_TICKS         = 50;
     private static final double SUSPEND_FLOAT_VEL     = 0.05;
-    private static final int    THROW_READY_TICKS     = 60;
+    private static final int    THROW_READY_TICKS     = 40;
     private static final double THROW_SCAN_RANGE      = 14.0;
     private static final double THROW_SCAN_WIDTH      = 2.5;
     private static final double THROW_SPEED_H         = 1.5;
@@ -74,11 +75,11 @@ public class TelekinesisPower implements Power {
     private static final double THROW_RELEASE_RANGE   = 12.0;
 
     // ── Choke phase ──────────────────────
-    private static final int    CHOKE_TICKS           = 40;   // duration of choke
-    private static final int    CHOKE_DAMAGE_INTERVAL = 18;   // ticks between damage pulses
+    private static final int    CHOKE_TICKS           = 60;   // duration of choke
+    private static final int    CHOKE_DAMAGE_INTERVAL = 10;   // ticks between damage pulses
     private static final float  CHOKE_DAMAGE_PER_TICK = 1.5f; // damage per pulse
     private static final double CHOKE_SQUEEZE_VEL     = -0.01; // upward squeeze velocity
-    private static final double CHOKE_ORBIT_RADIUS_START = 1.0; // particle orbit start radius
+    private static final double CHOKE_ORBIT_RADIUS_START = 0.7; // particle orbit start radius
     private static final double CHOKE_ORBIT_RADIUS_END   = 0.2; // tightens to this by end
 
     // ── Impact system ──
@@ -94,7 +95,7 @@ public class TelekinesisPower implements Power {
     private static final float  IMPACT_FLOOR_SCALE  = 1.8f;
 
     // ── Ultimate ──────────────────────────────────
-    private static final int    DEBRIS_MAX_BLOCKS            = 25;   // max orbiting blocks
+    private static final int    DEBRIS_MAX_BLOCKS            = 10;   // max orbiting blocks
     private static final double DEBRIS_HARVEST_RADIUS        = 10.0; // radius to harvest blocks from
     private static final int    DEBRIS_ORBIT_TICKS           = 260;  // how long ult lasts
     private static final double DEBRIS_ORBIT_RADIUS          = 4.5;  // orbit radius around player
@@ -111,7 +112,7 @@ public class TelekinesisPower implements Power {
     private static final double DEBRIS_THROW_SPREAD          = 0.6; // shotgun spread per extra block
     private static final double DEBRIS_THROW_EXPLOSION_RADIUS = 4.0;
     // block regen
-    private static final int    DEBRIS_REGEN_DELAY_TICKS = 25;  // no swing time before regen starts
+    private static final int    DEBRIS_REGEN_DELAY_TICKS = 15;  // no swing time before regen starts
     private static final int    DEBRIS_REGEN_INTERVAL    = 20;  // ticks per block regen
     private static final int    DEBRIS_REGEN_AMOUNT      = 5;   // blocks per regen tick
 
@@ -404,7 +405,7 @@ public class TelekinesisPower implements Power {
         }
 
         world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_ENDERMAN_TELEPORT, player.getSoundCategory(), 0.6f, 1.2f);
+                ModSounds.YANK, player.getSoundCategory(), 0.6f, 1.2f);
         if (hitAnything) world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_ILLUSIONER_CAST_SPELL, player.getSoundCategory(), 0.4f, 1.5f);
 
@@ -446,7 +447,7 @@ public class TelekinesisPower implements Power {
         }
 
         world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_SHULKER_SHOOT, player.getSoundCategory(), 0.7f, 0.9f);
+                ModSounds.SUSPEND, player.getSoundCategory(), 0.7f, 0.9f);
     }
 
     private void handleSuspendAndChoke(LivingEntity e, ServerWorld world, long time) {

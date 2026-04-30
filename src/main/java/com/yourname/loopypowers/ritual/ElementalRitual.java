@@ -1,7 +1,9 @@
 package com.yourname.loopypowers.ritual;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.power.*;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
@@ -11,7 +13,6 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Vector3f;
 
@@ -116,6 +117,12 @@ public class ElementalRitual implements Ritual {
         ticks++;
         if (ticks > TOTAL_TICKS) return true;
 
+        //  ambient loop plays evenly throughout the entire ritual
+        if (ticks == 1 || ticks % 28 == 0) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALLOOP, SoundCategory.PLAYERS, 0.5f, 0.7f);
+        }
+
         int stage     = currentStage();
         int stageTick = stageLocalTick();
 
@@ -169,11 +176,14 @@ public class ElementalRitual implements Ritual {
     }
 
     /* ============================================================
-       STAGE 1 — Earth and water ground the player, air stirs above
+       STAGE 1
        ============================================================ */
 
     private void tickStage1(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALSTART, SoundCategory.PLAYERS, 1.0f, 1.0f);
+
             world.playSound(null, sp.getBlockPos(),
                     SoundEvents.BLOCK_MOSS_PLACE,        SoundCategory.PLAYERS, 1.0f, 0.7f);
             world.playSound(null, sp.getBlockPos(),
@@ -240,7 +250,7 @@ public class ElementalRitual implements Ritual {
     private void tickStage2(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
             world.playSound(null, sp.getBlockPos(),
-                    SoundEvents.ENTITY_ENDER_DRAGON_AMBIENT, SoundCategory.PLAYERS, 0.6f, 0.9f);
+                    ModSounds.DARKNESSTELEPORT2, SoundCategory.PLAYERS, 0.6f, 0.9f);
         }
 
         double progress = (double) t / STAGE_2_TICKS;
@@ -389,14 +399,15 @@ public class ElementalRitual implements Ritual {
         // blindess
         if (progress > 0.15f && progress < 0.88f) {
             sp.addStatusEffect(new StatusEffectInstance(
-                    StatusEffects.BLINDNESS, 15, 0, true, false, false));
+                    StatusEffects.BLINDNESS, 25, 0, true, false, false));
         }
 
         // damage no kill
         if (t % STAGE_4_DAMAGE_INTERVAL == 0) {
             float health = sp.getHealth();
             if (health > STAGE_4_MIN_HEALTH + STAGE_4_DAMAGE_PER_TICK) {
-                sp.damage(world.getDamageSources().magic(), STAGE_4_DAMAGE_PER_TICK);
+                // Apply Custom Ritual Damage Type
+                sp.damage(ModDamageTypes.ritual(world), STAGE_4_DAMAGE_PER_TICK);
             }
         }
 
@@ -435,7 +446,7 @@ public class ElementalRitual implements Ritual {
                     pos.z + (world.random.nextDouble() - 0.5) * 1.2,
                     1, 0.06, 0.1, 0.06, 0.03);
             world.playSound(null, sp.getBlockPos(),
-                    SoundEvents.BLOCK_AMETHYST_CLUSTER_PLACE,
+                    ModSounds.DARKNESSLOOP,
                     SoundCategory.PLAYERS, 0.3f + (float) progress * 0.2f, 1.6f);
         }
 

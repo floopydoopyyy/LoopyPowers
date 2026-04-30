@@ -2,6 +2,7 @@ package com.yourname.loopypowers.entity;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.power.CosmicPower;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
@@ -67,6 +68,7 @@ public class BlackHoleEntity extends Entity {
 
     private static final DustParticleEffect LIGHT_PURPLE =
             new DustParticleEffect(new Vector3f(0.5f, 0.0f, 0.7f), 1.55f);
+
     /* ============================================================
        Constructor
        ============================================================ */
@@ -114,6 +116,11 @@ public class BlackHoleEntity extends Entity {
 
         pullAndDamageEntities(world, center);
         spawnAllParticles(world, center, lifeProgress);
+
+        // Loop Ambient Sound
+        if (life % 15 == 0) {
+            playBlackHoleLoop(world, center);
+        }
     }
 
     /* ============================================================
@@ -181,6 +188,27 @@ public class BlackHoleEntity extends Entity {
 
         // drain fate
         CosmicPower.drainFateTimer(entity);
+    }
+
+    /* ============================================================
+       Sounds
+       ============================================================ */
+
+    private void playBlackHoleLoop(ServerWorld world, Vec3d center) {
+        double soundRadiusSq = OUTER_RADIUS * OUTER_RADIUS;
+
+        for (ServerPlayerEntity p : world.getPlayers()) {
+            if (p.squaredDistanceTo(center) <= soundRadiusSq) {
+                world.playSound(
+                        null,
+                        p.getBlockPos(),
+                        ModSounds.DARKNESSLOOP,
+                        net.minecraft.sound.SoundCategory.PLAYERS,
+                        0.8f,
+                        1.3f
+                );
+            }
+        }
     }
 
     /* ============================================================

@@ -315,6 +315,8 @@ public class NaturePower implements Power {
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
+        // play at top to still be heard, since there's only 247 channels.
+        w.playSound(null, player.getBlockPos(), ModSounds.ARENABUILD, net.minecraft.sound.SoundCategory.BLOCKS, 0.8f, 1.0f);
 
         // remove the players old cage
         removeCageNow(player);
@@ -358,8 +360,6 @@ public class NaturePower implements Power {
         }
 
         CAGES.put(player.getUuid(), state);
-
-        w.playSound(null, player.getBlockPos(), ModSounds.ARENACREATE, player.getSoundCategory(), 0.9f, 1.0f);
         player.swingHand(Hand.MAIN_HAND, true);
     }
 

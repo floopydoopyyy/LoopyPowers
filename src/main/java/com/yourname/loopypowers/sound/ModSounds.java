@@ -37,7 +37,7 @@ public final class ModSounds {
     public static final Identifier BACKSTAB_ID   = new Identifier(Loopypowers.MOD_ID, "backstab");
     public static final Identifier BIGSTAB_ID    = new Identifier(Loopypowers.MOD_ID, "bigstab");
     public static final Identifier BASSBURST_ID  = new Identifier(Loopypowers.MOD_ID, "bassburst");
-    public static final Identifier ARENACREATE_ID = new Identifier(Loopypowers.MOD_ID, "arenacreate");
+    public static final Identifier ARENABUILD_ID = new Identifier(Loopypowers.MOD_ID, "arenabuild");
     public static final Identifier BOLT_ID        = new Identifier(Loopypowers.MOD_ID, "bolt");
     public static final Identifier EXPLODEBIG_ID  = new Identifier(Loopypowers.MOD_ID, "explodebig");
     public static final Identifier SPRAY_ID       = new Identifier(Loopypowers.MOD_ID, "spray");
@@ -47,6 +47,27 @@ public final class ModSounds {
     public static final Identifier DARKNESSLOOP_ID   = new Identifier(Loopypowers.MOD_ID, "darknessloop");
     public static final Identifier ICEBEAMLOOP_ID    = new Identifier(Loopypowers.MOD_ID, "icebeamloop");
     public static final Identifier ICEBEAMCHARGE_ID  = new Identifier(Loopypowers.MOD_ID, "icebeamcharge");
+    public static final Identifier RAISESTAKES_ID = new Identifier(Loopypowers.MOD_ID, "raisestakes");
+    public static final Identifier ALLIN_ID       = new Identifier(Loopypowers.MOD_ID, "allin");
+    public static final Identifier JACKPOT_ID     = new Identifier(Loopypowers.MOD_ID, "jackpot");
+    public static final Identifier JACKPOT2_ID    = new Identifier(Loopypowers.MOD_ID, "jackpot2");
+    public static final Identifier JACKPOT3_ID    = new Identifier(Loopypowers.MOD_ID, "jackpot3");
+    public static final Identifier NEWRULE_ID     = new Identifier(Loopypowers.MOD_ID, "newrule");
+    public static final Identifier FLICKER_ID          = new Identifier(Loopypowers.MOD_ID, "flicker");
+    public static final Identifier FLICKER2_ID         = new Identifier(Loopypowers.MOD_ID, "flicker2");
+    public static final Identifier FLICKER3_ID         = new Identifier(Loopypowers.MOD_ID, "flicker3");
+    public static final Identifier DARKNESSTELEPORT_ID = new Identifier(Loopypowers.MOD_ID, "darknessteleport");
+    public static final Identifier MISTENTER_ID        = new Identifier(Loopypowers.MOD_ID, "mistenter");
+    public static final Identifier MISTLOOP_ID          = new Identifier(Loopypowers.MOD_ID, "mistloop");
+    public static final Identifier DARKNESSTELEPORT2_ID = new Identifier(Loopypowers.MOD_ID, "darknessteleport2");
+    public static final Identifier SUSPEND_ID       = new Identifier(Loopypowers.MOD_ID, "suspend");
+    public static final Identifier BLACKHOLELOOP_ID = new Identifier(Loopypowers.MOD_ID, "blackholeloop");
+    public static final Identifier YANK_ID          = new Identifier(Loopypowers.MOD_ID, "yank");
+    public static final Identifier GUST_ID          = new Identifier(Loopypowers.MOD_ID, "gust");
+    public static final Identifier UPDRAFT_ID       = new Identifier(Loopypowers.MOD_ID, "updraft");
+    public static final Identifier RITUALLOOP_ID    = new Identifier(Loopypowers.MOD_ID, "ritualloop");
+    public static final Identifier RITUALSTART_ID   = new Identifier(Loopypowers.MOD_ID, "ritualstart");
+    public static final Identifier COSMICRAY_ID     = new Identifier(Loopypowers.MOD_ID, "cosmicray");
 
     // SoundEvents
     public static final SoundEvent THUNDERCLAP     = SoundEvent.of(THUNDERCLAP_ID);
@@ -75,7 +96,7 @@ public final class ModSounds {
     public static final SoundEvent BACKSTAB   = SoundEvent.of(BACKSTAB_ID);
     public static final SoundEvent BIGSTAB    = SoundEvent.of(BIGSTAB_ID);
     public static final SoundEvent BASSBURST  = SoundEvent.of(BASSBURST_ID);
-    public static final SoundEvent ARENACREATE = SoundEvent.of(ARENACREATE_ID);
+    public static final SoundEvent ARENABUILD = SoundEvent.of(ARENABUILD_ID);
     public static final SoundEvent BOLT        = SoundEvent.of(BOLT_ID);
     public static final SoundEvent EXPLODEBIG  = SoundEvent.of(EXPLODEBIG_ID);
     public static final SoundEvent SPRAY       = SoundEvent.of(SPRAY_ID);
@@ -85,6 +106,27 @@ public final class ModSounds {
     public static final SoundEvent DARKNESSLOOP  = SoundEvent.of(DARKNESSLOOP_ID);
     public static final SoundEvent ICEBEAMLOOP   = SoundEvent.of(ICEBEAMLOOP_ID);
     public static final SoundEvent ICEBEAMCHARGE = SoundEvent.of(ICEBEAMCHARGE_ID);
+    public static final SoundEvent RAISESTAKES = SoundEvent.of(RAISESTAKES_ID);
+    public static final SoundEvent ALLIN       = SoundEvent.of(ALLIN_ID);
+    public static final SoundEvent JACKPOT     = SoundEvent.of(JACKPOT_ID);
+    public static final SoundEvent JACKPOT2    = SoundEvent.of(JACKPOT2_ID);
+    public static final SoundEvent JACKPOT3    = SoundEvent.of(JACKPOT3_ID);
+    public static final SoundEvent NEWRULE     = SoundEvent.of(NEWRULE_ID);
+    public static final SoundEvent FLICKER          = SoundEvent.of(FLICKER_ID);
+    public static final SoundEvent FLICKER2         = SoundEvent.of(FLICKER2_ID);
+    public static final SoundEvent FLICKER3         = SoundEvent.of(FLICKER3_ID);
+    public static final SoundEvent DARKNESSTELEPORT = SoundEvent.of(DARKNESSTELEPORT_ID);
+    public static final SoundEvent MISTENTER        = SoundEvent.of(MISTENTER_ID);
+    public static final SoundEvent MISTLOOP          = SoundEvent.of(MISTLOOP_ID);
+    public static final SoundEvent DARKNESSTELEPORT2 = SoundEvent.of(DARKNESSTELEPORT2_ID);
+    public static final SoundEvent SUSPEND       = SoundEvent.of(SUSPEND_ID);
+    public static final SoundEvent BLACKHOLELOOP = SoundEvent.of(BLACKHOLELOOP_ID);
+    public static final SoundEvent YANK          = SoundEvent.of(YANK_ID);
+    public static final SoundEvent GUST          = SoundEvent.of(GUST_ID);
+    public static final SoundEvent UPDRAFT       = SoundEvent.of(UPDRAFT_ID);
+    public static final SoundEvent RITUALLOOP    = SoundEvent.of(RITUALLOOP_ID);
+    public static final SoundEvent RITUALSTART   = SoundEvent.of(RITUALSTART_ID);
+    public static final SoundEvent COSMICRAY     = SoundEvent.of(COSMICRAY_ID);
 
     private ModSounds() {}
 
@@ -115,7 +157,7 @@ public final class ModSounds {
         Registry.register(Registries.SOUND_EVENT, BACKSTAB_ID, BACKSTAB);
         Registry.register(Registries.SOUND_EVENT, BIGSTAB_ID, BIGSTAB);
         Registry.register(Registries.SOUND_EVENT, BASSBURST_ID, BASSBURST);
-        Registry.register(Registries.SOUND_EVENT, ARENACREATE_ID, ARENACREATE);
+        Registry.register(Registries.SOUND_EVENT, ARENABUILD_ID, ARENABUILD);
         Registry.register(Registries.SOUND_EVENT, BOLT_ID, BOLT);
         Registry.register(Registries.SOUND_EVENT, EXPLODEBIG_ID, EXPLODEBIG);
         Registry.register(Registries.SOUND_EVENT, SPRAY_ID, SPRAY);
@@ -125,6 +167,26 @@ public final class ModSounds {
         Registry.register(Registries.SOUND_EVENT, DARKNESSLOOP_ID, DARKNESSLOOP);
         Registry.register(Registries.SOUND_EVENT, ICEBEAMLOOP_ID, ICEBEAMLOOP);
         Registry.register(Registries.SOUND_EVENT, ICEBEAMCHARGE_ID, ICEBEAMCHARGE);
-
+        Registry.register(Registries.SOUND_EVENT, RAISESTAKES_ID, RAISESTAKES);
+        Registry.register(Registries.SOUND_EVENT, ALLIN_ID, ALLIN);
+        Registry.register(Registries.SOUND_EVENT, JACKPOT_ID, JACKPOT);
+        Registry.register(Registries.SOUND_EVENT, JACKPOT2_ID, JACKPOT2);
+        Registry.register(Registries.SOUND_EVENT, JACKPOT3_ID, JACKPOT3);
+        Registry.register(Registries.SOUND_EVENT, NEWRULE_ID, NEWRULE);
+        Registry.register(Registries.SOUND_EVENT, FLICKER_ID, FLICKER);
+        Registry.register(Registries.SOUND_EVENT, FLICKER2_ID, FLICKER2);
+        Registry.register(Registries.SOUND_EVENT, FLICKER3_ID, FLICKER3);
+        Registry.register(Registries.SOUND_EVENT, DARKNESSTELEPORT_ID, DARKNESSTELEPORT);
+        Registry.register(Registries.SOUND_EVENT, MISTENTER_ID, MISTENTER);
+        Registry.register(Registries.SOUND_EVENT, MISTLOOP_ID, MISTLOOP);
+        Registry.register(Registries.SOUND_EVENT, DARKNESSTELEPORT2_ID, DARKNESSTELEPORT2);
+        Registry.register(Registries.SOUND_EVENT, SUSPEND_ID, SUSPEND);
+        Registry.register(Registries.SOUND_EVENT, BLACKHOLELOOP_ID, BLACKHOLELOOP);
+        Registry.register(Registries.SOUND_EVENT, YANK_ID, YANK);
+        Registry.register(Registries.SOUND_EVENT, GUST_ID, GUST);
+        Registry.register(Registries.SOUND_EVENT, UPDRAFT_ID, UPDRAFT);
+        Registry.register(Registries.SOUND_EVENT, RITUALLOOP_ID, RITUALLOOP);
+        Registry.register(Registries.SOUND_EVENT, RITUALSTART_ID, RITUALSTART);
+        Registry.register(Registries.SOUND_EVENT, COSMICRAY_ID, COSMICRAY);
     }
 } // doing this sucks

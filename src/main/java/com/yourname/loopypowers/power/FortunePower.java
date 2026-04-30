@@ -3,6 +3,7 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
@@ -98,10 +99,10 @@ public class FortunePower implements Power {
     private static final int PROC_ACTIONBAR_TICKS = 35;
 
     // how fast you build luck per hit
-    private static final int LUCK_GAIN_ON_HIT = 8;
+    private static final int LUCK_GAIN_ON_HIT = 6;
 
     // decay after you stop hitting
-    private static final int LUCK_DECAY_DELAY_TICKS = 60;   // 3s after last hit
+    private static final int LUCK_DECAY_DELAY_TICKS = 30;   // 3s after last hit
     private static final int LUCK_DECAY_STEP_TICKS  = 10;   // then decay every 0.5s
     private static final int LUCK_DECAY_STEP_POINTS = 5;
 
@@ -110,7 +111,7 @@ public class FortunePower implements Power {
     private static final float PROC_BONUS_AT_MAX = 0.18f;   // // keep in mind base is separate from this and added to this total
 
     // spend luck on proc
-    private static final int LUCK_SPEND_ON_PROC = 6;
+    private static final int LUCK_SPEND_ON_PROC = 45;
 
     private static int getLuck(ServerPlayerEntity p) {
         return getIntTag(p, LUCK_POINTS, 0);
@@ -186,9 +187,9 @@ public class FortunePower implements Power {
 
             // sound
             w.playSound(null, target.getBlockPos(),
-                    SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
+                    ModSounds.JACKPOT,
                     attacker.getSoundCategory(),
-                    0.8f, 1.55f);
+                    0.5f, 1.0f);
 
         } else if (roll == 1) {
             //debuff enemy
@@ -199,9 +200,9 @@ public class FortunePower implements Power {
             spawnProcParticlesEnemy(w, target);
 
             w.playSound(null, target.getBlockPos(),
-                    SoundEvents.BLOCK_ENCHANTMENT_TABLE_USE,
+                    ModSounds.JACKPOT2,
                     attacker.getSoundCategory(),
-                    0.7f, 1.15f);
+                    0.5f, 1.0f);
 
         } else {
             attacker.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 40, 0, true, false));
@@ -212,9 +213,9 @@ public class FortunePower implements Power {
             spawnProcParticlesSelf(w, attacker);
 
             w.playSound(null, attacker.getBlockPos(),
-                    SoundEvents.ENTITY_PLAYER_LEVELUP,
+                    ModSounds.JACKPOT3,
                     attacker.getSoundCategory(),
-                    0.55f, 1.85f);
+                    0.5f, 1.0f);
         }
     }
     private static void spawnProcParticlesEnemy(ServerWorld w, LivingEntity target) {
@@ -295,9 +296,9 @@ public class FortunePower implements Power {
 
         // Base FX
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE,
+                ModSounds.ALLIN,
                 player.getSoundCategory(),
-                0.85f, 1.35f);
+                0.6f, 1.0f);
 
         w.spawnParticles(ParticleTypes.ENCHANT,
                 player.getX(), player.getY() + 1.0, player.getZ(),
@@ -305,10 +306,16 @@ public class FortunePower implements Power {
 
         // JACKPOT
         if (tryAllInJackpot(player, w)) {
+            net.minecraft.sound.SoundEvent jpSound = switch(w.random.nextInt(3)) {
+                case 0 -> ModSounds.JACKPOT;
+                case 1 -> ModSounds.JACKPOT2;
+                default -> ModSounds.JACKPOT3;
+            };
+
             w.playSound(null, player.getBlockPos(),
-                    SoundEvents.ENTITY_PLAYER_LEVELUP,
+                    jpSound,
                     player.getSoundCategory(),
-                    0.9f, 1.85f);
+                    0.5f, 1.0f);
 
             w.spawnParticles(ParticleTypes.FIREWORK,
                     player.getX(), player.getY() + 1.0, player.getZ(),
@@ -461,7 +468,7 @@ public class FortunePower implements Power {
 
         // beam fx
         spawnDuelBeam(w, start, beamEnd);
-        w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_BEACON_POWER_SELECT, player.getSoundCategory(), 0.8f, 1.25f);
+        w.playSound(null, player.getBlockPos(), ModSounds.RAISESTAKES, player.getSoundCategory(), 1.0f, 1.0f);
 
         if (hitEntity == null) {
             w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_BREAK, player.getSoundCategory(), 0.6f, 0.6f);
@@ -1093,8 +1100,8 @@ public class FortunePower implements Power {
         }
 
         if (playerCount >= HOUSE_RULE_MIN_PLAYERS_TO_ANNOUNCE) {
-            w.playSound(null, st.center, SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(),
-                    net.minecraft.sound.SoundCategory.PLAYERS, 0.7f, 1.25f);
+            w.playSound(null, st.center, ModSounds.NEWRULE,
+                    net.minecraft.sound.SoundCategory.PLAYERS, 0.5f, 0.9f);
         }
     }
 
@@ -1470,6 +1477,8 @@ public class FortunePower implements Power {
                 w.spawnParticles(ParticleTypes.CRIT,
                         victim.getX(), victim.getY() + victim.getHeight() * 0.6, victim.getZ(),
                         RULE_JACKPOT_FX_PARTICLES, 0.35, 0.35, 0.35, 0.12);
+
+                w.playSound(null, victim.getBlockPos(), ModSounds.JACKPOT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
             }
         }
 
@@ -1490,7 +1499,7 @@ public class FortunePower implements Power {
             victim.getCommandTags().remove(FORTUNE_DMG_GUARD);
             if (attacker != null) attacker.getCommandTags().remove(FORTUNE_DMG_GUARD);
         }
-        return true; // cancel original damage in your hook
+        return true; // cancel original damage in hook
     }
 
     private static HouseState findHouseForEntity(ServerWorld w, UUID u) {

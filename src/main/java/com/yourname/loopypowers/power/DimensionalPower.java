@@ -6,6 +6,7 @@ import com.yourname.loopypowers.entity.DisplaceEntity;
 import com.yourname.loopypowers.entity.ModEntities;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.RenderPackets;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -143,7 +144,7 @@ public class DimensionalPower implements Power {
         player.getCommandTags().add(PHASE_TAG + PASSIVE_PHASE_TICKS);
 
         player.getServerWorld().playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_AMETHYST_CLUSTER_PLACE,
+                ModSounds.FLICKER,
                 player.getSoundCategory(), 0.5f, 1.2f);
     }
 
@@ -183,9 +184,15 @@ public class DimensionalPower implements Power {
                 world.spawnParticles(darkBlue, x, y, z, 3, 0.3, 0.4, 0.3, 0.015);
             }
 
+            net.minecraft.sound.SoundEvent flickerSound = switch (world.random.nextInt(3)) {
+                case 0 -> ModSounds.FLICKER;
+                case 1 -> ModSounds.FLICKER2;
+                default -> ModSounds.FLICKER3;
+            };
+
             world.playSound(null, player.getBlockPos(),
-                    SoundEvents.BLOCK_AMETHYST_CLUSTER_PLACE,
-                    player.getSoundCategory(), 0.25f, 1.8f);
+                    flickerSound,
+                    player.getSoundCategory(), 0.5f, 1.0f);
         }
 
         // flicker

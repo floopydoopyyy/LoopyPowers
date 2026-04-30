@@ -4,6 +4,7 @@ import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.entity.BlackHoleEntity;
 import com.yourname.loopypowers.entity.ModEntities;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -421,7 +422,10 @@ public class CosmicPower implements Power {
 
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST,
-                player.getSoundCategory(), 0.6f, 1.6f);
+                player.getSoundCategory(), 0.4f, 1.6f);
+        world.playSound(null, player.getBlockPos(),
+                ModSounds.COSMICRAY,
+                player.getSoundCategory(), 0.4f, 1.6f);
 
         player.swingHand(Hand.MAIN_HAND, true);
 

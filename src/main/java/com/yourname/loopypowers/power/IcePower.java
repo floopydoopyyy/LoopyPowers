@@ -179,8 +179,8 @@ public class IcePower implements Power {
                 target.getBlockPos(),
                 ModSounds.SHATTER,
                 SoundCategory.PLAYERS,
-                1.0f,   // volume
-                1.0f    // pitch
+                0.5f,   // volume
+                0.8f    // pitch
         );
 
         // camerashake
@@ -1308,6 +1308,7 @@ public class IcePower implements Power {
                 SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE,
                 player.getSoundCategory(),
                 0.9f, 0.75f);
+        playBlizzardLoop(w, player);
 
         player.swingHand(Hand.MAIN_HAND, true);
     }
@@ -1348,7 +1349,7 @@ public class IcePower implements Power {
         }
 
         // Play blizzard loop every n ticks
-        if (player.age % 45 == 0) {
+        if (player.age % 40 == 0) {
             playBlizzardLoop(w, player);
         }
 

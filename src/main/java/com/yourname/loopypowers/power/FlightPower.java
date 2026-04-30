@@ -2,6 +2,7 @@ package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
@@ -152,17 +153,23 @@ public class FlightPower implements Power {
     private static final double GUST_MAX_HORIZ_SPEED = 2.2; // limit just in case
 
     @Override
-    public boolean tryActivatePrimary(ServerPlayerEntity player) { // fails if person is not flying.
-        if (!player.isFallFlying()) {
-            player.sendMessage(net.minecraft.text.Text.literal("§7You must be flying to use Gust."), true);
+    public boolean tryActivatePrimary(ServerPlayerEntity player) { // fails if person is grounded.
+        if (player.hasStatusEffect(ModEffects.GROUNDED)) {
+            player.sendMessage(net.minecraft.text.Text.literal("§7You're grounded."), true);
             return false;
         }
+        /* if (!player.isFallFlying()) {
+            player.sendMessage(net.minecraft.text.Text.literal("§7You must be flying to use Gust."), true);
+            return false;
+        } */
         activatePrimary(player);
         return true;
     }
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
+        // force flight to start
+        player.getCommandTags().add(GLIDE_REQUEST);
 
         // direction
         Vec3d look = player.getRotationVec(1.0f);
@@ -196,7 +203,7 @@ public class FlightPower implements Power {
                 12, 0.25, 0.15, 0.25, 0.02
         );
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_PHANTOM_FLAP,
+                ModSounds.GUST,
                 player.getSoundCategory(),
                 0.9f, 1.6f
         );
@@ -241,10 +248,11 @@ public class FlightPower implements Power {
     // SECONDARY
     @Override
     public boolean tryActivateSecondary(ServerPlayerEntity player) { // must be grounded and unbound to use updraft
+        /* // stops player from using if flying
         if (player.isFallFlying()) {
             player.sendMessage(net.minecraft.text.Text.literal("§7You must be on the ground to use updraft."), true);
             return false;
-        }
+        } */
         if (player.hasStatusEffect(ModEffects.GROUNDED)) {
             player.sendMessage(net.minecraft.text.Text.literal("§7You're grounded."), true);
             return false;
@@ -265,10 +273,10 @@ public class FlightPower implements Power {
         w.playSound(
                 null,
                 player.getBlockPos(),
-                SoundEvents.ENTITY_PHANTOM_FLAP,
+                ModSounds.UPDRAFT,
                 player.getSoundCategory(),
-                1.0f,
-                0.75f
+                1.1f,
+                1.3f
         );
 
         // send them in the air

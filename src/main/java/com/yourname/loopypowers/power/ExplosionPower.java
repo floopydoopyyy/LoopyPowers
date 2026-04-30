@@ -834,10 +834,10 @@ public class ExplosionPower implements Power {
 
     @Override
     public String getPassiveName() {
-        return "Explosure Therapy";
+        return "Exposure Therapy";
     } // haha! see what i did there. this name sucks
 
-    @Override
+    @Override 
     public String getPassiveDescription() {
         return "You take less explosion damage";
     }
@@ -850,7 +850,7 @@ public class ExplosionPower implements Power {
     @Override
     public String getSecondaryDescription() {
         return "Shoot an explosion where you are looking. The recoil will send you flying in the direction you shot the blast from" +
-                "you will still take fall damage after using this. This ability has 2 charges on seperate cooldowns.";
+                "you will still take fall damage after using this. This ability has 2 charges on separate cooldowns.";
     }
 
     @Override

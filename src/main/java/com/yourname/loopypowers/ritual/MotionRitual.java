@@ -1,7 +1,9 @@
 package com.yourname.loopypowers.ritual;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.power.*;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.player.PlayerEntity;
@@ -18,7 +20,7 @@ import java.util.function.Supplier;
 
 public class MotionRitual implements Ritual {
 
-       // POWERS
+    // POWERS
 
     private static final List<Supplier<Power>> MOTION_POWERS = List.of(
             SpeedPower::new,
@@ -86,6 +88,12 @@ public class MotionRitual implements Ritual {
         ticks++;
         if (ticks > TOTAL_TICKS) return true;
 
+        // ambient loop plays evenly throughout the entire ritual
+        if (ticks == 1 || ticks % 28 == 0) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALLOOP, SoundCategory.PLAYERS, 0.5f, 0.7f);
+        }
+
         int stage     = currentStage();
         int stageTick = stageLocalTick();
 
@@ -144,6 +152,9 @@ public class MotionRitual implements Ritual {
 
     private void tickStage1(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.RITUALSTART, SoundCategory.PLAYERS, 1.0f, 1.0f);
+
             world.playSound(null, sp.getBlockPos(),
                     SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP, SoundCategory.PLAYERS, 0.7f, 0.6f);
         }
@@ -219,7 +230,7 @@ public class MotionRitual implements Ritual {
     private void tickStage2(ServerPlayerEntity sp, ServerWorld world, int t) {
         if (t == 1) {
             world.playSound(null, sp.getBlockPos(),
-                    SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH, SoundCategory.PLAYERS, 0.7f, 0.5f);
+                    ModSounds.DARKNESSTELEPORT2, SoundCategory.PLAYERS, 0.7f, 0.5f);
         }
 
         double progress = (double) t / STAGE_2_TICKS;
@@ -289,7 +300,7 @@ public class MotionRitual implements Ritual {
         }
 
         if (t == 20) world.playSound(null, sp.getBlockPos(),
-                SoundEvents.ENTITY_ARROW_SHOOT,  SoundCategory.PLAYERS, 0.5f, 1.4f);
+                ModSounds.GUST,  SoundCategory.PLAYERS, 0.5f, 1.4f);
         if (t == 40) world.playSound(null, sp.getBlockPos(),
                 SoundEvents.ITEM_ELYTRA_FLYING,  SoundCategory.PLAYERS, 0.5f, 1.2f);
     }
@@ -418,7 +429,7 @@ public class MotionRitual implements Ritual {
         if (t % STAGE_4_DAMAGE_INTERVAL == 0) {
             float health = sp.getHealth();
             if (health > STAGE_4_MIN_HEALTH + STAGE_4_DAMAGE_PER_TICK) {
-                sp.damage(world.getDamageSources().magic(), STAGE_4_DAMAGE_PER_TICK);
+                sp.damage(ModDamageTypes.ritual(world), STAGE_4_DAMAGE_PER_TICK);
             }
         }
 
@@ -466,6 +477,11 @@ public class MotionRitual implements Ritual {
                     SoundEvents.ITEM_ELYTRA_FLYING,
                     SoundCategory.PLAYERS,
                     0.5f + (float) progress * 0.3f, 1.5f + (float) progress * 0.5f);
+        }
+        if (t % 8 == 0) {
+            world.playSound(null, sp.getBlockPos(),
+                    ModSounds.DARKNESSLOOP,
+                    SoundCategory.PLAYERS,  0.6f, 1.6f);
         }
     }
 
