@@ -230,12 +230,12 @@ public final class CooldownUI {
         // passive state
         boolean passiveOff = !PassiveManager.isEnabled(player);
 
-        // ❗ ONLY show anything if cooldowns exist
+        // only show if cooldowns exist
         if (!hasCooldowns) return;
 
         StringBuilder bar = new StringBuilder();
 
-        // ✅ Add passive indicator ONLY when OFF
+        // passive indicator when off
         if (passiveOff) {
             bar.append("§8[§cPassive OFF§8] §8| ");
         }

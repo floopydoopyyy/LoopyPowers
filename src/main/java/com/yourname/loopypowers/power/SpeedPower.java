@@ -65,9 +65,11 @@ public class SpeedPower implements Power { // SPEED
     private static final int    OVERDRIVE_JUMP_AMPLIFIER    = 0;
     private static final int    OVERDRIVE_HASTE_AMPLIFIER   = 2;
 
+    // EASTER EGG
+    private static final int    A_TRAIN_CHANCE   = 250;
+
     // sound
-    private static final int RUSH_LOOP_INTERVAL_TICKS      = 25;   // ~0.9s
-    private static final int OVERDRIVE_LOOP_INTERVAL_TICKS = 45;   // ~1.0s
+    private static final int RUSH_LOOP_INTERVAL_TICKS      = 25;
 
     // particles
     private static final DustParticleEffect CYAN_BRIGHT  =
@@ -187,22 +189,24 @@ public class SpeedPower implements Power { // SPEED
                     LivingEntity victim = (LivingEntity) e;
 
                     DamageSource rushSrc = ModDamageTypes.rush(player.getWorld(), player);
-                    victim.damage(rushSrc, RUSH_DAMAGE);
 
-                    double dx = victim.getX() - player.getX();
-                    double dz = victim.getZ() - player.getZ();
-                    double dist = Math.sqrt(dx * dx + dz * dz);
+                    // IF check prevents multi-hits and ignores i-framed entities
+                    if (victim.damage(rushSrc, RUSH_DAMAGE)) {
+                        double dx = victim.getX() - player.getX();
+                        double dz = victim.getZ() - player.getZ();
+                        double dist = Math.sqrt(dx * dx + dz * dz);
 
-                    if (dist > 0.001) {
-                        victim.addVelocity(
-                                (dx / dist) * RUSH_KNOCKBACK_HORIZONTAL,
-                                RUSH_KNOCKBACK_VERTICAL,
-                                (dz / dist) * RUSH_KNOCKBACK_HORIZONTAL
-                        );
-                        victim.velocityModified = true;
+                        if (dist > 0.001) {
+                            victim.addVelocity(
+                                    (dx / dist) * RUSH_KNOCKBACK_HORIZONTAL,
+                                    RUSH_KNOCKBACK_VERTICAL,
+                                    (dz / dist) * RUSH_KNOCKBACK_HORIZONTAL
+                            );
+                            victim.velocityModified = true;
+                        }
+
+                        CameraShake.shakeNearby(player, 8, 5, 0.45f);
                     }
-
-                    CameraShake.shakeNearby(player, 8, 5, 0.45f);
                 });
 
         spawnRushCastParticles(player);
@@ -357,30 +361,44 @@ public class SpeedPower implements Power { // SPEED
                         e -> e instanceof LivingEntity)
                 .forEach(entity -> {
                     DamageSource overdriveSrc = ModDamageTypes.overdrive(player.getWorld(), player);
-                    entity.damage(overdriveSrc, (float) OVERDRIVE_ENTITY_DAMAGE);
 
-                    Vec3d dir = entity.getPos().subtract(player.getPos()).normalize();
-                    entity.addVelocity(
-                            dir.x * OVERDRIVE_ENTITY_KNOCKBACK,
-                            OVERDRIVE_ENTITY_KNOCKBACK_Y,
-                            dir.z * OVERDRIVE_ENTITY_KNOCKBACK
-                    );
-                    entity.velocityModified = true;
+                    // protects against multi-hit chicanary
+                    if (entity.damage(overdriveSrc, (float) OVERDRIVE_ENTITY_DAMAGE)) {
 
-                    applyCollisionSlow(player);
+                        // EASTER EGG -------------------
+                        if (!entity.isAlive() && entity instanceof ServerPlayerEntity) {
+                            if (player.getRandom().nextInt(A_TRAIN_CHANCE) == 0) {
+                                // string in chat
+                                net.minecraft.text.Text message = net.minecraft.text.Text.literal(
+                                        "<" + player.getName().getString() + "> I can't stop. I can't stop. I can't stop. I can't stop."
+                                );
+                                player.getServer().getPlayerManager().broadcast(message, false);
+                            }
+                        }
+                        // -----------------------------------------------
 
-                    player.getServerWorld().spawnParticles(
-                            ParticleTypes.EXPLOSION_EMITTER,
-                            player.getX(), player.getY() + 1, player.getZ(),
-                            4, 0.6, 0.2, 0.6, 0.1
-                    );
-                    player.getServerWorld().playSound(
-                            null, player.getBlockPos(),
-                            SoundEvents.ENTITY_GENERIC_EXPLODE,
-                            player.getSoundCategory(), 1.0f, 0.8f
-                    );
+                        Vec3d dir = entity.getPos().subtract(player.getPos()).normalize();
+                        entity.addVelocity(
+                                dir.x * OVERDRIVE_ENTITY_KNOCKBACK,
+                                OVERDRIVE_ENTITY_KNOCKBACK_Y,
+                                dir.z * OVERDRIVE_ENTITY_KNOCKBACK
+                        );
+                        entity.velocityModified = true;
+
+                        applyCollisionSlow(player);
+
+                        player.getServerWorld().spawnParticles(
+                                ParticleTypes.EXPLOSION_EMITTER,
+                                player.getX(), player.getY() + 1, player.getZ(),
+                                4, 0.6, 0.2, 0.6, 0.1
+                        );
+                        player.getServerWorld().playSound(
+                                null, player.getBlockPos(),
+                                SoundEvents.ENTITY_GENERIC_EXPLODE,
+                                player.getSoundCategory(), 1.0f, 0.8f
+                        );
+                    }
                 });
-
         spawnOverdriveTrailParticles(player);
     }
 
@@ -738,7 +756,8 @@ public class SpeedPower implements Power { // SPEED
             if (tag.startsWith(BLOCK_DMG_CD_PREFIX)) return;
         }
 
-        player.damage(player.getDamageSources().flyIntoWall(), amount);
+        // Custom damage type applied for painting walls with your own lifeblood
+        player.damage(ModDamageTypes.wallCollision(player.getWorld()), amount);
 
         // Damage cooldown
         player.getCommandTags().add(BLOCK_DMG_CD_PREFIX + "10");

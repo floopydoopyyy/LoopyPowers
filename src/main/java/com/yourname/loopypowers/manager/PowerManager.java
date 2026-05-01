@@ -224,15 +224,6 @@ public class PowerManager {
         String key = abilityKey(power, AbilityTypes.PRIMARY);
         if (!isCooldownReady(player, key)) return;
 
-        if (power instanceof TeleportPower tp) {
-            boolean finished = tp.activatePrimaryDoubleBlink(player);
-            if (finished) {
-                long cd = computeFinalCooldownMs(player, power, AbilityTypes.PRIMARY, tp.getPrimaryCooldownMs());
-                startCooldown(player, key, cd);
-            }
-            return;
-        }
-
         if (power.tryActivatePrimary(player)) {
             long cd = computeFinalCooldownMs(player, power, AbilityTypes.PRIMARY, power.getPrimaryCooldownMs());
             startCooldown(player, key, cd);

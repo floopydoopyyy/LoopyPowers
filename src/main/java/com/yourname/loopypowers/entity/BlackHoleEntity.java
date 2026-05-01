@@ -22,6 +22,7 @@ public class BlackHoleEntity extends Entity {
 
     private ServerPlayerEntity owner;
     private int life;
+    private Vec3d travelDirection = Vec3d.ZERO;
 
     /* ============================================================
        Constants
@@ -29,17 +30,23 @@ public class BlackHoleEntity extends Entity {
 
     public static final int   LIFESPAN         = 200;  // ticks
 
+    // movement speed per tick
+    private static final double TRAVEL_SPEED   = 0.04;
+
+    // chance per tick to spawn a cow if bored
+    private static final float MOOVIN_CHANCE   = 0.003f;
+
     public static final double OUTER_RADIUS    = 25.0;
     public static final double MID_RADIUS      = 16.0;
     public static final double INNER_RADIUS    = 4.0;
 
     // Pull strengths per ring
-    public static final double OUTER_PULL      = 0.06;
-    public static final double MID_PULL        = 0.13;
-    public static final double INNER_PULL      = 0.30;
+    public static final double OUTER_PULL      = 0.02;
+    public static final double MID_PULL        = 0.7;
+    public static final double INNER_PULL      = 0.17;
 
     // velocity cap
-    private static final double MAX_PULL_SPEED = 0.65;
+    private static final double MAX_PULL_SPEED = 0.45;
 
     // Higher = more circular orbit, Lower = More direct pull
     private static final double ORBIT_TANGENT_MIX = 0.55;
@@ -87,6 +94,10 @@ public class BlackHoleEntity extends Entity {
         return owner;
     }
 
+    public void setTravelDirection(Vec3d dir) {
+        this.travelDirection = dir.normalize();
+    }
+
     /* ============================================================
        Tick
        ============================================================ */
@@ -102,19 +113,30 @@ public class BlackHoleEntity extends Entity {
             return;
         }
 
-        // follow caster
-        Vec3d followTarget = owner.getPos().add(0, 0.4, 0); // offset up slightly to center on body
-
+        // Move slowly in the assigned direction
         Vec3d current = this.getPos();
-        double followSpeed = 0.9; // slightly snappier since there's no forward offset to lag behind
-        Vec3d newPos = current.add(followTarget.subtract(current).multiply(followSpeed));
+        Vec3d newPos = current.add(this.travelDirection.multiply(TRAVEL_SPEED));
         this.setPos(newPos.x, newPos.y, newPos.z);
 
         ServerWorld world = (ServerWorld) this.getWorld();
         Vec3d center = this.getPos();
         float lifeProgress = (float) life / LIFESPAN;
 
-        pullAndDamageEntities(world, center);
+        boolean doingDamage = pullAndDamageEntities(world, center);
+
+        // -- EGG --
+        if (!doingDamage && world.random.nextFloat() < MOOVIN_CHANCE) {
+            net.minecraft.entity.passive.CowEntity moovin = EntityType.COW.create(world);
+            if (moovin != null) {
+                double ox = (world.random.nextDouble() - 0.5) * 12.0;
+                double oy = (world.random.nextDouble() - 0.5) * 12.0;
+                double oz = (world.random.nextDouble() - 0.5) * 12.0;
+                moovin.refreshPositionAndAngles(center.x + ox, center.y + oy, center.z + oz, world.random.nextFloat() * 360f, 0);
+                moovin.setCustomName(net.minecraft.text.Text.literal("Moovin"));
+                world.spawnEntity(moovin);
+            }
+        }
+
         spawnAllParticles(world, center, lifeProgress);
 
         // Loop Ambient Sound
@@ -127,7 +149,8 @@ public class BlackHoleEntity extends Entity {
        pull stuff
        ============================================================ */
 
-    private void pullAndDamageEntities(ServerWorld world, Vec3d center) { // applied to closer entities
+    private boolean pullAndDamageEntities(ServerWorld world, Vec3d center) { // applied to closer entities
+        boolean dealtDamage = false;
         List<LivingEntity> nearby = world.getEntitiesByClass(
                 LivingEntity.class,
                 new net.minecraft.util.math.Box(center, center).expand(OUTER_RADIUS),
@@ -142,6 +165,7 @@ public class BlackHoleEntity extends Entity {
             if (dist <= INNER_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, INNER_PULL);
                 applyInnerRingEffects(world, e);
+                dealtDamage = true;
 
             } else if (dist <= MID_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, MID_PULL);
@@ -150,6 +174,8 @@ public class BlackHoleEntity extends Entity {
                 applyOrbitalPull(e, toCenter, dist, OUTER_PULL);
             }
         }
+
+        return dealtDamage;
     }
 
     private void applyOrbitalPull(LivingEntity entity, Vec3d toCenter, double dist, double strength) { // applied to further entities
@@ -362,10 +388,21 @@ public class BlackHoleEntity extends Entity {
     @Override
     protected void readCustomDataFromNbt(NbtCompound nbt) {
         this.life = nbt.getInt("Life");
+
+        // restore trajectory if chunk reloads
+        double dx = nbt.getDouble("DirX");
+        double dy = nbt.getDouble("DirY");
+        double dz = nbt.getDouble("DirZ");
+        this.travelDirection = new Vec3d(dx, dy, dz);
     }
 
     @Override
     protected void writeCustomDataToNbt(NbtCompound nbt) {
         nbt.putInt("Life", this.life);
+
+        // save trajectory
+        nbt.putDouble("DirX", this.travelDirection.x);
+        nbt.putDouble("DirY", this.travelDirection.y);
+        nbt.putDouble("DirZ", this.travelDirection.z);
     }
 }

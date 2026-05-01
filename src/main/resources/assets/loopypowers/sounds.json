@@ -581,5 +581,41 @@
 			{ "name": "loopypowers:cosmicray", "volume": 0.85, "pitch": 0.95 },
 			{ "name": "loopypowers:cosmicray", "volume": 0.95, "pitch": 1.05 }
 		]
+	},
+
+	"jackpotfunny": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.jackpotfunny",
+		"sounds": [
+			{ "name": "loopypowers:jackpotfunny", "volume": 1.0, "pitch": 1.00 },
+			{ "name": "loopypowers:jackpotfunny", "volume": 1.2, "pitch": 1.00 },
+			{ "name": "loopypowers:jackpotfunny", "volume": 1.0, "pitch": 1.5 }
+		]
+	},
+
+	"partypopper": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.partypopper",
+		"sounds": [
+			{ "name": "loopypowers:partypopper", "volume": 1.0, "pitch": 1.00 },
+			{ "name": "loopypowers:partypopper", "volume": 1.2, "pitch": 1.00 }
+		]
+	},
+
+	"funnyfnaf": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.funnyfnaf",
+		"sounds": [
+			{ "name": "loopypowers:funnyfnaf", "volume": 0.7, "pitch": 1.00 },
+			{ "name": "loopypowers:funnyfnaf", "volume": 0.5, "pitch": 1.00 }
+		]
+	},
+
+	"onepunch": {
+		"category": "player",
+		"subtitle": "subtitles.loopypowers.onepunch",
+		"sounds": [
+			{ "name": "loopypowers:onepunch", "volume": 1.0, "pitch": 1.00 }
+		]
 	}
 }

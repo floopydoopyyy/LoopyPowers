@@ -1,11 +1,13 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.entity.ModEntities;
 import com.yourname.loopypowers.entity.PowerFireballEntity;
 import com.yourname.loopypowers.manager.AbilityTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.damage.ModDamageTypes;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -20,11 +22,82 @@ import net.minecraft.world.World;
 
 public class FirePower implements Power {
 
+    /* ============================================================
+       CONSTANTS - PASSIVE
+       ============================================================ */
+    private static final int PASSIVE_FIRE_RESIST_DURATION = 600; // ticks
+    private static final int PASSIVE_FIRE_ON_HIT_DURATION = 4;   // seconds
+
+    /* ============================================================
+       CONSTANTS - PRIMARY
+       ============================================================ */
+    private static final float PRIMARY_SPEED = 2.6f;
+    private static final float PRIMARY_DIRECT_DAMAGE = 2.0f;
+    private static final int PRIMARY_EXPLOSION_POWER = 2;
+    private static final float PRIMARY_EXPLOSION_DAMAGE = 4.0f;
+    private static final double PRIMARY_SPAWN_OFFSET = 0.6;
+
+    /* ============================================================
+       CONSTANTS - SECONDARY
+       ============================================================ */
+    private static final float SECONDARY_EXPLOSION_POWER = 2.5f;
+    private static final float SECONDARY_EXPLOSION_DAMAGE = 6.0f;
+    private static final double SECONDARY_LAUNCH_STRENGTH = 1.7;
+    private static final double SECONDARY_KB_HORIZONTAL = 1.8;
+    private static final double SECONDARY_KB_VERTICAL = 0.6;
+    private static final int SECONDARY_FIRE_DURATION = 4; // seconds
+    private static final int SECONDARY_HOVER_TICKS = 140;
+    private static final int SECONDARY_NO_FALL_TICKS = 200;
+
+    // Hover Mechanics
+    private static final double HOVER_LIFT_FORCE = 0.045;
+    private static final double HOVER_GRAVITY_LIMIT = -0.08;
+    private static final double HOVER_AIR_CONTROL = 0.99;
+    private static final double HOVER_STEERING_FORCE = 0.035;
+
+    // Camera Shake
+    private static final int SECONDARY_SHAKE_DURATION = 20;
+    private static final int SECONDARY_SHAKE_AMPLITUDE = 10;
+    private static final float SECONDARY_SHAKE_INTENSITY = 1.0f;
+
+    private static final int SECONDARY_EXPLOSION_SHAKE_DUR = 6;
+    private static final int SECONDARY_EXPLOSION_SHAKE_AMP = 8;
+    private static final float SECONDARY_EXPLOSION_SHAKE_INT = 0.25f;
+
+    /* ============================================================
+       CONSTANTS - ULTIMATE
+       ============================================================ */
+    private static final int ULTIMATE_CHARGE_TICKS = 100;
+    private static final float ULTIMATE_EXPLOSION_POWER = 30.0f;
+    private static final float ULTIMATE_DAMAGE_RADIUS = 10.0f;
+    private static final float ULTIMATE_MAX_DAMAGE = 25.0f;
+    private static final int ULTIMATE_FIRE_DURATION = 6; // seconds
+
+    // Pull
+    private static final double ULTIMATE_PULL_BASE_RADIUS = 6.0;
+    private static final double ULTIMATE_PULL_SCALED_RADIUS = 14.0;
+    private static final double ULTIMATE_PULL_BASE_STRENGTH = 0.01;
+    private static final double ULTIMATE_PULL_SCALED_STRENGTH = 0.04;
+    private static final double ULTIMATE_PULL_VERTICAL_MODIFIER = 0.2;
+
+    // Camera Shake
+    private static final int ULT_START_SHAKE_DURATION = 30;
+    private static final int ULT_START_SHAKE_AMPLITUDE = 100;
+    private static final float ULT_START_SHAKE_INTENSITY = 0.6f;
+
+    private static final int ULT_DETONATE_SHAKE_DURATION = 50;
+    private static final int ULT_DETONATE_SHAKE_AMPLITUDE = 30;
+    private static final float ULT_DETONATE_SHAKE_INTENSITY = 2.5f;
+
+    /* ============================================================
+       BASIC
+       ============================================================ */
+
     @Override
-    public void onAssign(ServerPlayerEntity player) { // when power gained
+    public void onAssign(ServerPlayerEntity player) {
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.FIRE_RESISTANCE,
-                600,   // 30 seconds
+                PASSIVE_FIRE_RESIST_DURATION,
                 0,
                 true,
                 false
@@ -33,55 +106,44 @@ public class FirePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        // PASSIVES:
-        // FIRE RESI
-
-        // only if passive on
+        // PASSIVES
         if (!PassiveManager.isEnabled(player)) {
-
-            StatusEffectInstance fireRes =
-                    player.getStatusEffect(StatusEffects.FIRE_RESISTANCE);
-
+            StatusEffectInstance fireRes = player.getStatusEffect(StatusEffects.FIRE_RESISTANCE);
             if (fireRes == null || fireRes.getDuration() < 100) {
                 player.addStatusEffect(new StatusEffectInstance(
                         StatusEffects.FIRE_RESISTANCE,
-                        600,
+                        PASSIVE_FIRE_RESIST_DURATION,
                         0,
                         true,
                         false
                 ));
             }
         }
-        // SECONDARY:
+
+        // SECONDARY
         if (player.getCommandTags().contains("fire_hover"))
             tickHover(player);
 
-        if (player.getCommandTags().contains("fire_no_fall"))
-            tickNoFall(player);
-        // ULTIMATE:
+        // ULTIMATE
         if (player.getCommandTags().contains("fire_ultimate_charge"))
-            tickUltimateCharge(player); //everytime i add something to ticks i feel like im bumfucking the server sexual style
+            tickUltimateCharge(player);
     }
-    // FIRE ASPECT
+
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
-        // sets the target on fire
-        // dodge passive if passive off
         if (!PassiveManager.isEnabled(attacker)) return;
-        target.setOnFireFor(4);
+        target.setOnFireFor(PASSIVE_FIRE_ON_HIT_DURATION);
     }
+
+    /* ============================================================
+       PRIMARY
+       ============================================================ */
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
         if (!(player.getWorld() instanceof ServerWorld world)) return;
 
-        // Fireball features
-        float speed = 2.6f;          // higher = faster travel
-        float directDamage = 2.0f;   // damage on direct hit
-        int explosionPower = 2;      // damage to world
-        float explosionDamage = 4.0f; // AoE damage
-
-        shootFireball(world, player, speed, directDamage, explosionPower, explosionDamage);
+        shootFireball(world, player, PRIMARY_SPEED, PRIMARY_DIRECT_DAMAGE, PRIMARY_EXPLOSION_POWER, PRIMARY_EXPLOSION_DAMAGE);
     }
 
     private void shootFireball(
@@ -106,8 +168,7 @@ public class FirePower implements Power {
 
         fireball.setDamageValues(directDamage, explosionDamage);
 
-        // Spawn from the player’s eyes, slightly forward so it doesn't collide instantly
-        Vec3d spawnPos = player.getEyePos().add(look.multiply(0.6));
+        Vec3d spawnPos = player.getEyePos().add(look.multiply(PRIMARY_SPAWN_OFFSET));
         fireball.refreshPositionAndAngles(
                 spawnPos.x, spawnPos.y, spawnPos.z,
                 player.getYaw(), player.getPitch()
@@ -115,21 +176,23 @@ public class FirePower implements Power {
 
         player.swingHand(Hand.MAIN_HAND, true);
 
-        world.spawnEntity(fireball); // ServerWorld spawns the entity
+        world.spawnEntity(fireball);
     }
 
-    //SECONDARY
+    /* ============================================================
+       SECONDARY
+       ============================================================ */
+
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
 
         launchExplosion(player);
 
         player.getCommandTags().add("fire_hover");
-        player.getCommandTags().add("fire_hover_ticks_100");
+        player.getCommandTags().add("fire_hover_ticks_" + SECONDARY_HOVER_TICKS);
 
-        CameraShake.shakeNearby(player, 20, 10, 1.0f);
+        CameraShake.shakeNearby(player, SECONDARY_SHAKE_DURATION, SECONDARY_SHAKE_AMPLITUDE, SECONDARY_SHAKE_INTENSITY);
 
-        // Refresh Primary (Fireball) Cooldown
         PowerManager.clearAbilityCooldown(player, AbilityTypes.PRIMARY);
     }
 
@@ -137,8 +200,7 @@ public class FirePower implements Power {
 
         ServerWorld world = player.getServerWorld();
 
-        DamageSource explosionSource =
-                player.getDamageSources().explosion(player, player);
+        DamageSource explosionSource = ModDamageTypes.firePower(world, player);
 
         world.createExplosion(
                 player,
@@ -147,23 +209,19 @@ public class FirePower implements Power {
                 player.getX(),
                 player.getY(),
                 player.getZ(),
-                2.5f,
+                SECONDARY_EXPLOSION_POWER,
                 true,
                 World.ExplosionSourceType.MOB
         );
 
-        // camerashake
         CameraShake.shakeNearby(player,
-                6,
-                8,
-                0.25f);
-
-        // launch upward
-        double launchStrength = 1.7; // STRENGTH OF LAUNCH
+                SECONDARY_EXPLOSION_SHAKE_DUR,
+                SECONDARY_EXPLOSION_SHAKE_AMP,
+                SECONDARY_EXPLOSION_SHAKE_INT);
 
         player.setVelocity(
                 player.getVelocity().x * 0.7,
-                launchStrength,
+                SECONDARY_LAUNCH_STRENGTH,
                 player.getVelocity().z * 0.7
         );
 
@@ -171,10 +229,16 @@ public class FirePower implements Power {
 
         player.fallDistance = 0;
 
-        player.getCommandTags().add("fire_no_fall");
-        player.getCommandTags().add("fire_no_fall_ticks_200"); // TIME OF HOVER (in ticks)
+        // stop fall damage
+        player.addStatusEffect(new StatusEffectInstance(
+                ModEffects.BRACED,
+                SECONDARY_NO_FALL_TICKS,
+                0,
+                true,
+                false,
+                true // showIcon
+        ));
 
-        // knockback entities
         world.getOtherEntities(
                 player,
                 player.getBoundingBox().expand(4),
@@ -185,21 +249,20 @@ public class FirePower implements Power {
                     .subtract(player.getPos())
                     .normalize();
 
-            entity.addVelocity(dir.x * 1.8, 0.6, dir.z * 1.8);
+            entity.addVelocity(dir.x * SECONDARY_KB_HORIZONTAL, SECONDARY_KB_VERTICAL, dir.z * SECONDARY_KB_HORIZONTAL);
 
             entity.velocityModified = true;
 
             entity.damage(
-                    player.getDamageSources().explosion(player, player),
-                    6.0f
+                    explosionSource,
+                    SECONDARY_EXPLOSION_DAMAGE
             );
-            entity.setOnFireFor(4);
+            entity.setOnFireFor(SECONDARY_FIRE_DURATION);
         });
     }
 
     private void tickHover(ServerPlayerEntity player) {
 
-        // Cancel if they hit the ground or crouched
         if (player.isOnGround() || player.isSneaking()) {
             player.getCommandTags().remove("fire_hover");
             player.getCommandTags().removeIf(tag -> tag.startsWith("fire_hover_ticks_"));
@@ -208,35 +271,26 @@ public class FirePower implements Power {
 
         Vec3d vel = player.getVelocity();
 
-        // movement stuff
-        double liftForce = 0.045;     // upward force
-        double gravityLimit = -0.08;  // max fall speed
-        double airControl = 0.99;     // horizontal control
-
         double newY = vel.y;
 
-        // apply lift if movement is poor
         if (newY < 0.25)
-            newY += liftForce;
+            newY += HOVER_LIFT_FORCE;
 
-        // clamp fall speed
-        if (newY < gravityLimit)
-            newY = gravityLimit;
+        if (newY < HOVER_GRAVITY_LIMIT)
+            newY = HOVER_GRAVITY_LIMIT;
 
         player.setVelocity(
-                vel.x * airControl,
+                vel.x * HOVER_AIR_CONTROL,
                 newY,
-                vel.z * airControl
+                vel.z * HOVER_AIR_CONTROL
         );
 
-        Vec3d look = player.getRotationVec(1.0f); // Make moving easier
-
-        double steeringForce = 0.035;
+        Vec3d look = player.getRotationVec(1.0f);
 
         player.addVelocity(
-                look.x * steeringForce,
+                look.x * HOVER_STEERING_FORCE,
                 0,
-                look.z * steeringForce
+                look.z * HOVER_STEERING_FORCE
         );
 
         player.velocityModified = true;
@@ -297,51 +351,23 @@ public class FirePower implements Power {
             }
         }
     }
-    private void tickNoFall(ServerPlayerEntity player) {
 
-        player.fallDistance = 0;
-
-        final String prefix = "fire_no_fall_ticks_";
-
-        for (String tag : player.getCommandTags()) {
-
-            if (tag.startsWith(prefix)) {
-
-                int ticks;
-                try {
-                    ticks = Integer.parseInt(tag.substring(prefix.length())) - 1;
-                } catch (NumberFormatException e) {
-                    // If tag is corrupted, remove it safely
-                    player.getCommandTags().remove(tag);
-                    player.getCommandTags().remove("fire_no_fall");
-                    break;
-                }
-
-                player.getCommandTags().remove(tag);
-
-                if (ticks > 0) {
-                    player.getCommandTags().add(prefix + ticks);
-                } else {
-                    player.getCommandTags().remove("fire_no_fall");
-                }
-
-                break;
-            }
-        }
-    }
+    /* ============================================================
+       ULTIMATE
+       ============================================================ */
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
 
         player.getCommandTags().add("fire_ultimate_charge");
-        player.getCommandTags().add("fire_ultimate_charge_ticks_100"); // this just does the countdown, other methods do the thing
+        player.getCommandTags().add("fire_ultimate_charge_ticks_" + ULTIMATE_CHARGE_TICKS);
 
-        CameraShake.shakeNearby(player, 30, 100, 0.6f);
+        CameraShake.shakeNearby(player, ULT_START_SHAKE_DURATION, ULT_START_SHAKE_AMPLITUDE, ULT_START_SHAKE_INTENSITY);
 
         player.getServerWorld().playSound(
                 null,
                 player.getBlockPos(),
-                net.minecraft.sound.SoundEvents.ITEM_TOTEM_USE, //change this, it sucks
+                net.minecraft.sound.SoundEvents.ITEM_TOTEM_USE,
                 player.getSoundCategory(),
                 1.0f,
                 0.6f
@@ -374,7 +400,7 @@ public class FirePower implements Power {
             }
         }
 
-        float progress = 1f - (ticksRemaining / 100f);
+        float progress = 1f - (ticksRemaining / (float) ULTIMATE_CHARGE_TICKS);
 
         applyUltimateChargeEffects(player, world, progress, ticksRemaining);
     }
@@ -386,7 +412,6 @@ public class FirePower implements Power {
             int ticksRemaining
     ) {
 
-        // Strong resistance and immobility
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.RESISTANCE, 5, 4, true, false));
 
@@ -397,7 +422,6 @@ public class FirePower implements Power {
 
         double intensity = 0.5 + progress * 2.5;
 
-        // fire particles
         world.spawnParticles(
                 ParticleTypes.FLAME,
                 player.getX(),
@@ -410,7 +434,6 @@ public class FirePower implements Power {
                 0.02 * intensity
         );
 
-        // Lava droplets increase over time
         world.spawnParticles(
                 ParticleTypes.LAVA,
                 player.getX(),
@@ -423,7 +446,6 @@ public class FirePower implements Power {
                 0.03
         );
 
-        // Smoke column
         world.spawnParticles(
                 ParticleTypes.LARGE_SMOKE,
                 player.getX(),
@@ -435,7 +457,7 @@ public class FirePower implements Power {
                 0.5,
                 0.01
         );
-        // camerashake
+
         CameraShake.shakeNearby(
                 player,
                 20,
@@ -443,12 +465,9 @@ public class FirePower implements Power {
                 0.15f + progress * 0.6f
         );
 
-        // this just sounds cool tbh
         pullEntitiesToward(player, world, progress);
 
-        // constants
         if (ticksRemaining % 20 == 0) {
-
             world.playSound(
                     null,
                     player.getBlockPos(),
@@ -459,9 +478,7 @@ public class FirePower implements Power {
             );
         }
 
-        // final second
         if (ticksRemaining < 20) {
-
             world.spawnParticles(
                     ParticleTypes.SOUL_FIRE_FLAME,
                     player.getX(),
@@ -482,7 +499,7 @@ public class FirePower implements Power {
             ServerWorld world,
             float progress
     ) {
-        double radius = 6 + progress * 14; //cool effect but not worth the time
+        double radius = ULTIMATE_PULL_BASE_RADIUS + progress * ULTIMATE_PULL_SCALED_RADIUS;
 
         for (LivingEntity entity : world.getEntitiesByClass(
                 LivingEntity.class,
@@ -499,11 +516,11 @@ public class FirePower implements Power {
 
             dir = dir.normalize();
 
-            double strength = 0.03 + progress * 0.12; // STRENGTH = PULL STRENGTH
-            // keep in mind that this happens 20 times a second
+            double strength = ULTIMATE_PULL_BASE_STRENGTH + progress * ULTIMATE_PULL_SCALED_STRENGTH;
+
             entity.addVelocity(
                     dir.x * strength,
-                    dir.y * strength * 0.4,
+                    dir.y * strength * ULTIMATE_PULL_VERTICAL_MODIFIER,
                     dir.z * strength
             );
 
@@ -511,18 +528,11 @@ public class FirePower implements Power {
         }
     }
 
-    private void detonateUltimate(ServerPlayerEntity player) { // the actual explosion
-        // holy shit this took so long to even get to
+    private void detonateUltimate(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
-        float explosionPower = 30.0f; // DONT FORGET TO CHANGE THE OTHER VARIABLES WITH THIS
-        float damageRadius = 10f;
-        float maxDamage = 18f;
+        DamageSource source = ModDamageTypes.fireExplosion(world, player);
 
-        DamageSource source =
-                player.getDamageSources().explosion(player, player);
-
-        // real explosion
         world.createExplosion(
                 player,
                 source,
@@ -530,15 +540,14 @@ public class FirePower implements Power {
                 player.getX(),
                 player.getY(),
                 player.getZ(),
-                explosionPower,
+                ULTIMATE_EXPLOSION_POWER,
                 true,
                 World.ExplosionSourceType.MOB
         );
 
-        // LOS-based entity damage
-        applyLOSExplosionDamage(player, damageRadius, maxDamage);
+        applyLOSExplosionDamage(player, ULTIMATE_DAMAGE_RADIUS, ULTIMATE_MAX_DAMAGE);
 
-        CameraShake.shakeNearby(player, 50, 30, 2.5f);
+        CameraShake.shakeNearby(player, ULT_DETONATE_SHAKE_DURATION, ULT_DETONATE_SHAKE_AMPLITUDE, ULT_DETONATE_SHAKE_INTENSITY);
 
         world.playSound(
                 null,
@@ -558,10 +567,10 @@ public class FirePower implements Power {
                 0.5f
         );
     }
-    private void applyLOSExplosionDamage( // without this, it would just kill everything
-                                          ServerPlayerEntity sourcePlayer, // essentially this just scales the maxdamage with LOS
-                                          float radius,
-                                          float maxDamage
+    private void applyLOSExplosionDamage(
+            ServerPlayerEntity sourcePlayer,
+            float radius,
+            float maxDamage
     ) {
 
         ServerWorld world = sourcePlayer.getServerWorld();
@@ -570,8 +579,7 @@ public class FirePower implements Power {
 
         Box area = new Box(origin, origin).expand(radius);
 
-        DamageSource source =
-                sourcePlayer.getDamageSources().explosion(sourcePlayer, sourcePlayer);
+        DamageSource source = ModDamageTypes.fireExplosion(world, sourcePlayer);
 
         for (LivingEntity entity : world.getEntitiesByClass(
                 LivingEntity.class,
@@ -581,7 +589,6 @@ public class FirePower implements Power {
 
             Vec3d target = entity.getPos().add(0, entity.getHeight() * 0.5, 0);
 
-            // raycast from start
             var hit = world.raycast(new net.minecraft.world.RaycastContext(
                     origin,
                     target,
@@ -590,7 +597,6 @@ public class FirePower implements Power {
                     sourcePlayer
             ));
 
-            // if wall blocks, skip damage
             if (hit.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK)
                 continue;
 
@@ -602,25 +608,29 @@ public class FirePower implements Power {
 
             float damage = (float)(maxDamage * falloff);
 
-            entity.setOnFireFor(6);
+            entity.setOnFireFor(ULTIMATE_FIRE_DURATION);
 
             entity.damage(source, damage);
         }
     }
 
+    /* ============================================================
+       METADATA
+       ============================================================ */
+
     @Override
     public long getSecondaryCooldownMs() {
-        return 5_000; // 35 seconds
+        return 45_000;
     }
 
     @Override
     public long getUltimateCooldownMs() {
-        return 10_000; // 100 seconds
+        return 500_000;
     }
 
     @Override
     public long getPrimaryCooldownMs() {
-        return 2_500; // 6.5 seconds
+        return 8_500;
     }
 
     @Override
@@ -645,14 +655,14 @@ public class FirePower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Fire is mainly effective at range due to the fireball ability, which the secondary compliments. It also still has some utility up close, since" +
+        return "Fire is mainly effective at range due to the fireball ability, which the secondary compliments. It also still has some utility up close, since " +
                 "your hits inflict fire and you do not take fire damage. These abilities are destructive though so be careful.";
     }
 
     @Override
     public String getPassiveName() {
         return "Heart of fire";
-    } // i just suck at names huh
+    }
 
     @Override
     public String getPassiveDescription() {
@@ -672,7 +682,7 @@ public class FirePower implements Power {
 
     @Override
     public String getUltimateDescription() {
-        return "Charge up for an extended period of time, surrounding yourself in particles and slowing down greatly. Nearby enemies will be pulled in slightly. After charge unleash a huge explosion damaging anything nearby. This will not" +
+        return "Charge up for an extended period of time, surrounding yourself in particles and slowing down greatly. Nearby enemies will be pulled in slightly. After charge unleash a huge explosion damaging anything nearby. This will not " +
                 "damage you.";
     }
 }

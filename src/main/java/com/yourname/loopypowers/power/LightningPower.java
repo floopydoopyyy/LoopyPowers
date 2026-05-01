@@ -1,5 +1,6 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
 import net.minecraft.entity.LivingEntity;
@@ -48,7 +49,7 @@ public class LightningPower implements Power {
     private static final String SUPERCHARGE_TICKS  = "lt_supercharge_ticks_";
     private static final int    SUPERCHARGE_AURA_INTERVAL = 4; // aura pulse every 4 ticks (~0.2s)
 
-    // PRIMARY — directional cone, slightly flattened vertically
+    // PRIMARY
     private static final double CLAP_RANGE     = 7.0;
     private static final double CLAP_ANGLE_DEG = 65.0;  // horizontal spread
     private static final double CLAP_VERT_FLAT = 0.45;  // vertical squash on cone check (< 1 = flatter)
@@ -58,6 +59,8 @@ public class LightningPower implements Power {
     private static final double CLAP_KB_MAX        = 1.5;
     private static final double CLAP_KB_MIN        = 0.6;
     private static final double CLAP_STUN_DISTANCE = 2.2;    // how close they have to be for slowness
+    // EGG Tuning
+    private static final int PARTY_CHANCE = 650; // 1 in n chance
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
@@ -211,8 +214,7 @@ public class LightningPower implements Power {
 
         // Stun
         if (tier >= 3) {
-            target.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, STUN_TICKS, STUN_AMP, true, true));
-            target.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, STUN_TICKS, STUN_AMP, true, true));
+            target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, STUN_TICKS, STUN_AMP, true, true));
         }
         // chain stuff
         if (tier >= 4) {
@@ -362,82 +364,47 @@ public class LightningPower implements Power {
         Vec3d origin  = player.getEyePos();
         Vec3d forward = player.getRotationVec(1.0f).normalize();
 
-        // squash vertical component so the cone is horizontally dominant
+        // Squash vertically
         Vec3d flatForward = new Vec3d(forward.x, forward.y * CLAP_VERT_FLAT, forward.z).normalize();
         double cos = Math.cos(Math.toRadians(CLAP_ANGLE_DEG));
 
         Box box = new Box(player.getPos(), player.getPos()).expand(CLAP_RANGE, 2.5, CLAP_RANGE);
+        List<LivingEntity> targets = world.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != player);
 
-        List<LivingEntity> targets = world.getEntitiesByClass(
-                LivingEntity.class,
-                box,
-                e -> e.isAlive() && e != player
-        );
-
-        //animations
         player.swingHand(Hand.MAIN_HAND, true);
 
-        world.playSound(null, player.getBlockPos(),
-                ModSounds.THUNDERCLAP,
-                player.getSoundCategory(),
-                0.7f, 1.4f);
+        // Roll for the funny
+        boolean isParty = RNG.nextInt(PARTY_CHANCE) == 0;
 
-        // directional wedge FX
-        spawnClapCone(world, player);
-
-        int hits = 0;
+        if (isParty) {
+            world.playSound(null, player.getBlockPos(), ModSounds.PARTYPOPPER, player.getSoundCategory(), 1.0f, 1.0f);
+            spawnConfetti(world, player);
+        } else {
+            world.playSound(null, player.getBlockPos(), ModSounds.THUNDERCLAP, player.getSoundCategory(), 0.7f, 1.4f);
+            spawnClapCone(world, player);
+        }
 
         for (LivingEntity target : targets) {
             Vec3d to = target.getPos().add(0, target.getHeight() * 0.5, 0).subtract(origin);
             double dist = to.length();
+
             if (dist < 0.001 || dist > CLAP_RANGE) continue;
 
-            // flatten the to-vector the same way before checking the angle
             Vec3d flatTo = new Vec3d(to.x, to.y * CLAP_VERT_FLAT, to.z).normalize();
             if (flatForward.dotProduct(flatTo) < cos) continue;
 
-            // LOS
             if (!player.canSee(target)) continue;
 
-            // damage
-            double t = 1.0 - (dist / CLAP_RANGE); // 1 near, 0 far
-            float damage = (float) (CLAP_MIN_DAMAGE + t * (CLAP_MAX_DAMAGE - CLAP_MIN_DAMAGE));
+            double t = 1.0 - (dist / CLAP_RANGE);
+            target.damage(ModDamageTypes.thunderclap(player.getWorld(), player), (float) (CLAP_MIN_DAMAGE + t * (CLAP_MAX_DAMAGE - CLAP_MIN_DAMAGE)));
 
-            target.damage(ModDamageTypes.thunderclap(player.getWorld(), player), damage);
-
-            // knockback
-            Vec3d dir = to.normalize();
-            double kb = CLAP_KB_MIN + t * (CLAP_KB_MAX - CLAP_KB_MIN);
-            Vec3d push = dir.multiply(kb).add(0, 0.1 + t * 0.15, 0); // knockback (change constants above)
-            target.addVelocity(push.x, push.y, push.z);
-            target.velocityModified = true;
-            target.setOnFireFor(2); // fire on hit
-
-            // Close-range mini stun
-            if (dist <= CLAP_STUN_DISTANCE) {
-                target.addStatusEffect(new StatusEffectInstance(
-                        StatusEffects.SLOWNESS, 14, 1, true, true));
+            // Hit feedback
+            if (isParty) {
+                spawnTargetConfetti(world, target, t);
+            } else {
+                world.spawnParticles(ParticleTypes.ELECTRIC_SPARK, target.getX(), target.getY() + 1.0, target.getZ(), (int)(8 + 20 * t), 0.4, 0.6, 0.4, 0.06);
+                world.spawnParticles(BOLT_YELLOW, target.getX(), target.getY() + 1.0, target.getZ(), (int)(6 + 12 * t), 0.3, 0.4, 0.3, 0.05);
             }
-
-            // hit sparks at each target, scaled by proximity
-            world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                    target.getX(), target.getY() + 1.0, target.getZ(),
-                    (int)(8 + 20 * t), 0.4, 0.6, 0.4, 0.06);
-            world.spawnParticles(BOLT_YELLOW,
-                    target.getX(), target.getY() + 1.0, target.getZ(),
-                    (int)(6 + 12 * t), 0.3, 0.4, 0.3, 0.05);
-            world.spawnParticles(BOLT_WHITE,
-                    target.getX(), target.getY() + 0.8, target.getZ(),
-                    (int)(3 + 6 * t), 0.2, 0.2, 0.2, 0.04);
-
-            hits++;
-        }
-
-        if (hits == 0) {
-            world.playSound(null, player.getBlockPos(),
-                    SoundEvents.BLOCK_REDSTONE_TORCH_BURNOUT,
-                    player.getSoundCategory(),
-                    0.4f, 0.8f);
         }
     }
 
@@ -492,6 +459,47 @@ public class LightningPower implements Power {
                 center.x, center.y, center.z,
                 6, 0.15, 0.15, 0.15, 0.05);
     } // my head hurts
+
+    // EGG
+    private void spawnConfetti(ServerWorld world, ServerPlayerEntity player) {
+        Vec3d center  = player.getPos().add(0, 0.8, 0);
+        Vec3d forward = player.getRotationVec(1.0f).normalize();
+        Vec3d right = new Vec3d(-forward.z, 0, forward.x).normalize();
+
+        double halfAngle = Math.toRadians(CLAP_ANGLE_DEG * 0.5);
+        int depthSlices = 6;
+        int arcPoints = 20;
+
+        for (int d = 1; d <= depthSlices; d++) {
+            double depth = CLAP_RANGE * ((double) d / depthSlices);
+            double arcWidth = depth * Math.tan(halfAngle);
+            Vec3d slicePos = center.add(forward.multiply(depth));
+
+            for (int i = 0; i <= arcPoints; i++) {
+                double lateral = -arcWidth + 2.0 * arcWidth * ((double) i / arcPoints);
+                double jitter = (RNG.nextDouble() - 0.5) * 0.6;
+
+                double x = slicePos.x + right.x * (lateral + jitter);
+                double z = slicePos.z + right.z * (lateral + jitter);
+                double y = slicePos.y + (RNG.nextDouble() - 0.5) * 1.5;
+
+                if (RNG.nextFloat() > 0.50f) continue;
+
+                // Randomized Rainbow Confetti
+                Vector3f rainbow = new Vector3f(RNG.nextFloat(), RNG.nextFloat(), RNG.nextFloat());
+                world.spawnParticles(new DustParticleEffect(rainbow, 1.1f), x, y, z, 1, 0, 0, 0, 0);
+            }
+        }
+    }
+
+    private void spawnTargetConfetti(ServerWorld world, LivingEntity target, double t) {
+        int count = (int)(25 + 30 * t);
+        for (int i = 0; i < count; i++) {
+            Vector3f color = new Vector3f(RNG.nextFloat(), RNG.nextFloat(), RNG.nextFloat());
+            world.spawnParticles(new DustParticleEffect(color, 0.85f), target.getX(), target.getY() + 1.0, target.getZ(), 1, 0.3, 0.4, 0.3, 0.03);
+        }
+    }
+
 
 
     // SECONDARY
@@ -795,11 +803,12 @@ public class LightningPower implements Power {
 
         target.damage(ModDamageTypes.smite(caster.getWorld(), caster), STORM_DAMAGE);
 
+/*
         target.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, STORM_STUN_TICKS, STORM_STUN_AMP, true, true));
         target.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.WEAKNESS, STORM_STUN_TICKS, STORM_STUN_AMP, true, true));
-
+*/
         // fx
         spawnHitRing(world, target, 3);
 

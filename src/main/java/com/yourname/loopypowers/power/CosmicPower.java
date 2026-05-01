@@ -98,8 +98,6 @@ public class CosmicPower implements Power {
             tickFate(e, world);
             tickTag(e, FATE_IMMUNE_TAG);
         }
-
-        handleBlackHole(player);
         handleShootingStar(player);
 
         tickTag(player, BLACKHOLE_TAG);
@@ -252,8 +250,7 @@ public class CosmicPower implements Power {
             target.getCommandTags().add(FATE_TIMER_TAG + reduced);
         }
 
-        // Sync immediately so the HUD shows the slam-reduced timer right away
-        // rather than waiting for the next tickFate call.
+        // Sync immediately
         syncFateEffect(target, reduced);
 
         // If reduced == 0, tickFate will start detonation on the next tick.
@@ -376,7 +373,7 @@ public class CosmicPower implements Power {
     }
 
     /* ============================================================
-       PRIMARY  –  Cosmic Ray
+       PRIMARY
        ============================================================ */
 
     @Override
@@ -475,7 +472,7 @@ public class CosmicPower implements Power {
     }
 
     /* ============================================================
-       SECONDARY  –  Shooting Star
+       SECONDARY
        ============================================================ */
 
     @Override
@@ -491,6 +488,9 @@ public class CosmicPower implements Power {
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH,
                 player.getSoundCategory(), 0.9f, 0.8f);
+
+        player.addStatusEffect(new StatusEffectInstance(
+                ModEffects.BRACED, 100, 0, true, false, true));
     }
 
     private void handleShootingStar(ServerPlayerEntity player) {
@@ -524,9 +524,9 @@ public class CosmicPower implements Power {
             if (e.getPos().distanceTo(slamPos) > STAR_SLAM_RADIUS) continue;
 
             e.damage(ModDamageTypes.shootingStar(world, player), 4.0f);
-            // addFate syncs the effect for the fate damage portion...
+            // addFate syncs the effect for the fate damage portion
             addFate(e, STAR_FATE_STORE, 0, player.getUuid());
-            // ...reduceFateTimer then re-syncs with the reduced value,
+            // reduceFateTimer then re-syncs with the reduced value,
             // so the HUD ends up showing the post-slam timer in one frame.
             reduceFateTimer(e, STAR_TIMER_REDUCTION);
         }
@@ -565,18 +565,20 @@ public class CosmicPower implements Power {
     }
 
     /* ============================================================
-       ULTIMATE  –  Black Hole
+       ULTIMATE
        ============================================================ */
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
-        Vec3d spawnPos = player.getEyePos().add(player.getRotationVec(1.0f).multiply(2.0));
+        Vec3d lookDir = player.getRotationVec(1.0f).normalize();
+        Vec3d spawnPos = player.getEyePos().add(lookDir.multiply(3.0));
 
         BlackHoleEntity bh = new BlackHoleEntity(ModEntities.BLACK_HOLE_ENTITY, world);
         bh.setOwner(player);
         bh.setPos(spawnPos.x, spawnPos.y - 1.0, spawnPos.z);
+        bh.setTravelDirection(lookDir);
         world.spawnEntity(bh);
 
         removeTagPrefix(player, BLACKHOLE_TAG);
@@ -588,15 +590,8 @@ public class CosmicPower implements Power {
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
                 player.getSoundCategory(), 0.6f, 0.5f);
-    }
 
-    private void handleBlackHole(ServerPlayerEntity player) {
-        if (!hasTag(player, BLACKHOLE_TAG)) return;
-
-        player.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.SLOWNESS, 5, 4, true, false, false));
-        player.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.SLOW_FALLING, 5, 1, true, false, false));
+        player.swingHand(Hand.MAIN_HAND, true);
     }
 
     /**
@@ -658,11 +653,10 @@ public class CosmicPower implements Power {
 
     @Override
     public String getUltimateDescription() {
-        return "Summon a black hole that follows your location, you are slowed during this." +
-                "/n This black hole has a huge pull radius and gets a stronger pull the closer entities are to you, eventually getting too difficult to outrun." +
+        return "Summon a slow-moving black hole a few blocks in front of you." +
+                "/n This black hole travels slowly in the direction you cast it, having a large pull radius that gets stronger the closer entities are to the centre." +
                 "/n Any entities in the centre of the black hole will take constant damage (this does not apply Fate damage) and their Fate timer will be quickly drained down." +
-                "/n Essentially, this is a way to quickly drain fate and explode groups of entities." +
-                "/n Also, you should go into 3rd person for this ultimate, since there will be A LOT of particles around you.";
+                "/n Essentially, this is a way to quickly drain fate and explode groups of entities over an area.";
     }
 
     /* ============================================================

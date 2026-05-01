@@ -9,6 +9,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Hand;
@@ -39,6 +40,7 @@ public class StrengthPower implements Power {
     private static final String RUSHING = "st_rushing_";          // st_rushing_<ticks>
     private static final String RUSH_DIR = "st_rush_dir_";        // st_rush_dir_<x>_<y>_<z> (packed)
     private static final String RUSH_HIT_LOCK = "st_rush_hit_";   // st_rush_hit_<ticks>
+    private static final String RUSH_CANCEL_LOCK = "st_rush_cancel_"; // marker
     // Rage
     private static final String RAGING = "st_raging_";            // st_raging_<ticks>
 
@@ -127,10 +129,16 @@ public class StrengthPower implements Power {
         double lift = target.isOnGround() ? 0.18 : 0.08;   // if on ground
         double maxUp = 0.55;                               // cap so to not send in sun
 
+        target.setAttacker(attacker); // tag em for the kill feed
+
         target.addVelocity(dir.x * out, lift, dir.z * out);
         Vec3d tv = target.getVelocity();
         target.setVelocity(tv.x, Math.min(maxUp, Math.max(tv.y, 0.06)), tv.z);
         target.velocityModified = true;
+
+        if (target instanceof ServerPlayerEntity sp) {
+            sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp)); // let the server know they zoomin so it stops whining
+        }
 
         // Extra particles
         w.spawnParticles(
@@ -155,8 +163,8 @@ public class StrengthPower implements Power {
     /* ============================================================
        PASSIVE
        ============================================================ */
-        // mining stuff is handled via mixins
-        // strength handled by tick
+    // mining stuff is handled via mixins
+    // strength handled by tick
 
     /* ============================================================
        PRIMARY
@@ -293,7 +301,7 @@ public class StrengthPower implements Power {
             if (casterGrounded) {
                 // 3 rings
                 double[] radii = new double[] { 1.4, 2.8, 4.2 };
-                int[] counts   = new int[]    { 140, 190, 240 };
+                int[] counts   = new int[]    { 24, 32, 42 }; // lowered these so the network thread doesnt commit die
                 double[] spreads = new double[]{ 0.25, 0.30, 0.38 };
                 double[] speeds  = new double[]{ 0.35, 0.40, 0.45 };
 
@@ -383,6 +391,8 @@ public class StrengthPower implements Power {
                 up = Math.max(up, minUpGround * kbMult);
             }
 
+            t.setAttacker(player); // tag em for the kill feed
+
             // on hit damage
             float dmg = (float) (SLAM_ENTITY_DAMAGE * (0.6f + 0.6f * falloff) * dmgMult);
             if (dmg > 0.0f) {
@@ -393,6 +403,10 @@ public class StrengthPower implements Power {
             Vec3d v = t.getVelocity();
             t.setVelocity(v.x + dir.x * out, Math.max(v.y, up), v.z + dir.z * out);
             t.velocityModified = true;
+
+            if (t instanceof ServerPlayerEntity sp) {
+                sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp)); // let the server know they zoomin so it stops whining
+            }
 
             // if grounded, do extra
             if (casterGrounded && w.random.nextFloat() < 0.35f) {
@@ -548,6 +562,7 @@ public class StrengthPower implements Power {
 
         player.setVelocity(v.x, newY, v.z);
         player.velocityModified = true;
+        player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player)); // let the server know we zoomin so it stops whining
     }
 
     private static boolean isNearGround(ServerPlayerEntity player, ServerWorld w) {
@@ -595,7 +610,6 @@ public class StrengthPower implements Power {
     private static final double RUSH_CRASH_AOE_RADIUS = 4.5; // explosion size
     private static final int RUSH_STEER_TICKS = 7;      // window to adjust direction before locked
     private static final int RUSH_CANCEL_COOLDOWN_TICKS = 4; // time until ability can be cancelled
-    private static final String RUSH_CANCEL_LOCK = "st_rush_cancel_"; // marker
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
@@ -735,6 +749,7 @@ public class StrengthPower implements Power {
 
         player.setVelocity(push.x, newY, push.z);
         player.velocityModified = true;
+        player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player)); // let the server know we zoomin so it stops whining
 
         // fx
         ServerWorld w = player.getServerWorld();
@@ -789,6 +804,8 @@ public class StrengthPower implements Power {
 
             if (!hits.isEmpty()) {
                 for (LivingEntity t : hits) {
+                    t.setAttacker(player); // tag em for the kill feed
+
                     // damage
                     t.damage(ModDamageTypes.rushCollision(w, player), RUSH_HIT_DAMAGE);
 
@@ -796,6 +813,10 @@ public class StrengthPower implements Power {
                     Vec3d tv = t.getVelocity();
                     t.setVelocity(tv.x, Math.max(tv.y, RUSH_HIT_KNOCKUP), tv.z);
                     t.velocityModified = true;
+
+                    if (t instanceof ServerPlayerEntity sp) {
+                        sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp)); // let the server know they zoomin so it stops whining
+                    }
 
                     // feedback
                     w.spawnParticles(ParticleTypes.CRIT,
@@ -862,6 +883,7 @@ public class StrengthPower implements Power {
         // stop player
         player.setVelocity(0, player.getVelocity().y * 0.25, 0);
         player.velocityModified = true;
+        player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player)); // let the server know we zoomin so it stops whining
 
         // fx
         Vec3d impact = wallHit.getPos();
@@ -932,11 +954,16 @@ public class StrengthPower implements Power {
         );
 
         for (LivingEntity t : victims) {
+            t.setAttacker(player); // tag em for the kill feed
             t.damage(ModDamageTypes.rushCollision(w, player), RUSH_CRASH_AOE_DAMAGE);
 
             Vec3d tv = t.getVelocity();
             t.setVelocity(tv.x, Math.max(tv.y, 0.65), tv.z);
             t.velocityModified = true;
+
+            if (t instanceof ServerPlayerEntity sp) {
+                sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp)); // let the server know they zoomin so it stops whining
+            }
         }
 
         // camera shake at impact
@@ -1104,7 +1131,7 @@ public class StrengthPower implements Power {
         );
 
         // push particles outward
-        int points = 46;
+        int points = 24; // halved this so it doesn't stutter
         double radius = 3.35;          // ring size
         double speed = 0.45;           // how much its pushed
         double y = player.getY() + 0.15;

@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.yourname.loopypowers.CooldownUI;
+import com.yourname.loopypowers.Loopypowers;
 import com.yourname.loopypowers.manager.AbilityTypes;
 import com.yourname.loopypowers.manager.PlayerDataStore;
 import com.yourname.loopypowers.manager.PowerManager;
@@ -237,6 +238,12 @@ public class PowerCommand {
                                 // disables or re-enables the cooldown system globally (useful for testing)
                                 .then(literal("togglecooldowns")
                                         .executes(PowerCommand::debugToggleCooldowns)
+                                )
+
+                                // /power debug onepunch
+                                // bypasses rng and armor for the easter egg punch
+                                .then(literal("onepunch")
+                                        .executes(PowerCommand::debugToggleOnePunch)
                                 )
                         )
         );
@@ -844,6 +851,15 @@ public class PowerCommand {
 
         String state = cooldownsCurrentlyDisabled ? "§cDISABLED" : "§aENABLED";
         ctx.getSource().sendFeedback(() -> Text.literal("Cooldown system is now " + state + "§f."), true);
+        return 1;
+    }
+
+    // ---------- Debug: toggle onepunch ----------
+
+    private static int debugToggleOnePunch(CommandContext<ServerCommandSource> ctx) {
+        Loopypowers.onePunchDebugEnabled = !Loopypowers.onePunchDebugEnabled;
+        String state = Loopypowers.onePunchDebugEnabled ? "§aENABLED" : "§cDISABLED";
+        ctx.getSource().sendFeedback(() -> Text.literal("One Punch mode is now " + state + "§f."), true);
         return 1;
     }
 

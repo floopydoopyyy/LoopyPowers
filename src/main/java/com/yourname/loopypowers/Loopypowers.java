@@ -22,10 +22,14 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
+import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,6 +103,12 @@ public class Loopypowers implements ModInitializer {
         registerDamageHook();
     }
 
+    // how often they get sent to the stratosphere normally
+    private static final float ONE_PUNCH_CHANCE = 0.05f;
+
+    // if the debug setting is toggled
+    public static boolean onePunchDebugEnabled = false;
+
     private void registerMeleeHitCallback() {
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (world.isClient()) return ActionResult.PASS;
@@ -106,6 +116,63 @@ public class Loopypowers implements ModInitializer {
             if (!(entity instanceof LivingEntity target)) return ActionResult.PASS;
 
             Power power = PowerManager.getPower(sp);
+
+            // EGG for opm
+            // this was a waste of my time
+            if (power instanceof StrengthPower && sp.getMainHandStack().isEmpty()) {
+
+                boolean isUnarmoredPlayer = (target instanceof ServerPlayerEntity) && (target.getArmor() == 0);
+
+                // check for armour, or debug being enabled
+                if (onePunchDebugEnabled || (isUnarmoredPlayer && world.random.nextFloat() < ONE_PUNCH_CHANCE)) {
+
+                    // wind up
+                    world.playSound(null, sp.getBlockPos(), ModSounds.ONEPUNCH, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
+
+                    // launch into orbit
+                    Vec3d dir = sp.getRotationVec(1.0f).normalize();
+                    target.setVelocity(dir.x * 25.0, 4.0, dir.z * 25.0);
+                    target.velocityModified = true;
+
+                    if (target instanceof ServerPlayerEntity spTarget) {
+                        spTarget.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(spTarget));
+                    }
+
+                    // air tunnel
+                    if (world instanceof ServerWorld sw) {
+                        Vec3d pos = target.getPos();
+
+                        //hit
+                        sw.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, pos.x, pos.y + 1.0, pos.z, 2, 0, 0, 0, 0);
+                        sw.spawnParticles(ParticleTypes.FLASH, pos.x, pos.y + 1.0, pos.z, 5, 1.0, 1.0, 1.0, 0);
+
+                        // more
+                        for (int i = 0; i < 150; i++) {
+                            double step = i * 0.8;
+                            double px = pos.x + dir.x * step;
+                            double py = pos.y + 1.0 + dir.y * step;
+                            double pz = pos.z + dir.z * step;
+
+                            // dense inner trail
+                            sw.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, px, py, pz, 15, 0.5, 0.5, 0.5, 0.1);
+                            // massive outter
+                            sw.spawnParticles(ParticleTypes.CLOUD, px, py, pz, 30, 3.0, 3.0, 3.0, 0.3);
+
+                            // periodic extra
+                            if (i % 8 == 0) {
+                                sw.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, px, py, pz, 1, 0, 0, 0, 0);
+                                sw.spawnParticles(ParticleTypes.EXPLOSION, px, py, pz, 5, 4.0, 4.0, 4.0, 0);
+                            }
+                        }
+                    }
+
+                    // splat
+                    target.damage(ModDamageTypes.onePunch(world, sp), 9999f);
+
+                    return ActionResult.SUCCESS; // skip normal logic
+                }
+            }
+
             if (power != null) power.onHit(sp, target);
 
             return ActionResult.PASS;
@@ -114,6 +181,22 @@ public class Loopypowers implements ModInitializer {
 
     private void registerDamageHook() {
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((victim, source, amount) -> {
+            // ── GLOBAL EFFECT HANDLERS ────────────────────────────────────────
+
+            // fall damage immunity
+            if (source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_FALL)) {
+                if (victim.hasStatusEffect(ModEffects.BRACED)) {
+                    // coomsume effect
+                    victim.removeStatusEffect(ModEffects.BRACED);
+
+                    // Play feedback
+                    if (victim.getWorld() instanceof ServerWorld w) {
+                        w.playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_WOOL_FALL, net.minecraft.sound.SoundCategory.PLAYERS, 0.7f, 1.2f);
+                        w.spawnParticles(net.minecraft.particle.ParticleTypes.CLOUD, victim.getX(), victim.getY(), victim.getZ(), 20, 0.4, 0.1, 0.4, 0.05);
+                    }
+                    return false; // cancel it!
+                }
+            }
 
             // ── ATTACKER-SIDE ─────────────────────────────────────────────────
 
@@ -157,6 +240,13 @@ public class Loopypowers implements ModInitializer {
                 if (tp.tryDodge(victimPlayer)) return false;
             }
 
+            if (victimPower instanceof LightningPower) {
+                // stop lightning damage
+                if (source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_LIGHTNING)) {
+                    return false;
+                }
+            }
+
             if (victimPower instanceof FlightPower fp) {
                 if (fp.isBoomInvulnerable(victimPlayer)) return false;
                 fp.onDamaged(victimPlayer);
@@ -167,10 +257,21 @@ public class Loopypowers implements ModInitializer {
             }
 
             if (victimPower instanceof ExplosionPower) {
+                // If they are airborne and their ultimate is active
+                if (!victimPlayer.isOnGround() &&
+                        ExplosionPower.getTimerLeft(victimPlayer, ExplosionPower.ULT_ACTIVE) > 0) {
+
+                    // force pop if they take a big chunk of damage and its from a target
+                    if (source.getAttacker() instanceof LivingEntity && amount >= 3.0f) {
+                        if (victimPlayer.getWorld() instanceof ServerWorld sw) {
+                            ExplosionPower.forceEarlyDetonation(victimPlayer, sw);
+                        }
+                    }
+                }
+
+                // self damage check
                 if (ExplosionPower.shouldIgnoreSelfExplosionDamage(victimPlayer)
                         && source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_EXPLOSION)) return false;
-                if (ExplosionPower.shouldIgnoreFallDamage(victimPlayer)
-                        && source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_FALL)) return false;
             }
 
             if (victimPower instanceof DarknessPower) {
@@ -256,11 +357,6 @@ public class Loopypowers implements ModInitializer {
         if (power == null) return;
 
         power.onTick(player);
-
-        if (power instanceof TeleportPower tp && tp.consumeBlinkCooldownRequest(player)) {
-            String key = PowerManager.abilityKey(power, AbilityTypes.PRIMARY);
-            CooldownUI.startCooldown(player, key, tp.getPrimaryCooldownMs());
-        }
 
         if (power instanceof TelekinesisPower tk) {
             boolean isSwinging  = player.handSwinging;

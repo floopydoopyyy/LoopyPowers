@@ -12,9 +12,16 @@ import net.minecraft.entity.effect.StatusEffectCategory;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
+import net.minecraft.particle.DustParticleEffect;
+import org.joml.Vector3f;
 
 public class StunEffect extends StatusEffect {
+
+    // Bright yellow dust for the "cartoon stars" effect
+    private static final DustParticleEffect STUN_DUST = new DustParticleEffect(new Vector3f(1.0f, 0.9f, 0.1f), 1.0f);
+
     public StunEffect() {
         super(StatusEffectCategory.HARMFUL, 0xF7CB15); // grey yellow
 
@@ -61,6 +68,26 @@ public class StunEffect extends StatusEffect {
     @Override
     public void applyUpdateEffect(LivingEntity entity, int amplifier) {
         if (entity.getWorld().isClient) return;
+
+        // --- VISUAL INDICATOR: SWIRLING STARS ---
+        if (entity.getWorld() instanceof ServerWorld world) {
+            double radius = 0.55; // Distance from the center of the head
+            double height = entity.getY() + entity.getHeight() + 0.35; // Just above the head
+
+            // Use the entity's age to rotate the particles
+            double angle1 = (entity.age * 0.25) % (2 * Math.PI); // 0.25 controls the rotation speed
+            double angle2 = angle1 + Math.PI; // Offset the second star by 180 degrees
+
+            double x1 = entity.getX() + Math.cos(angle1) * radius;
+            double z1 = entity.getZ() + Math.sin(angle1) * radius;
+
+            double x2 = entity.getX() + Math.cos(angle2) * radius;
+            double z2 = entity.getZ() + Math.sin(angle2) * radius;
+
+            // Spawn the particles with 0 velocity so they form a  orbit
+            world.spawnParticles(STUN_DUST, x1, height, z1, 1, 0, 0, 0, 0);
+            world.spawnParticles(STUN_DUST, x2, height, z2, 1, 0, 0, 0, 0);
+        }
 
         if (entity instanceof ServerPlayerEntity p) {
             // Player Stun Logic

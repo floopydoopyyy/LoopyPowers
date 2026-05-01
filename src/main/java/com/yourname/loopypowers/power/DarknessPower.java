@@ -284,12 +284,13 @@ public class DarknessPower implements Power {
     // interior particles
     private static final int BLACKOUT_INNER_PARTICLES = 100; // density
     private static final double BLACKOUT_INNER_SPREAD = BLACKOUT_RADIUS * 0.9;
+    // multiplier
+    private static final float EXPOSED_DAMAGE_MULT = 1.50f; // damage boost
+    // EGG
+    private static final float FUNNY_SOUND_CHANCE = 0.0005f; // chance per tick
 
     private static final DustParticleEffect BLACK_DUST =
             new DustParticleEffect(new Vec3d(0.01, 0.01, 0.01).toVector3f(), 1.8f);
-
-    // DAMAGE
-    private static final float BLACKOUT_DAMAGE_MULT = 1.50f;
 
     private static final Map<UUID, BlackoutState> ACTIVE_BLACKOUTS = new HashMap<>();
     private static final Map<RegistryKey<World>, Long> BLACKOUT_LAST_TICK = new HashMap<>();
@@ -375,6 +376,11 @@ public class DarknessPower implements Power {
 
             if ((now % 25L) == 0L) {
                 playDarknessLoop(w, st);
+            }
+
+            // --- EGG ---
+            if (w.random.nextFloat() < FUNNY_SOUND_CHANCE) {
+                tryPlayFunnySound(w, st);
             }
         }
 
@@ -528,6 +534,34 @@ public class DarknessPower implements Power {
         }
     }
 
+    // EGG
+    private static void tryPlayFunnySound(ServerWorld w, BlackoutState st) {
+        List<ServerPlayerEntity> playersInside = new ArrayList<>();
+        double radiusSq = BLACKOUT_RADIUS * BLACKOUT_RADIUS;
+
+        for (ServerPlayerEntity p : w.getPlayers()) {
+            // Find players within the radius who are not the caster
+            if (p.squaredDistanceTo(st.center) <= radiusSq) {
+                playersInside.add(p);
+            }
+        }
+
+        if (!playersInside.isEmpty()) {
+            // Pick one random victim
+            ServerPlayerEntity victim = playersInside.get(w.random.nextInt(playersInside.size()));
+
+            // play sound at players location
+            w.playSound(
+                    null,
+                    victim.getBlockPos(),
+                    ModSounds.FUNNYFNAF,
+                    SoundCategory.PLAYERS,
+                    1.0f,
+                    1.0f
+            );
+        }
+    }
+
     /* ============================================================
        DAMAGE HOOK
        ============================================================ */
@@ -537,183 +571,77 @@ public class DarknessPower implements Power {
     /**
      called from global hook and picks if the boost is the backstab, ultimate or both.
      */
+    // DarknessPower.java - Replace the relevant section in tryAdjustDarknessDamage
     public static boolean tryAdjustDarknessDamage(LivingEntity victim, DamageSource source, float amount) {
         if (amount <= 0) return false;
 
         Entity atkEnt = source.getAttacker();
         if (!(atkEnt instanceof LivingEntity attacker)) return false;
-
         if (!(victim.getWorld() instanceof ServerWorld w)) return false;
 
-        // recursion guard
-        if (victim.getCommandTags().contains(DARKNESS_DMG_GUARD)) return false;
-        if (attacker.getCommandTags().contains(DARKNESS_DMG_GUARD)) return false;
+        // Recursion guard
+        if (victim.getCommandTags().contains(DARKNESS_DMG_GUARD) ||
+                attacker.getCommandTags().contains(DARKNESS_DMG_GUARD)) return false;
 
         float mult = 1.0f;
         boolean didBackstab = false;
-        boolean didUlt = false;
+        boolean didExposed = false; // Marker for FX cleanup
         DamageSource finalSource = source;
 
-        // backstab
+        // Backstab logic
         if (isBehindTarget(attacker, victim)) {
             mult *= BACKSTAB_BONUS_MULT;
             didBackstab = true;
             finalSource = ModDamageTypes.darknessBackstab(w, attacker);
         }
 
-        // ULTIMATE
-        if (attacker instanceof ServerPlayerEntity sp) {
-            BlackoutState st = ACTIVE_BLACKOUTS.get(sp.getUuid());
-            if (st != null && st.worldKey.equals(w.getRegistryKey()) && isInsideBlackout(st, victim)) {
-                mult *= BLACKOUT_DAMAGE_MULT;
-                didUlt = true;
-                finalSource = ModDamageTypes.darkUlt(w, attacker); // overrides backstab type if both occur
-            }
+        // Exposed effect logic
+        if (victim.hasStatusEffect(ModEffects.EXPOSED)) {
+            mult *= EXPOSED_DAMAGE_MULT;
+            didExposed = true;
+            // Use the darkUlt damage type for death message consistency
+            finalSource = ModDamageTypes.darkUlt(w, attacker);
         }
 
-        // no change - let normal damage happen
+        // No change - let normal damage happen
         if (Math.abs(mult - 1.0f) < 1.0e-4f && finalSource == source) return false;
 
         float newAmount = amount * mult;
 
-        // APPLY MODIFIED DAMAGE
         victim.getCommandTags().add(DARKNESS_DMG_GUARD);
         attacker.getCommandTags().add(DARKNESS_DMG_GUARD);
         try {
             victim.damage(finalSource, newAmount);
 
-            // BACKSTAB FX
+            // backstab fx
             if (didBackstab) {
-
-                w.playSound(
-                        null,
-                        victim.getBlockPos(),
-                        ModSounds.BACKSTAB,
-                        attacker.getSoundCategory(),
-                        0.7f,
-                        1.0f
-                );
-
-                w.spawnParticles(
-                        ParticleTypes.SMOKE,
-                        victim.getX(),
-                        victim.getBodyY(0.5),
-                        victim.getZ(),
-                        12,
-                        0.3, 0.4, 0.3,
-                        0.02
-                );
-
-                w.spawnParticles(
-                        ParticleTypes.LARGE_SMOKE,
-                        victim.getX(),
-                        victim.getBodyY(0.5),
-                        victim.getZ(),
-                        6,
-                        0.2, 0.3, 0.2,
-                        0.01
-                );
-
-                // directional particles
-                Vec3d dir = attacker.getRotationVec(1.0f).normalize();
-
-                w.spawnParticles(
-                        ParticleTypes.SMOKE,
-                        victim.getX() + dir.x * 0.5,
-                        victim.getBodyY(0.5),
-                        victim.getZ() + dir.z * 0.5,
-                        6,
-                        0.1, 0.1, 0.1,
-                        0.01
-                );
+                triggerBackstabFx(w, victim, attacker);
             }
 
-            // ULTIMATE
-            if (didUlt) {
+            // exposed fx
+            if (didExposed) {
+                w.playSound(null, victim.getBlockPos(), ModSounds.BIGSTAB, attacker.getSoundCategory(), 0.5f, 1.2f);
 
-                w.playSound(
-                        null,
-                        victim.getBlockPos(),
-                        ModSounds.BIGSTAB,
-                        attacker.getSoundCategory(),
-                        0.5f,
-                        1.2f
-                );
+                // Dark burst particles
+                w.spawnParticles(ParticleTypes.SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 20, 0.4, 0.5, 0.4, 0.04);
+                w.spawnParticles(ParticleTypes.LARGE_SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 10, 0.3, 0.4, 0.3, 0.02);
+                w.spawnParticles(BLACK_DUST, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 12, 0.25, 0.3, 0.25, 0.0);
 
-                // dark burst
-                w.spawnParticles(
-                        ParticleTypes.SMOKE,
-                        victim.getX(),
-                        victim.getBodyY(0.5),
-                        victim.getZ(),
-                        20,
-                        0.4, 0.5, 0.4,
-                        0.04
-                );
-
-                w.spawnParticles(
-                        ParticleTypes.LARGE_SMOKE,
-                        victim.getX(),
-                        victim.getBodyY(0.5),
-                        victim.getZ(),
-                        10,
-                        0.3, 0.4, 0.3,
-                        0.02
-                );
-
-                // black dust
-                w.spawnParticles(
-                        BLACK_DUST,
-                        victim.getX(),
-                        victim.getBodyY(0.5),
-                        victim.getZ(),
-                        12,
-                        0.25, 0.3, 0.25,
-                        0.0
-                );
-
-                // inward "collapse" effect
+                // inward collapse
                 Vec3d dir = attacker.getRotationVec(1.0f).normalize();
-
                 for (int i = 0; i < 8; i++) {
                     double angle = w.random.nextDouble() * Math.PI * 2;
                     double radius = 0.6;
-
                     double px = victim.getX() + Math.cos(angle) * radius;
                     double pz = victim.getZ() + Math.sin(angle) * radius;
-                    double py = victim.getBodyY(0.5);
-
-                    w.spawnParticles(
-                            BLACK_DUST,
-                            px, py, pz,
-                            0,
-                            dir.x, 0.05, dir.z,
-                            1.0
-                    );
+                    w.spawnParticles(BLACK_DUST, px, victim.getBodyY(0.5), pz, 0, dir.x, 0.05, dir.z, 1.0);
                 }
             }
 
-            // COMBO
-            if (didBackstab && didUlt) {
-
-                w.playSound(
-                        null,
-                        victim.getBlockPos(),
-                        ModSounds.BIGSTAB,
-                        attacker.getSoundCategory(),
-                        0.9f,
-                        0.8f
-                );
-
-                w.spawnParticles(
-                        ParticleTypes.CRIT,
-                        victim.getX(),
-                        victim.getBodyY(0.5),
-                        victim.getZ(),
-                        15,
-                        0.3, 0.3, 0.3,
-                        0.1
-                );
+            // --- COMBO FX ---
+            if (didBackstab && didExposed) {
+                w.playSound(null, victim.getBlockPos(), ModSounds.BIGSTAB, attacker.getSoundCategory(), 0.9f, 0.8f);
+                w.spawnParticles(ParticleTypes.CRIT, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 15, 0.3, 0.3, 0.3, 0.1);
             }
 
         } finally {
@@ -721,7 +649,17 @@ public class DarknessPower implements Power {
             attacker.getCommandTags().remove(DARKNESS_DMG_GUARD);
         }
 
-        return true; // we handled the damage so cancel it
+        return true;
+    }
+
+    // Helper method for code cleanup
+    private static void triggerBackstabFx(ServerWorld w, LivingEntity victim, LivingEntity attacker) {
+        w.playSound(null, victim.getBlockPos(), ModSounds.BACKSTAB, attacker.getSoundCategory(), 0.7f, 1.0f);
+        w.spawnParticles(ParticleTypes.SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 12, 0.3, 0.4, 0.3, 0.02);
+        w.spawnParticles(ParticleTypes.LARGE_SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 6, 0.2, 0.3, 0.2, 0.01);
+
+        Vec3d dir = attacker.getRotationVec(1.0f).normalize();
+        w.spawnParticles(ParticleTypes.SMOKE, victim.getX() + dir.x * 0.5, victim.getBodyY(0.5), victim.getZ() + dir.z * 0.5, 6, 0.1, 0.1, 0.1, 0.01);
     }
 
     private static boolean isInsideBlackout(BlackoutState st, LivingEntity e) {

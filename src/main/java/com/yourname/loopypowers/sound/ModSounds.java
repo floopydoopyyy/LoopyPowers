@@ -68,6 +68,10 @@ public final class ModSounds {
     public static final Identifier RITUALLOOP_ID    = new Identifier(Loopypowers.MOD_ID, "ritualloop");
     public static final Identifier RITUALSTART_ID   = new Identifier(Loopypowers.MOD_ID, "ritualstart");
     public static final Identifier COSMICRAY_ID     = new Identifier(Loopypowers.MOD_ID, "cosmicray");
+    public static final Identifier JACKPOTFUNNY_ID     = new Identifier(Loopypowers.MOD_ID, "jackpotfunny");
+    public static final Identifier PARTYPOPPER_ID     = new Identifier(Loopypowers.MOD_ID, "partypopper");
+    public static final Identifier FUNNYFNAF_ID     = new Identifier(Loopypowers.MOD_ID, "funnyfnaf");
+    public static final Identifier ONEPUNCH_ID     = new Identifier(Loopypowers.MOD_ID, "onepunch");
 
     // SoundEvents
     public static final SoundEvent THUNDERCLAP     = SoundEvent.of(THUNDERCLAP_ID);
@@ -127,6 +131,10 @@ public final class ModSounds {
     public static final SoundEvent RITUALLOOP    = SoundEvent.of(RITUALLOOP_ID);
     public static final SoundEvent RITUALSTART   = SoundEvent.of(RITUALSTART_ID);
     public static final SoundEvent COSMICRAY     = SoundEvent.of(COSMICRAY_ID);
+    public static final SoundEvent JACKPOTFUNNY     = SoundEvent.of(JACKPOTFUNNY_ID);
+    public static final SoundEvent PARTYPOPPER     = SoundEvent.of(PARTYPOPPER_ID);
+    public static final SoundEvent FUNNYFNAF     = SoundEvent.of(FUNNYFNAF_ID);
+    public static final SoundEvent ONEPUNCH     = SoundEvent.of(ONEPUNCH_ID);
 
     private ModSounds() {}
 
@@ -188,5 +196,9 @@ public final class ModSounds {
         Registry.register(Registries.SOUND_EVENT, RITUALLOOP_ID, RITUALLOOP);
         Registry.register(Registries.SOUND_EVENT, RITUALSTART_ID, RITUALSTART);
         Registry.register(Registries.SOUND_EVENT, COSMICRAY_ID, COSMICRAY);
+        Registry.register(Registries.SOUND_EVENT, JACKPOTFUNNY_ID, JACKPOTFUNNY);
+        Registry.register(Registries.SOUND_EVENT, PARTYPOPPER_ID, PARTYPOPPER);
+        Registry.register(Registries.SOUND_EVENT, FUNNYFNAF_ID, FUNNYFNAF);
+        Registry.register(Registries.SOUND_EVENT, ONEPUNCH_ID, ONEPUNCH);
     }
 } // doing this sucks

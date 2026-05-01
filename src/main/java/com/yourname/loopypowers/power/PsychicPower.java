@@ -73,6 +73,25 @@ public class PsychicPower implements Power {
     private static final double ULT_STOP_DISTANCE    = 1.5;
     private static final int    ATTACK_COOLDOWN      = 25;
 
+    // Egg!!!
+    private static final double COMPEL_CHAT_CHANCE = 0.05; // percentage chance
+    private static final java.util.List<String> STUPID_MESSAGES = java.util.List.of(
+            "I think I'll use my credit card.",
+            "I came to goon!",
+            "do u guys like Radiohead?",
+            "I LISTEN TO ALEXG I LISTEN TO ALEXG I LISTEN TO ALEXG I LISTEN TO ALEXG.",
+            "you know what 6 7 backwards spells? efok. because i dont give e fok until ive had my coffee",
+            "i really need a wee",
+            "hop on MARVEL RIVALS?",
+            "my tummy hurt :(",
+            "hello everyone my name is welcome",
+            "no one is illegal on stolen land BTW", // this ones not stupid this one is BASED
+            "morp",
+            "hello everybody my name is welcome",
+            "throw me into the wolves, and i'll come back pregnant",
+            "JOIN THE REBELLION"
+    );
+
     /* ============================================================
        ESSENTIAL
        ============================================================ */
@@ -207,6 +226,23 @@ public class PsychicPower implements Power {
         removeTagPrefix(target, COMPEL_TAG);
         target.getCommandTags().add(COMPEL_TAG + COMPEL_DURATION);
         target.addStatusEffect(new StatusEffectInstance(ModEffects.COMPELLED, COMPEL_DURATION, 0, false, false, true));
+
+        // --- EGG ---
+        if (target instanceof ServerPlayerEntity player && player.getServer() != null) {
+            // roll
+            if (player.getRandom().nextDouble() < COMPEL_CHAT_CHANCE) {
+                // pick a random message
+                String msg = STUPID_MESSAGES.get(player.getRandom().nextInt(STUPID_MESSAGES.size()));
+
+                // send message
+                net.minecraft.text.Text chatText = net.minecraft.text.Text.literal(
+                        "<" + player.getName().getString() + "> " + msg
+                );
+
+                // broadcast to server
+                player.getServer().getPlayerManager().broadcast(chatText, false);
+            }
+        }
     }
 
     private void handleCompel(ServerPlayerEntity player) {
@@ -362,7 +398,7 @@ public class PsychicPower implements Power {
 
         // Stun
         target.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.SLOWNESS, SPIKE_STUN_DURATION, SPIKE_STUN_AMPLIFIER,
+                ModEffects.STUN, SPIKE_STUN_DURATION, SPIKE_STUN_AMPLIFIER,
                 false, true, true));
 
         // lingering stun

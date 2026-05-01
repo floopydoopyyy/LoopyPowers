@@ -1,6 +1,8 @@
 {
   "replace": false,
   "values": [
-    "loopypowers:super_explosion"
+    "loopypowers:super_explosion",
+    "loopypowers:explosion_normal",
+    "loopypowers:fire_explosion"
   ]
 }

@@ -844,9 +844,7 @@ public class IcePower implements Power {
         if (caster == null) return;
 
         Box box = new Box(top).expand(0.9, 1.6, 0.9);
-
-        List<LivingEntity> hits = w.getEntitiesByClass(LivingEntity.class, box,
-                e -> e.isAlive() && e != caster);
+        List<LivingEntity> hits = w.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != caster);
 
         int nowTick = (int) (w.getTime() & 0x7fffffff);
 
@@ -855,6 +853,7 @@ public class IcePower implements Power {
             if (last == nowTick) continue;
             setIntTag(e, SPIKE_HIT_TICK, nowTick);
 
+            // pass attribution
             e.damage(ModDamageTypes.iceSpike(w, caster), SPIKES_DAMAGE);
 
             Vec3d v = e.getVelocity();
@@ -885,12 +884,12 @@ public class IcePower implements Power {
     private static final double BEAM_WIDTH = 0.75;
 
     private static final int BEAM_APPLY_EVERY = 2;
-    private static final int BEAM_STACKS_PER_APPLY = 3;
+    private static final int BEAM_STACKS_PER_APPLY = 5;
     private static final int BEAM_SLOW_AMP = 1;
     private static final int BEAM_SLOW_TICKS = 12;
 
     private static final int BEAM_DAMAGE_EVERY = 2;
-    private static final float BEAM_DAMAGE = 0.25f;
+    private static final float BEAM_DAMAGE = 0.75f;
 
     private static final int BEAM_PARTICLE_DENSITY = 10;
     private static final double BEAM_SPIRAL_RADIUS = 0.15;
@@ -1251,12 +1250,16 @@ public class IcePower implements Power {
     private static final double ULT_WAVE_HEIGHT_OFFSET = 0.10;
     private static final double ULT_WAVE_JUMP_CLEARANCE = 0.55;
 
-    private static final float ULT_WAVE_DAMAGE = 3.0f;
-    private static final double ULT_WAVE_KB = 0.45;
-    private static final double ULT_WAVE_UP = 0.10;
+    private static final float ULT_WAVE_DAMAGE = 4.0f;
+    private static final double ULT_WAVE_KB = 0.25;
+    private static final double ULT_WAVE_UP = 0.07;
     private static final int ULT_WAVE_FREEZE_STACKS = 35;
-    private static final int ULT_WAVE_SLOW_TICKS = 14;
+    private static final int ULT_WAVE_SLOW_TICKS = 20;
     private static final int ULT_WAVE_SLOW_AMP = 1;
+
+    // egg
+    private static final double ULT_SNOWMAN_CHANCE = 0.002; // chance per tick
+    private static final String SNOWMAN_STATE = "ice_sm_state_"; // ice_sm_state_<step>_<x>_<y>_<z>
 
     private static final String ULT_WAVE_HIT = "ice_ulth_";
 
@@ -1320,39 +1323,41 @@ public class IcePower implements Power {
         ServerWorld w = player.getServerWorld();
         tickSingleTimer(player, ULT_ACTIVE);
 
-        // Blizzard every tick
+        // 1. Blizzard Global Effects
         spawnBlizzard(w, player);
 
-        // snow
+        // 2. Entity-Specific "Blowing Wind" (Performance optimized)
+        spawnSnowAroundEntities(w, player);
+
+        // 3. Ground snow accumulation
         if ((player.age % ULT_SNOW_COVER_EVERY) == 0) {
             spreadSnowCover(w, player, (int)Math.ceil(ULT_BLIZZARD_RADIUS), ULT_SNOW_COVER_ATTEMPTS);
         }
 
-        // freeze around caster
+        // 4. Random Snowman Building
+        if (w.random.nextDouble() < ULT_SNOWMAN_CHANCE) {
+            tryStartSnowmanBuild(w, player);
+        }
+        tickActiveSnowmanBuilds(w, player);
+
+        // 5. Water freeze around caster
         if ((player.age % ULT_FROST_EVERY) == 0) {
             freezeWaterAroundCaster(w, player, ULT_FROST_RADIUS, ULT_FROST_MAX_PER_TICK);
         }
 
-        // Wave timer
+        // 6. Pulse Waves & Loop Sound
         int pulseLeft = tickSingleTimer(player, ULT_PULSE);
         if (pulseLeft == 0) {
             setSingleTimerTag(player, ULT_PULSE, ULT_WAVE_INTERVAL);
-
             spawnUltWave(w, player);
-
-            w.playSound(null, player.getBlockPos(),
-                    SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP,
-                    player.getSoundCategory(),
-                    0.8f, 0.85f);
+            w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP, player.getSoundCategory(), 0.8f, 0.85f);
         } else if (pulseLeft < 0) {
             setSingleTimerTag(player, ULT_PULSE, ULT_WAVE_INTERVAL);
         }
 
-        // Play blizzard loop every n ticks
-        if (player.age % 40 == 0) {
+        if (player.age % 30 == 0) {
             playBlizzardLoop(w, player);
         }
-
         tickUltWavesWorld(w);
     }
 
@@ -1437,15 +1442,12 @@ public class IcePower implements Power {
         Vec3d c = caster.getPos();
 
         for (int i = 0; i < attempts; i++) {
-            // sqrt(rand) -> denser near center
             double r = Math.sqrt(w.random.nextDouble()) * radius;
             double a = w.random.nextDouble() * (Math.PI * 2.0);
 
             int x = MathHelper.floor(c.x + Math.cos(a) * r);
             int z = MathHelper.floor(c.z + Math.sin(a) * r);
 
-            // Find the closest "air above ground" near the caster's height.
-            // IMPORTANT: allow freezing water so snow can spread over water too.
             BlockPos place = findSurfaceAirAboveSolid(w, x, z, caster.getBlockY(), true);
 
             if (!w.isInBuildLimit(place)) continue;
@@ -1454,10 +1456,8 @@ public class IcePower implements Power {
             BlockState below = w.getBlockState(belowPos);
             BlockState at = w.getBlockState(place);
 
-            // Must have a solid top face to hold snow (frosted ice qualifies)
             if (!below.isSideSolidFullSquare(w, belowPos, Direction.UP)) continue;
 
-            // If already snow: increase layers (up to 8)
             if (at.isOf(Blocks.SNOW)) {
                 int layers = at.get(SnowBlock.LAYERS);
                 if (layers < ULT_SNOW_MAX_LAYERS) {
@@ -1466,13 +1466,11 @@ public class IcePower implements Power {
                 continue;
             }
 
-            // Otherwise, place snow if replaceable
-            boolean replaceable = at.isAir() || (at.getCollisionShape(w, place).isEmpty() && at.getFluidState().isEmpty());
-            if (!replaceable) continue;
+            // now only target air
+            if (!at.isAir()) continue;
 
             w.setBlockState(place, Blocks.SNOW.getDefaultState(), 2);
 
-            // small feedback puff sometimes
             if ((i % 10) == 0) {
                 w.spawnParticles(ParticleTypes.SNOWFLAKE,
                         place.getX() + 0.5, place.getY() + 0.05, place.getZ() + 0.5,
@@ -1562,15 +1560,15 @@ public class IcePower implements Power {
         Box scan = new Box(c.x - scanR, wave.waveY - 3.0, c.z - scanR,
                 c.x + scanR, wave.waveY + 4.0, c.z + scanR);
 
+        // Added check to ignore Snow Golems in the scan filter
         List<LivingEntity> hits = w.getEntitiesByClass(LivingEntity.class, scan,
-                e -> e.isAlive() && !e.getUuid().equals(wave.owner));
+                e -> e.isAlive() &&
+                        !e.getUuid().equals(wave.owner) &&
+                        !(e instanceof net.minecraft.entity.passive.SnowGolemEntity));
 
         for (LivingEntity e : hits) {
-            // don't hit if above
             double eTop = e.getY() + e.getHeight();
             if (eTop < wave.waveY - 0.10) continue;
-
-            // jump-over dodge
             if (e.getY() > wave.waveY + ULT_WAVE_JUMP_CLEARANCE) continue;
 
             Vec3d p = e.getPos();
@@ -1588,6 +1586,7 @@ public class IcePower implements Power {
             ServerPlayerEntity caster = (ownerEnt instanceof ServerPlayerEntity sp) ? sp : null;
 
             if (caster != null) {
+                // Attributes damage correctly to the caster[cite: 8]
                 e.damage(ModDamageTypes.iceShockwave(w, caster), ULT_WAVE_DAMAGE);
                 if (!tryShatter(caster, e)) {
                     applyFreezePoints(caster, e, ULT_WAVE_FREEZE_STACKS);
@@ -1600,7 +1599,6 @@ public class IcePower implements Power {
             double inv = (dist < 1.0e-4) ? 0.0 : (1.0 / dist);
             double pushX = dx * inv * ULT_WAVE_KB;
             double pushZ = dz * inv * ULT_WAVE_KB;
-
             double newY = Math.min(0.55, Math.max(v.y, ULT_WAVE_UP));
             e.setVelocity(v.x + pushX, newY, v.z + pushZ);
             e.velocityModified = true;
@@ -1619,11 +1617,87 @@ public class IcePower implements Power {
                         p.getBlockPos(),
                         ModSounds.BLIZZARDLOOP,
                         p.getSoundCategory(),
-                        0.4f,
-                        1.0f
+                        0.3f,
+                        0.8f
                 );
             }
         }
+    }
+
+    private static void spawnSnowAroundEntities(ServerWorld w, ServerPlayerEntity caster) {
+        Box area = caster.getBoundingBox().expand(ULT_BLIZZARD_RADIUS);
+        List<LivingEntity> targets = w.getEntitiesByClass(LivingEntity.class, area, e -> e.isAlive() && e != caster);
+
+        for (LivingEntity e : targets) {
+            Vec3d p = e.getPos();
+            // Blowing gusts swirling around the entity
+            for (int i = 0; i < 3; i++) {
+                double ox = (w.random.nextDouble() - 0.5) * 1.5;
+                double oz = (w.random.nextDouble() - 0.5) * 1.5;
+                double oy = w.random.nextDouble() * e.getHeight();
+
+                // Wind-blown particles with horizontal velocity
+                w.spawnParticles(ParticleTypes.SNOWFLAKE, p.x + ox, p.y + oy, p.z + oz, 1, 0.5, 0.1, 0.5, 0.05);
+
+                if (w.random.nextBoolean()) {
+                    w.spawnParticles(ParticleTypes.WHITE_ASH, p.x + ox, p.y + oy, p.z + oz, 1, 0.2, 0.0, 0.2, 0.02);
+                }
+            }
+        }
+    }
+
+    // EGG
+    private static void tryStartSnowmanBuild(ServerWorld w, ServerPlayerEntity caster) {
+        double r = w.random.nextDouble() * (ULT_BLIZZARD_RADIUS - 2);
+        double a = w.random.nextDouble() * Math.PI * 2.0;
+        int x = MathHelper.floor(caster.getX() + Math.cos(a) * r);
+        int z = MathHelper.floor(caster.getZ() + Math.sin(a) * r);
+
+        BlockPos pos = findSurfaceAirAboveSolid(w, x, z, caster.getBlockY(), true);
+        if (pos != null && w.getBlockState(pos).isAir()) {
+            // tag format: ice_sm_build_<step>_<delay>_<x>_<y>_<z>
+            caster.getCommandTags().add("ice_sm_build_1_10_" + pos.getX() + "_" + pos.getY() + "_" + pos.getZ());
+        }
+    }
+
+    private static void tickActiveSnowmanBuilds(ServerWorld w, ServerPlayerEntity caster) {
+        Iterator<String> it = caster.getCommandTags().iterator();
+        List<String> newTags = new ArrayList<>();
+        List<String> toRemove = new ArrayList<>();
+
+        while (it.hasNext()) {
+            String tag = it.next();
+            if (!tag.startsWith("ice_sm_build_")) continue;
+
+            toRemove.add(tag);
+            String[] parts = tag.split("_");
+            int step = Integer.parseInt(parts[3]);
+            int delay = Integer.parseInt(parts[4]) - 1;
+            int x = Integer.parseInt(parts[5]);
+            int y = Integer.parseInt(parts[6]);
+            int z = Integer.parseInt(parts[7]);
+            BlockPos basePos = new BlockPos(x, y, z);
+
+            if (delay <= 0) {
+                if (step == 1) { // Place bottom snow
+                    w.setBlockState(basePos, Blocks.SNOW_BLOCK.getDefaultState());
+                    w.playSound(null, basePos, SoundEvents.BLOCK_SNOW_PLACE, SoundCategory.BLOCKS, 1f, 1f);
+                    newTags.add("ice_sm_build_2_15_" + x + "_" + y + "_" + z);
+                } else if (step == 2) { // Place top snow
+                    w.setBlockState(basePos.up(), Blocks.SNOW_BLOCK.getDefaultState());
+                    w.playSound(null, basePos.up(), SoundEvents.BLOCK_SNOW_PLACE, SoundCategory.BLOCKS, 1f, 1.2f);
+                    newTags.add("ice_sm_build_3_15_" + x + "_" + y + "_" + z);
+                } else if (step == 3) { // Place pumpkin (Vanilla triggers golem spawn)
+                    w.setBlockState(basePos.up(2), Blocks.CARVED_PUMPKIN.getDefaultState());
+                    w.spawnParticles(ParticleTypes.SNOWFLAKE, x+0.5, y+2, z+0.5, 20, 0.5, 0.5, 0.5, 0.05);
+                }
+            } else {
+                newTags.add("ice_sm_build_" + step + "_" + delay + "_" + x + "_" + y + "_" + z);
+            }
+        }
+
+        caster.getCommandTags().removeAll(toRemove);
+        caster.getCommandTags().addAll(newTags);
     }
 
     /* ============================================================
@@ -1701,7 +1775,7 @@ public class IcePower implements Power {
     @Override
     public String getUltimateDescription() {
         return "Cause a blizzard to form around you, freezing and snowing on your surroundings. There will also be shockwaves produced from your location that will damage," +
-                "apply freeze and shatter anyone fully frozen. These shockwaves are visual and can be jumped over (although snow layers mark it harder to see)";
+                "apply freeze and shatter anyone fully frozen. These shockwaves are visual and can be jumped over (although snow layers make it harder to see)";
     }
 
     /* ============================================================

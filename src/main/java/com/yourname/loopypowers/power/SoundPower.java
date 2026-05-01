@@ -24,53 +24,125 @@ import java.util.UUID;
 import java.util.Map;
 import java.util.HashMap;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.GameRules;
 import net.minecraft.block.BlockState;
 
 public class SoundPower implements Power {
 
     /* ============================================================
-       TAGS / TIMERS
+       TAGS / CONSTANTS
        ============================================================ */
 
-    // Passive: resonance tracking + trails
-    private static final String RES_POINTS = "sd_res_points_";
+    private static final String RES_POINTS     = "sd_res_points_";
     private static final String RES_TRAIL_STEP = "sd_res_trail_step_";
-    private static final String RES_SCAN_STEP = "sd_res_scan_step_";
-
-    // “Resonated” marker on targets (server-side state)
-    private static final String RESONATED = "sd_resonated_";
-
-    // debuffs
-    private static final String DAMPENED = "sd_dampened_";
-
-    /* ============================================================
-       CONSTANTS
-       ============================================================ */
-
-    // Passive scan radius
-    private static final double RES_RADIUS = 14.0;
-    // How often passive runs
-    private static final int RES_SCAN_INTERVAL = 4;
-    private static final int RES_TRAIL_INTERVAL = 2;
-    // heartbeat warning
+    private static final String RES_SCAN_STEP  = "sd_res_scan_step_";
+    private static final String RESONATED      = "sd_resonated_";
+    private static final String DAMPENED       = "sd_dampened_";
     private static final String HB_CASTER_STEP = "sd_hb_caster_step_";
     private static final String HB_TARGET_STEP = "sd_hb_target_step_";
-    private static final double RES_INSTANT_RADIUS = 3.0;
-    private static final int RESONATED_TICKS = 80;
+    private static final String ULT_WINDUP     = "sd_ult_windup_";
 
-    /* ============================================================
-       SERVER-ONLY PASSIVE STATE
-       ============================================================ */
-
-    // point per victim storage
+    // server-only passive state
     private static final Map<UUID, Integer> RES_SCORE = new HashMap<>();
-    private static final int RES_THRESHOLD = 15;
-    private static final int RES_DECAY_PER_SCAN = 2;
-    private static final int MAX_TRAIL_TARGETS = 14;
+    private static final Map<UUID, BassDropState> BD_STATES = new HashMap<>();
+    private static final Map<UUID, UltState> ULT_STATES = new HashMap<>();
+
+    private static final class BassDropState {
+        int nextPulse;
+        int nextPulseIn;
+        boolean finalPending;
+        int finalIn;
+        final java.util.Set<UUID> scanned = new java.util.HashSet<>();
+        int pullVizStep = -1;
+        int blastVizStep = -1;
+    }
+
+    private static final class UltState {}
+
+    // ── Passive tuning ────────────────────────────────────────────────────────
+
+    // how far we check for stuff
+    private static final double RES_RADIUS         = 14.0;
+    // how fast we scan
+    private static final int    RES_SCAN_INTERVAL  = 4;
+    private static final int    RES_TRAIL_INTERVAL = 2;
+    // instant find if they get this close
+    private static final double RES_INSTANT_RADIUS = 3.0;
+    // how long the glow lasts
+    private static final int    RESONATED_TICKS    = 80;
+    // points needed to pop
+    private static final int    RES_THRESHOLD      = 15;
+    // points lost if they sit still
+    private static final int    RES_DECAY_PER_SCAN = 1;
+    // max trails to show at once
+    private static final int    MAX_TRAIL_TARGETS  = 14;
+
+    // points for doing stuff
+    private static final int PTS_SLOW_MOVE = 1;
+    private static final int PTS_FAST_MOVE = 2;
+    private static final int PTS_SPRINT    = 3;
+    private static final int PTS_JUMP      = 3;
+    private static final int PTS_FALL      = 4;
+    private static final int PTS_HURT      = 2;
+    private static final int PTS_WATER     = 1;
+
+    // ── Primary tuning ────────────────────────────────────────────────────────
+
+    // where the bolt spawns from your face
+    private static final double BOLT_SPAWN_OFFSET  = 0.6;
+    // how fast it goes
+    private static final double BOLT_SPEED         = 1.7;
+
+    // ── Secondary tuning ─────────────────────────────────────────────────────
+
+    // number of booms
+    private static final int    BD_PULSE_COUNT       = 6;
+    // time between pulses
+    private static final int    BD_PULSE_GAP_TICKS   = 3;
+    private static final int    BD_FINAL_DELAY_TICKS = 2;
+    // area it pulls from
+    private static final double BD_PULL_RADIUS       = 10.0;
+    // area it blows up
+    private static final double BD_FINAL_RADIUS      = 7.0;
+    // how hard it pulls
+    private static final float  BD_PULL_STRENGTH     = 0.22f;
+    private static final float  BD_PULL_UP           = 0.02f;
+    // final burst push
+    private static final float  BD_FINAL_KB          = 1.00f;
+    private static final float  BD_FINAL_UP          = 0.30f;
+    private static final float  BD_FINAL_DAMAGE      = 7.0f;
+    // how long they get stunned for
+    private static final int    BD_FINAL_STUN_TICKS  = 40;
+    private static final int    BD_REMOTE_STUN_TICKS = 30;
+
+    private static final int PULL_VIZ_STEPS  = 8;
+    private static final int BLAST_VIZ_STEPS = 8;
+    private static final int PULL_POINTS     = 90;
+    private static final int BLAST_POINTS    = 120;
+
+    // ── Ultimate tuning ───────────────────────────────────────────────────────
+
+    // time before it fires
+    private static final int    ULT_WINDUP_TICKS      = 22;
+    // how far the beam goes
+    private static final double ULT_RANGE             = 50.0;
+    // thickness of the beam
+    private static final double ULT_BEAM_RADIUS       = 1.35;
+    private static final float  ULT_DAMAGE            = 17.0f;
+    // knockback
+    private static final float  ULT_KB                = 2.5f;
+    private static final float  ULT_UP                = 1.2f;
+    private static final int    ULT_TEAR_STEPS        = 36;
+    // chance to break a block
+    private static final float  ULT_TEAR_CHANCE       = 0.45f;
+    // chance to actually drop the block items
+    private static final float  ULT_DROP_CHANCE       = 0.15f;
+    private static final double ULT_PARTICLE_STEP     = 0.55;
+    // max blocks it can rip up
+    private static final int    ULT_MAX_BLOCKS_BROKEN = 150;
+    private static final int    ULT_SURFACE_SEARCH    = 4;
 
     /* ============================================================
-       BASIC
+       LIFECYCLE
        ============================================================ */
 
     @Override
@@ -96,6 +168,31 @@ public class SoundPower implements Power {
 
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {}
+
+    public static void applyAbilityHit(ServerPlayerEntity caster, LivingEntity target, float baseDamage, boolean allowBurst) {
+        target.damage(ModDamageTypes.sound(target.getWorld(), caster), baseDamage);
+
+        if (!allowBurst || !hasTagPrefix(target, RESONATED)) return;
+
+        removeTagPrefix(target, RESONATED);
+        target.removeStatusEffect(StatusEffects.GLOWING);
+
+        float burstDamageBonus = 4.0f;
+        target.damage(ModDamageTypes.sound(target.getWorld(), caster), burstDamageBonus);
+
+        // resets velocity before stunning so they stop moving
+        target.setVelocity(0, Math.min(target.getVelocity().y, 0.0), 0);
+        target.velocityModified = true;
+
+        // Apply STUN Effect
+        target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, 35, 0, false, false, true));
+        setSingleTimerTag(target, DAMPENED, 45);
+
+        ServerWorld sw = (ServerWorld) target.getWorld();
+        sw.spawnParticles(ParticleTypes.SONIC_BOOM, target.getX(), target.getY() + target.getHeight() * 0.6, target.getZ(), 1, 0, 0, 0, 0);
+        sw.spawnParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 0.2, target.getZ(), 6, 0.35, 0.25, 0.35, 0.02);
+        sw.playSound(null, target.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE, caster.getSoundCategory(), 0.9f, 1.3f);
+    }
 
     /* ============================================================
        PASSIVE
@@ -218,47 +315,18 @@ public class SoundPower implements Power {
         Vec3d v = e.getVelocity();
         double h = Math.sqrt(v.x * v.x + v.z * v.z);
 
-        if (h > 0.08) pts += 1;
-        if (h > 0.22) pts += 3;
-        if (e.isSprinting()) pts += 4;
-        if (!e.isOnGround() && v.y > 0.10) pts += 3;
-        if (!e.isOnGround() && v.y < -0.25) pts += 2;
-        if (e.hurtTime > 0) pts += 2;
-        if (e.isTouchingWater()) pts += 1;
+        if (h > 0.08) pts += PTS_SLOW_MOVE;
+        if (h > 0.22) pts += PTS_FAST_MOVE;
+        if (e.isSprinting()) pts += PTS_SPRINT;
+        if (!e.isOnGround() && v.y > 0.10) pts += PTS_JUMP;
+        if (!e.isOnGround() && v.y < -0.25) pts += PTS_FALL;
+        if (e.hurtTime > 0) pts += PTS_HURT;
+        if (e.isTouchingWater()) pts += PTS_WATER;
         return pts;
     }
 
-    public static void applyAbilityHit(ServerPlayerEntity caster, LivingEntity target, float baseDamage, boolean allowBurst) {
-        target.damage(ModDamageTypes.sound(target.getWorld(), caster), baseDamage);
-
-        if (!allowBurst || !hasTagPrefix(target, RESONATED)) return;
-
-        removeTagPrefix(target, RESONATED);
-        target.removeStatusEffect(StatusEffects.GLOWING);
-
-        float burstDamageBonus = 4.0f;
-        target.damage(ModDamageTypes.sound(target.getWorld(), caster), burstDamageBonus);
-
-        target.setVelocity(0, Math.min(target.getVelocity().y, 0.0), 0);
-        target.velocityModified = true;
-
-        // Apply STUN Effect
-        target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, 35, 0, false, false, true));
-        setSingleTimerTag(target, DAMPENED, 45);
-
-        ServerWorld sw = (ServerWorld) target.getWorld();
-        sw.spawnParticles(ParticleTypes.SONIC_BOOM, target.getX(), target.getY() + target.getHeight() * 0.6, target.getZ(), 1, 0, 0, 0, 0);
-        sw.spawnParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 0.2, target.getZ(), 6, 0.35, 0.25, 0.35, 0.02);
-        sw.playSound(null, target.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE, caster.getSoundCategory(), 0.9f, 1.3f);
-
-        if (target instanceof ServerPlayerEntity spTarget) {
-            spTarget.playSound(ModSounds.EARRING, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);
-            CameraShake.shake(spTarget, 20, 1.0f);
-        }
-    }
-
     /* ============================================================
-       ABILITIES
+       PRIMARY  –  Doppler
        ============================================================ */
 
     @Override
@@ -267,45 +335,19 @@ public class SoundPower implements Power {
         SonicBoltEntity bolt = new SonicBoltEntity(ModEntities.SONIC_BOLT, w);
         bolt.setOwner(player);
 
-        Vec3d start = player.getEyePos().add(player.getRotationVec(1.0f).multiply(0.6));
+        Vec3d start = player.getEyePos().add(player.getRotationVec(1.0f).multiply(BOLT_SPAWN_OFFSET));
         bolt.setPos(start.x, start.y, start.z);
 
         Vec3d dir = player.getRotationVec(1.0f).normalize();
-        bolt.setVelocity(dir.multiply(1.7));
+        bolt.setVelocity(dir.multiply(BOLT_SPEED));
 
         w.spawnEntity(bolt);
         w.playSound(null, player.getBlockPos(), ModSounds.BOLT, player.getSoundCategory(), 0.4f, 1.2f);
     }
 
-    private static final int BD_PULSE_COUNT = 6;
-    private static final int BD_PULSE_GAP_TICKS = 5;
-    private static final int BD_FINAL_DELAY_TICKS = 2;
-    private static final double BD_PULL_RADIUS = 10.0;
-    private static final double BD_FINAL_RADIUS = 7.0;
-    private static final float  BD_PULL_STRENGTH = 0.22f;
-    private static final float  BD_PULL_UP = 0.02f;
-    private static final float  BD_FINAL_KB = 1.00f;
-    private static final float  BD_FINAL_UP = 0.30f;
-    private static final float  BD_FINAL_DAMAGE = 4.0f;
-    private static final int    BD_FINAL_STUN_TICKS = 35;
-    private static final int    BD_REMOTE_STUN_TICKS = 30;
-
-    private static final int PULL_VIZ_STEPS = 8;
-    private static final int BLAST_VIZ_STEPS = 8;
-    private static final int PULL_POINTS = 90;
-    private static final int BLAST_POINTS = 120;
-
-    private static final class BassDropState {
-        int nextPulse;
-        int nextPulseIn;
-        boolean finalPending;
-        int finalIn;
-        final java.util.Set<UUID> scanned = new java.util.HashSet<>();
-
-        int pullVizStep = -1;
-        int blastVizStep = -1;
-    }
-    private static final Map<UUID, BassDropState> BD_STATES = new HashMap<>();
+    /* ============================================================
+       SECONDARY  –  Bass Drop
+       ============================================================ */
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
@@ -536,21 +578,9 @@ public class SoundPower implements Power {
         }
     }
 
-    private static final String ULT_WINDUP = "sd_ult_windup_";
-    private static final int ULT_WINDUP_TICKS = 22;
-    private static final double ULT_RANGE = 50.0;
-    private static final double ULT_BEAM_RADIUS = 1.35;
-    private static final float ULT_DAMAGE = 7.0f;
-    private static final float ULT_KB = 2.5f;
-    private static final float ULT_UP = 1.2f;
-    private static final int ULT_TEAR_STEPS = 36;
-    private static final float ULT_TEAR_CHANCE = 0.45f;
-    private static final double ULT_PARTICLE_STEP = 0.55;
-    private static final int ULT_MAX_BLOCKS_BROKEN = 128;
-    private static final int ULT_SURFACE_SEARCH = 4;
-
-    private static final class UltState {}
-    private static final Map<UUID, UltState> ULT_STATES = new HashMap<>();
+    /* ============================================================
+       ULTIMATE  –  Sonic Shriek
+       ============================================================ */
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
@@ -702,7 +732,7 @@ public class SoundPower implements Power {
                     w.spawnParticles(ParticleTypes.CRIT, hitPos.getX() + 0.5, hitPos.getY() + 1.1, hitPos.getZ() + 0.5, 2, 0.10, 0.10, 0.10, 0.0);
                 }
 
-                boolean drop = true;
+                boolean drop = w.random.nextFloat() < ULT_DROP_CHANCE;
                 if (w.breakBlock(hitPos, drop)) {
                     broken++;
                 }
@@ -710,6 +740,56 @@ public class SoundPower implements Power {
             p = p.add(step);
         }
     }
+
+    /* ============================================================
+       META
+       ============================================================ */
+
+    @Override public String getName()          { return "Sound"; }
+    @Override public String getPassiveName()   { return "Resonance"; }
+    @Override public String getPrimaryName()   { return "Doppler"; }
+    @Override public String getSecondaryName() { return "Bass Drop"; }
+    @Override public String getUltimateName()  { return "Sonic Shriek"; }
+
+    @Override public long getPrimaryCooldownMs()   { return 2_000; }
+    @Override public long getSecondaryCooldownMs() { return 5_000; }
+    @Override public long getUltimateCooldownMs()  { return 12_000; }
+
+    @Override
+    public String getOverviewDescription() {
+        return "Sound is a primarily ranged power that also offers some (although probably not that great practically) utility " +
+                "in the form of tracking and stunning. These abilities pierce through walls and work best at longer ranges.";
+    }
+
+    @Override
+    public String getPassiveDescription() {
+        return "You listening senses are heightened: nearby entities leave lingering sound trails and if they are too conspicuous or close will become resonated," +
+                " directing you to their position and making them glow. Hitting resonated targets with your abilities deals bonus damage and stuns briefly." +
+                " Actions such as taking damage are considered conspicuous meaning hits with your abilities can resonate targets. Only you can see the resonation particles" +
+                " but effects like glowing are seen by all.";
+    }
+
+    @Override
+    public String getPrimaryDescription() {
+        return "Fire a small, long range, piercing projectile in the direction you are looking that damages any entity it touches. Resonated targets will be stunned and take extra damage,";
+    }
+
+    @Override
+    public String getSecondaryDescription() {
+        return "Do multiple small sound pulses that pull in nearby entities (resonating them if they get too close) and unleash a burst that knocks" +
+                "back any nearby entities and stunning + dealing extra damage to anything resonated.";
+    }
+
+    @Override
+    public String getUltimateDescription() {
+        return "Stop all movement and charge up, unleashing a beam  with huge range that tears up nearby blocks and pierces walls. The range" +
+                "is a lot wider then you will probably see (particle rendering) and hit entities will take high damage and knockback and will also" +
+                "be stunned and take extra damage if resonated; Think of it like a bigger warden beam.";
+    }
+
+    /* ============================================================
+       HELPERS
+       ============================================================ */
 
     private static net.minecraft.sound.SoundCategory casterSoundCategoryFallback(ServerWorld w) {
         return net.minecraft.sound.SoundCategory.PLAYERS;
@@ -738,7 +818,7 @@ public class SoundPower implements Power {
                     if (w.random.nextFloat() < 0.35f) {
                         w.spawnParticles(new net.minecraft.particle.BlockStateParticleEffect(ParticleTypes.BLOCK, s), p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5, 6, 0.25, 0.25, 0.25, 0.08);
                     }
-                    boolean drop = true;
+                    boolean drop = w.random.nextFloat() < ULT_DROP_CHANCE;
                     if (w.breakBlock(p, drop)) {
                         broken++;
                     }
@@ -839,51 +919,5 @@ public class SoundPower implements Power {
 
         if (ticks > 0) e.getCommandTags().add(prefix + ticks);
         return ticks;
-    }
-
-    @Override public String getName() { return "Sound"; }
-    @Override public String getPrimaryName() { return "Doppler"; }
-    @Override public String getSecondaryName() { return "Bass Drop"; }
-    @Override public String getUltimateName() { return "Sonic Shriek"; }
-
-    @Override public long getPrimaryCooldownMs() { return 2_000; }
-    @Override public long getSecondaryCooldownMs() { return 5_000; }
-    @Override public long getUltimateCooldownMs() { return 12_000; }
-
-    @Override
-    public String getOverviewDescription() {
-        return "Sound is a primarily ranged power that also offers some (although probably not that great practically) utility " +
-                "in the form of tracking and stunning. These abilities pierce through walls and work best at longer ranges.";
-    }
-
-    @Override
-    public String getPassiveName() {
-        return "Resonance";
-    }
-
-    @Override
-    public String getPassiveDescription() {
-        return "You listening senses are heightened: nearby entities leave lingering sound trails and if they are too conspicuous or close will become resonated," +
-                " directing you to their position and making them glow. Hitting resonated targets with your abilities deals bonus damage and stuns briefly." +
-                " Actions such as taking damage are considered conspicuous meaning hits with your abilities can resonate targets. Only you can see the resonation particles" +
-                " but effects like glowing are seen by all.";
-    }
-
-    @Override
-    public String getPrimaryDescription() {
-        return "Fire a small, long range, piercing projectile in the direction you are looking that damages any entity it touches. Resonated targets will be stunned and take extra damage,";
-    }
-
-    @Override
-    public String getSecondaryDescription() {
-        return "Do multiple small sound pulses that pull in nearby entities (resonating them if they get too close) and unleash a burst that knocks" +
-                "back any nearby entities and stunning + dealing extra damage to anything resonated.";
-    }
-
-    @Override
-    public String getUltimateDescription() {
-        return "Stop all movement and charge up, unleashing a beam  with huge range that tears up nearby blocks and pierces walls. The range" +
-                "is a lot wider then you will probably see (particle rendering) and hit entities will take high damage and knockback and will also" +
-                "be stunned and take extra damage if resonated; Think of it like a bigger warden beam.";
     }
 }

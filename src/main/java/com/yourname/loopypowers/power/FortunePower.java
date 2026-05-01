@@ -187,7 +187,7 @@ public class FortunePower implements Power {
 
             // sound
             w.playSound(null, target.getBlockPos(),
-                    ModSounds.JACKPOT,
+                    w.random.nextInt(FUNNY_CHANCE) == 0 ? ModSounds.JACKPOTFUNNY : ModSounds.JACKPOT,
                     attacker.getSoundCategory(),
                     0.5f, 1.0f);
 
@@ -200,7 +200,7 @@ public class FortunePower implements Power {
             spawnProcParticlesEnemy(w, target);
 
             w.playSound(null, target.getBlockPos(),
-                    ModSounds.JACKPOT2,
+                    w.random.nextInt(FUNNY_CHANCE) == 0 ? ModSounds.JACKPOTFUNNY : ModSounds.JACKPOT2,
                     attacker.getSoundCategory(),
                     0.5f, 1.0f);
 
@@ -213,11 +213,12 @@ public class FortunePower implements Power {
             spawnProcParticlesSelf(w, attacker);
 
             w.playSound(null, attacker.getBlockPos(),
-                    ModSounds.JACKPOT3,
+                    w.random.nextInt(FUNNY_CHANCE) == 0 ? ModSounds.JACKPOTFUNNY : ModSounds.JACKPOT3,
                     attacker.getSoundCategory(),
                     0.5f, 1.0f);
         }
     }
+
     private static void spawnProcParticlesEnemy(ServerWorld w, LivingEntity target) {
         w.spawnParticles(
                 ParticleTypes.ENCHANT,
@@ -270,7 +271,8 @@ public class FortunePower implements Power {
     private static final int JACKPOT_REGEN_TICKS  = 40;     // regeneration time
     private static final int PRIM_BUFF_TICKS = 80; // time buffed
     private static final int PRIM_FX_TICKS = 16; // fx
-
+    // egg
+    private static final int FUNNY_CHANCE = 300; // funny
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
@@ -311,6 +313,10 @@ public class FortunePower implements Power {
                 case 1 -> ModSounds.JACKPOT2;
                 default -> ModSounds.JACKPOT3;
             };
+
+            if (w.random.nextInt(FUNNY_CHANCE) == 0) {
+                jpSound = ModSounds.JACKPOTFUNNY;
+            }
 
             w.playSound(null, player.getBlockPos(),
                     jpSound,
@@ -1478,7 +1484,8 @@ public class FortunePower implements Power {
                         victim.getX(), victim.getY() + victim.getHeight() * 0.6, victim.getZ(),
                         RULE_JACKPOT_FX_PARTICLES, 0.35, 0.35, 0.35, 0.12);
 
-                w.playSound(null, victim.getBlockPos(), ModSounds.JACKPOT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
+                net.minecraft.sound.SoundEvent jpSound = w.random.nextInt(FUNNY_CHANCE) == 0 ? ModSounds.JACKPOTFUNNY : ModSounds.JACKPOT;
+                w.playSound(null, victim.getBlockPos(), jpSound, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
             }
         }
 

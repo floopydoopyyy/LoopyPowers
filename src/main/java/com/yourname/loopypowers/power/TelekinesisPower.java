@@ -82,6 +82,9 @@ public class TelekinesisPower implements Power {
     private static final double CHOKE_ORBIT_RADIUS_START = 0.7; // particle orbit start radius
     private static final double CHOKE_ORBIT_RADIUS_END   = 0.2; // tightens to this by end
 
+    // EGG
+    private static final int    QUOTE_CHANCE           = 250;   // duration of choke
+
     // ── Impact system ──
     private static final int    TK_AIRBORNE_TICKS   = 40;
 
@@ -121,6 +124,9 @@ public class TelekinesisPower implements Power {
     private final Map<UUID, UUID> scheduledExplosions = new HashMap<>();
     private final Map<UUID, Vec3d> lastKnownBlockPos = new HashMap<>();
     private final Map<UUID, Long> lastSwingTime = new HashMap<>();
+
+    // EGG
+    private static final int    WOOLLIAM_CHANCE            = 40;   // 1 in whatever chance for woolliam to make a cameo
 
     /* ============================================================
        PARTICLE STUFF
@@ -451,59 +457,50 @@ public class TelekinesisPower implements Power {
     }
 
     private void handleSuspendAndChoke(LivingEntity e, ServerWorld world, long time) {
-        boolean wasSuspended = hasTag(e, TK_SUSPEND_TAG); // check BEFORE ticking
+        boolean wasSuspended = hasTag(e, TK_SUSPEND_TAG);
         boolean stillSuspended = tickTag(e, TK_SUSPEND_TAG);
 
         if (stillSuspended) {
-            // Normal suspend
             e.setVelocity(e.getVelocity().x * 0.3, SUSPEND_FLOAT_VEL, e.getVelocity().z * 0.3);
             e.velocityModified = true;
-            e.addStatusEffect(new StatusEffectInstance(
-                    StatusEffects.SLOWNESS, 5, 4, true, false, false));
+            e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 5, 4, true, false, false));
             spawnSuspendAura(world, e, time);
             return;
         }
 
-        // Tag just expired this tick
+        // Transition from Suspend to Choke
         if (wasSuspended && !hasTag(e, TK_CHOKE_TAG)) {
             e.getCommandTags().add(TK_CHOKE_TAG + CHOKE_TICKS);
+
+            // --- EASTER EGG ---
+            if (e instanceof ServerPlayerEntity && world.random.nextInt(QUOTE_CHANCE) == 0) {
+                Entity owner = resolveOwner(suspendOwner.get(e.getUuid()), world);
+                if (owner instanceof ServerPlayerEntity attacker) {
+                    net.minecraft.text.Text message = net.minecraft.text.Text.literal(
+                            "<" + attacker.getName().getString() + "> I find your lack of faith... disturbing..."
+                    );
+                    world.getServer().getPlayerManager().broadcast(message, false);
+                }
+            }
         }
 
-        // ------ Choke phase ------------
         boolean choking = tickTag(e, TK_CHOKE_TAG);
         if (!choking) {
-            // Choke fully expired — no further attribution needed
             suspendOwner.remove(e.getUuid());
             return;
         }
 
+        // choke logic
         int chokeRemaining = getTagValue(e, TK_CHOKE_TAG);
         float chokeProgress = 1.0f - ((float) chokeRemaining / CHOKE_TICKS);
-
-        double squeezeVel = CHOKE_SQUEEZE_VEL + chokeProgress * 0.10;
-        e.setVelocity(
-                e.getVelocity().x * 0.2,
-                squeezeVel,
-                e.getVelocity().z * 0.2
-        );
+        e.setVelocity(e.getVelocity().x * 0.2, CHOKE_SQUEEZE_VEL + chokeProgress * 0.10, e.getVelocity().z * 0.2);
         e.velocityModified = true;
 
-        int slownessLevel = (int)(chokeProgress * 5);
-        e.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.SLOWNESS, 5, slownessLevel, true, false, false));
-
         if (e.age % CHOKE_DAMAGE_INTERVAL == 0) {
-            float damage = CHOKE_DAMAGE_PER_TICK * (0.5f + chokeProgress);
-
-            // Attribute to whoever applied the original suspend
             Entity attacker = resolveOwner(suspendOwner.get(e.getUuid()), world);
-            e.damage(ModDamageTypes.strangle(world, attacker), damage);
-
-            world.playSound(null, e.getBlockPos(),
-                    SoundEvents.ENTITY_PLAYER_HURT_SWEET_BERRY_BUSH, e.getSoundCategory(),
-                    0.4f + chokeProgress * 0.3f, 0.9f);
+            e.damage(ModDamageTypes.strangle(world, attacker), CHOKE_DAMAGE_PER_TICK * (0.5f + chokeProgress));
+            world.playSound(null, e.getBlockPos(), SoundEvents.ENTITY_PLAYER_HURT_SWEET_BERRY_BUSH, e.getSoundCategory(), 0.4f + chokeProgress * 0.3f, 0.9f);
         }
-
         spawnChokeAura(world, e, time, chokeProgress);
     }
 
@@ -560,17 +557,14 @@ public class TelekinesisPower implements Power {
 
         clearDebrisField(world);
 
+        // Attempt to harvest blocks, but we no longer care if the count is 0
         int harvested = tryHarvestBlocks(player, world, DEBRIS_MAX_BLOCKS);
 
-        if (harvested == 0) {
-            world.playSound(null, player.getBlockPos(),
-                    SoundEvents.BLOCK_STONE_HIT, player.getSoundCategory(), 0.8f, 0.6f);
-            return;
-        }
+        // removed: the "if (harvested == 0) return;" check that caused whiffs
 
         debrisFieldTicksRemaining = DEBRIS_ORBIT_TICKS;
 
-        // rings
+        // Visual rings always spawn to show the energy field is active
         for (int ring = 0; ring < 3; ring++) {
             double ringRadius = 1.5 + ring * 2.5;
             int points = 12 + ring * 6;
@@ -584,7 +578,7 @@ public class TelekinesisPower implements Power {
             }
         }
 
-        // fx
+        // Field activation FX
         for (int i = 0; i < 20; i++) {
             double a = world.random.nextDouble() * Math.PI * 2;
             double r = world.random.nextDouble() * 1.5;
@@ -597,8 +591,13 @@ public class TelekinesisPower implements Power {
 
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM, player.getSoundCategory(), 1.2f, 0.4f);
-        world.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_STONE_BREAK, player.getSoundCategory(), 1.5f, 0.6f);
+
+        // Only play the "crunchy" stone break sound if we actually grabbed blocks
+        if (harvested > 0) {
+            world.playSound(null, player.getBlockPos(),
+                    SoundEvents.BLOCK_STONE_BREAK, player.getSoundCategory(), 1.5f, 0.6f);
+        }
+
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 0.6f, 0.5f);
     }
@@ -612,8 +611,7 @@ public class TelekinesisPower implements Power {
             for (int dy = -3; dy <= 4; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
                     BlockPos pos = player.getBlockPos().add(dx, dy, dz);
-                    if (pos.isWithinDistance(center, DEBRIS_HARVEST_RADIUS)
-                            && isHarvestable(world, pos)) {
+                    if (pos.isWithinDistance(center, DEBRIS_HARVEST_RADIUS) && isHarvestable(world, pos)) {
                         candidates.add(pos);
                     }
                 }
@@ -623,22 +621,43 @@ public class TelekinesisPower implements Power {
         java.util.Collections.shuffle(candidates, new java.util.Random());
 
         int harvested = 0;
+        boolean wooliamSpawned = false;
+
         for (BlockPos pos : candidates) {
             if (harvested >= maxCount) break;
 
             BlockState state = world.getBlockState(pos);
             world.removeBlock(pos, false);
 
-            FallingBlockEntity falling = FallingBlockEntity.spawnFromBlock(world, pos, state);
-            falling.setNoGravity(true);
-            falling.dropItem = false;
-            falling.timeFalling = -32768;
+            Entity orbitEntity;
 
-            // Assign to inner or outer ring based on index
-            orbitAngles.put(falling.getUuid(), (Math.PI * 2.0 * harvested) / maxCount);
+            // --- EASTER EGG ---
+            if (!wooliamSpawned && world.random.nextInt(WOOLLIAM_CHANCE) == 0) {
+                net.minecraft.entity.passive.SheepEntity sheep = net.minecraft.entity.EntityType.SHEEP.create(world);
+                if (sheep != null) {
+                    sheep.setCustomName(net.minecraft.text.Text.literal("Woolliam"));
+                    sheep.setNoGravity(true);
+                    sheep.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
+                    world.spawnEntity(sheep);
+                    orbitEntity = sheep;
+                    wooliamSpawned = true;
+                } else {
+                    orbitEntity = FallingBlockEntity.spawnFromBlock(world, pos, state);
+                }
+            } else {
+                orbitEntity = FallingBlockEntity.spawnFromBlock(world, pos, state);
+            }
+
+            // orbital entity setup
+            if (orbitEntity instanceof FallingBlockEntity falling) {
+                falling.setNoGravity(true);
+                falling.dropItem = false;
+                falling.timeFalling = -32768;
+            }
+
+            orbitAngles.put(orbitEntity.getUuid(), (Math.PI * 2.0 * harvested) / maxCount);
             harvested++;
         }
-
         return harvested;
     }
 
@@ -647,26 +666,17 @@ public class TelekinesisPower implements Power {
      */
     private boolean isHarvestable(ServerWorld world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
-        if (state.isAir()) return false;
+
+        // Safety checks: No air, no chests/furnaces/block entities, must be solid
+        if (state.isAir() || world.getBlockEntity(pos) != null) return false;
         if (!state.isOpaque()) return false;
 
-        // list of valid blocks, should probably add more
-        net.minecraft.block.Block block = state.getBlock();
-        return block == Blocks.STONE
-                || block == Blocks.COBBLESTONE
-                || block == Blocks.DIRT
-                || block == Blocks.GRASS_BLOCK
-                || block == Blocks.GRAVEL
-                || block == Blocks.SAND
-                || block == Blocks.SANDSTONE
-                || block == Blocks.DEEPSLATE
-                || block == Blocks.COBBLED_DEEPSLATE
-                || block == Blocks.ANDESITE
-                || block == Blocks.DIORITE
-                || block == Blocks.GRANITE
-                || block == Blocks.TUFF
-                || block == Blocks.NETHERRACK
-                || block == Blocks.BLACKSTONE;
+        // Uses Minecraft Registry Tags to cover massive groups of blocks concisely
+        return state.isIn(net.minecraft.registry.tag.BlockTags.LOGS)             // Wood types
+                || state.isIn(net.minecraft.registry.tag.BlockTags.DIRT)         // Dirts and grasses
+                || state.isIn(net.minecraft.registry.tag.BlockTags.SAND)         // Sands
+                || state.isIn(net.minecraft.registry.tag.BlockTags.SNOW)         // Snows
+                || state.isIn(net.minecraft.registry.tag.BlockTags.PICKAXE_MINEABLE); // Stones
     }
 
     private void clearDebrisField(ServerWorld world) {
@@ -692,30 +702,24 @@ public class TelekinesisPower implements Power {
      */
     private void handleDebrisField(ServerPlayerEntity player) {
         if (debrisFieldTicksRemaining <= 0) return;
-
-        // regen blocks if possible
         handleDebrisRegen(player);
-
         ServerWorld world = player.getServerWorld();
         debrisFieldTicksRemaining--;
 
-        if (debrisFieldTicksRemaining <= 0) {
-            clearDebrisField(world);
-            return;
-        }
+        if (debrisFieldTicksRemaining <= 0) { clearDebrisField(world); return; }
 
         Vec3d playerPos = player.getPos().add(0, 1.0, 0);
         tickTag(player, DEBRIS_THROW_CD_TAG);
-
         Set<UUID> toRemove = new HashSet<>();
         int total = orbitAngles.size();
 
         int index = 0;
         for (Map.Entry<UUID, Double> entry : orbitAngles.entrySet()) {
             UUID uuid = entry.getKey();
-
             Entity ent = world.getEntity(uuid);
-            if (!(ent instanceof FallingBlockEntity block) || block.isRemoved()) {
+
+            // FIX: Allow any orbiting entity (like Wooliam)
+            if (ent == null || ent.isRemoved()) {
                 toRemove.add(uuid);
                 index++;
                 continue;
@@ -725,51 +729,25 @@ public class TelekinesisPower implements Power {
             double orbitRadius = isInner ? DEBRIS_ORBIT_RADIUS_INNER : DEBRIS_ORBIT_RADIUS;
             double orbitSpeed  = isInner ? -DEBRIS_ORBIT_SPEED_INNER : DEBRIS_ORBIT_SPEED;
 
-            int ringIndex = index / 2;
-            int ringTotal = Math.max(1, total / 2);
-            double baseAngle = (Math.PI * 2.0 * ringIndex) / ringTotal;
-            double timeOffset = world.getTime() * orbitSpeed;
-            double angle = baseAngle + timeOffset;
-
+            double angle = (Math.PI * 2.0 * (index / 2)) / Math.max(1, total / 2) + (world.getTime() * orbitSpeed);
             entry.setValue(angle);
 
             double x = playerPos.x + Math.cos(angle) * orbitRadius;
             double z = playerPos.z + Math.sin(angle) * orbitRadius;
-            double y = playerPos.y
-                    + Math.sin(angle * 1.5 + world.getTime() * 0.08) * 0.5
-                    + (isInner ? 0.3 : 0.0);
+            double y = playerPos.y + Math.sin(angle * 1.5 + world.getTime() * 0.08) * 0.5 + (isInner ? 0.3 : 0.0);
 
-            Vec3d target  = new Vec3d(x, y, z);
-            Vec3d current = block.getPos();
-            Vec3d delta   = target.subtract(current);
+            Vec3d target = new Vec3d(x, y, z);
+            ent.setVelocity(target.subtract(ent.getPos()).multiply(0.35));
+            ent.velocityModified = true;
 
-            Vec3d motion = delta.multiply(0.35);
-            block.setVelocity(motion);
-            block.velocityModified = true;
+            if (target.distanceTo(ent.getPos()) > 5.0) ent.setPos(target.x, target.y, target.z);
 
-            if (delta.length() > 5.0) {
-                block.setPos(target.x, target.y, target.z);
-            }
+            ent.setNoGravity(true);
+            if (ent instanceof FallingBlockEntity fb) fb.timeFalling = -32768;
 
-            block.setNoGravity(true);
-            block.timeFalling = -32768;
-
-            world.spawnParticles(isInner ? TK_MAGENTA : TK_DARK_PINK,
-                    target.x, target.y, target.z, 1, 0.04, 0.04, 0.04, 0.01);
-
-            if (world.getTime() % 2 == 0) {
-                world.spawnParticles(TK_PINK,
-                        target.x, target.y, target.z, 1, 0.07, 0.07, 0.07, 0.015);
-            }
-
-            if (!isInner && world.getTime() % 6 == 0) {
-                world.spawnParticles(TK_PINK_LARGE,
-                        target.x, target.y + 0.2, target.z, 1, 0.1, 0.1, 0.1, 0.02);
-            }
-
+            world.spawnParticles(isInner ? TK_MAGENTA : TK_DARK_PINK, target.x, target.y, target.z, 1, 0.04, 0.04, 0.04, 0.01);
             index++;
         }
-
         toRemove.forEach(orbitAngles::remove);
         // below should not use blocks at all
 
@@ -843,17 +821,14 @@ public class TelekinesisPower implements Power {
         if (hasTag(player, DEBRIS_THROW_CD_TAG)) return;
 
         ServerWorld world = player.getServerWorld();
-
-        // not enough blocks
         if (orbitAngles.size() < DEBRIS_THROW_COUNT) {
-            world.playSound(null, player.getBlockPos(),
-                    SoundEvents.BLOCK_STONE_HIT, player.getSoundCategory(), 0.6f, 0.5f);
+            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_STONE_HIT, player.getSoundCategory(), 0.6f, 0.5f);
             return;
         }
 
         Vec3d look = player.getRotationVec(1.0f);
         Vec3d right = new Vec3d(-look.z, 0, look.x).normalize();
-        Vec3d up    = look.crossProduct(right).normalize();
+        Vec3d up = look.crossProduct(right).normalize();
 
         int thrown = 0;
         Iterator<Map.Entry<UUID, Double>> it = orbitAngles.entrySet().iterator();
@@ -862,64 +837,38 @@ public class TelekinesisPower implements Power {
             Map.Entry<UUID, Double> entry = it.next();
             UUID uuid = entry.getKey();
 
-            FallingBlockEntity block = null;
-            for (Entity candidate : world.iterateEntities()) {
-                if (candidate.getUuid().equals(uuid)
-                        && candidate instanceof FallingBlockEntity fb) {
-                    block = fb;
-                    break;
-                }
-            }
-
+            // ensure woolliam isnt ignored
+            Entity orbitEntity = world.getEntity(uuid);
             it.remove();
 
-            if (block != null && !block.isRemoved()) {
-                block.setNoGravity(false);
-                block.timeFalling = 0;
-                block.dropItem = false;
+            if (orbitEntity != null && !orbitEntity.isRemoved()) {
+                orbitEntity.setNoGravity(false); // Re-enable gravity for the throw
 
-                double spreadH = (thrown == 0) ? 0 : (thrown % 2 == 0 ? 1 : -1)
-                        * DEBRIS_THROW_SPREAD * ((thrown + 1) / 2);
+                if (orbitEntity instanceof FallingBlockEntity fb) {
+                    fb.timeFalling = 0;
+                    fb.dropItem = false;
+                }
+
+                double spreadH = (thrown == 0) ? 0 : (thrown % 2 == 0 ? 1 : -1) * DEBRIS_THROW_SPREAD * ((thrown + 1) / 2);
                 double spreadV = (world.random.nextDouble() - 0.5) * DEBRIS_THROW_SPREAD * 0.5;
 
-                Vec3d vel = look.multiply(DEBRIS_THROW_SPEED)
-                        .add(right.multiply(spreadH))
-                        .add(up.multiply(spreadV));
+                Vec3d vel = look.multiply(DEBRIS_THROW_SPEED).add(right.multiply(spreadH)).add(up.multiply(spreadV));
+                orbitEntity.setVelocity(vel);
+                orbitEntity.velocityModified = true;
 
-                block.setVelocity(vel);
-                block.velocityModified = true;
-
-                // Store the throwing player so triggerDebrisExplosion can attribute correctly
                 scheduledExplosions.put(uuid, player.getUuid());
 
-                spawnImpactRing(world, block.getPos(), 8, 0.25);
-                world.spawnParticles(TK_MAGENTA,
-                        block.getX(), block.getY(), block.getZ(),
-                        4, 0.2, 0.2, 0.2, 0.06);
+                spawnImpactRing(world, orbitEntity.getPos(), 8, 0.25);
+                world.spawnParticles(TK_MAGENTA, orbitEntity.getX(), orbitEntity.getY(), orbitEntity.getZ(), 4, 0.2, 0.2, 0.2, 0.06);
             }
-
             thrown++;
         }
 
         if (thrown > 0) {
             removeTagPrefix(player, DEBRIS_THROW_CD_TAG);
             player.getCommandTags().add(DEBRIS_THROW_CD_TAG + DEBRIS_THROW_COOLDOWN);
-
-            world.playSound(null, player.getBlockPos(),
-                    SoundEvents.ENTITY_WARDEN_SONIC_BOOM, player.getSoundCategory(), 0.8f, 1.1f);
-            world.playSound(null, player.getBlockPos(),
-                    SoundEvents.BLOCK_STONE_BREAK, player.getSoundCategory(), 1.2f, 1.2f);
-
-            for (int i = 0; i < 12; i++) {
-                double spread = (world.random.nextDouble() - 0.5) * 0.4;
-                world.spawnParticles(TK_PINK_LARGE,
-                        player.getEyePos().x, player.getEyePos().y, player.getEyePos().z,
-                        1,
-                        look.x * 0.6 + spread,
-                        look.y * 0.6 + (world.random.nextDouble() - 0.5) * 0.2,
-                        look.z * 0.6 + spread,
-                        0.08);
-            }
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_WARDEN_SONIC_BOOM, player.getSoundCategory(), 0.8f, 1.1f);
+            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_STONE_BREAK, player.getSoundCategory(), 1.2f, 1.2f);
         }
     }
 
@@ -929,53 +878,49 @@ public class TelekinesisPower implements Power {
         ServerWorld world = player.getServerWorld();
         Set<UUID> toExplode = new HashSet<>();
 
-        for (UUID blockUuid : scheduledExplosions.keySet()) {
-            FallingBlockEntity block = null;
-            for (net.minecraft.entity.Entity candidate : world.iterateEntities()) {
-                if (candidate.getUuid().equals(blockUuid)
-                        && candidate instanceof FallingBlockEntity fb) {
-                    block = fb;
-                    break;
-                }
-            }
+        // check for missing entities
+        for (UUID entityUuid : scheduledExplosions.keySet()) {
+            // search for wooliam
+            Entity ent = world.getEntity(entityUuid);
 
-            if (block == null || block.isRemoved()) {
-                Vec3d pos = lastKnownBlockPos.get(blockUuid);
+            if (ent == null || ent.isRemoved()) {
+                Vec3d pos = lastKnownBlockPos.get(entityUuid);
                 if (pos != null) {
                     triggerDebrisExplosion(player, world, pos);
                 }
-                toExplode.add(blockUuid);
-                continue;
+                toExplode.add(entityUuid);
             }
         }
 
-        for (UUID blockUuid : toExplode) {
-            scheduledExplosions.remove(blockUuid);
+        // cleanup all entities that exploded
+        for (UUID uuid : toExplode) {
+            scheduledExplosions.remove(uuid);
         }
 
-        // store last known position
+        // check for impacts/update positon
         for (Map.Entry<UUID, UUID> entry : scheduledExplosions.entrySet()) {
-            UUID blockUuid = entry.getKey();
+            UUID entityUuid = entry.getKey();
+            Entity ent = world.getEntity(entityUuid);
 
-            for (net.minecraft.entity.Entity candidate : world.iterateEntities()) {
-                if (!candidate.getUuid().equals(blockUuid)
-                        || !(candidate instanceof FallingBlockEntity block)) continue;
+            if (ent == null) continue;
 
-                lastKnownBlockPos.put(blockUuid, block.getPos());
+            // store position to prevent weird teleporting
+            lastKnownBlockPos.put(entityUuid, ent.getPos());
 
-                // Check for block collision by checking if velocity zeroed out horizontally
-                boolean hitSomething = block.horizontalCollision || block.isOnGround();
+            // check for collision
+            boolean hitSomething = ent.horizontalCollision || ent.isOnGround();
 
-                if (hitSomething) {
-                    Vec3d explodePos = block.getPos();
-                    block.discard();
-                    triggerDebrisExplosion(player, world, explodePos);
-                    toExplode.add(blockUuid);
-                }
-                break;
+            if (hitSomething) {
+                Vec3d explodePos = ent.getPos();
+                triggerDebrisExplosion(player, world, explodePos);
+
+                // discard the entity
+                ent.discard();
+                toExplode.add(entityUuid);
             }
         }
 
+        // cleanup
         toExplode.forEach(uuid -> {
             scheduledExplosions.remove(uuid);
             lastKnownBlockPos.remove(uuid);

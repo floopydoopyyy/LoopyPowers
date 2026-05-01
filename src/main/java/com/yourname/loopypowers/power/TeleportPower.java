@@ -1,14 +1,18 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.CooldownUI;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.*;
@@ -16,17 +20,56 @@ import net.minecraft.entity.projectile.ProjectileUtil;
 import net.minecraft.entity.Entity;
 import com.yourname.loopypowers.network.RenderPackets;
 import net.minecraft.world.RaycastContext;
+import org.joml.Vector3f;
 
 import java.util.List;
 import java.util.Random;
 
-public class
-TeleportPower implements Power {
-    //CONSTANTS
-    // Primary
-    private static final String BLINK_WINDOW = "tp_blink_window_ticks_"; // second press window
-    private static final String BLINK_USED_ONCE = "tp_blink_used_once";  // this one is a marker (no number)
-    private static final String BLINK_CD_REQUEST = "tp_blink_cd_request"; // used for cooldown for primary
+public class TeleportPower implements Power {
+
+    /* ============================================================
+       CONSTANTS - PASSIVE
+       ============================================================ */
+    private static final float PASSIVE_DODGE_CHANCE = 0.18f; // percentage chance to dodge
+    private static final int PASSIVE_HIDE_TICKS = 12;        // how long dodge invisibility effect is
+    private static final int PASSIVE_IFRAME_TICKS = 18;      // window of invincibility
+    private static final int PASSIVE_COOLDOWN_TICKS = 280;   // dodge cooldown in ticks
+
+    /* ============================================================
+       CONSTANTS - PRIMARY
+       ============================================================ */
+    private static final int PRIMARY_MAX_CHARGES = 3;
+    private static final int PRIMARY_RECHARGE_TICKS = 120;           // 6 seconds per charge
+    private static final int PRIMARY_LOCK_TICKS = 5;                 // tiny anti-spam delay between blinks
+    private static final double PRIMARY_BLINK_DIST = 14.0;           // distance of the blink
+    private static final double PRIMARY_AIR_LOOK_THRESHOLD = 0.55;   // decides if angle is high enough for air teleport
+
+    // Internal logic tags for primary charges
+    private static final String BLINK_CHARGES = "tp_blink_c_";
+    private static final String BLINK_RECHARGE = "tp_blink_r_";
+    private static final String BLINK_LOCK = "tp_blink_lock_";
+
+    /* ============================================================
+       CONSTANTS - SECONDARY
+       ============================================================ */
+    private static final long SECONDARY_COOLDOWN_MS = 16_000;
+    private static final double SECONDARY_RANGE = 24.0;
+    private static final double SECONDARY_HIT_MARGIN = 2.0;          // How generous the hitbox is
+
+    /* ============================================================
+       CONSTANTS - ULTIMATE
+       ============================================================ */
+    private static final long ULTIMATE_COOLDOWN_MS = 420_000;
+    private static final int ULTIMATE_DURATION_TICKS = 120;       // 6 seconds
+    private static final int ULTIMATE_ATTACK_STEP_INITIAL = 4;    // startup delay before first swing
+    private static final int ULTIMATE_ATTACK_STEP_ONGOING = 6;    // ticks between each swing
+    private static final double ULTIMATE_SEARCH_RADIUS = 6.0;     // how far to look for targets
+    private static final double ULTIMATE_TELEPORT_OFFSET = -1.5;  // how far behind victim to teleport
+    private static final double ULTIMATE_AURA_RADIUS = 11.0;      // visual ring radius
+
+    // Ultimate Custom Particles
+    private static final DustParticleEffect FRENZY_DUST = new DustParticleEffect(new Vector3f(0.55f, 0.0f, 0.85f), 1.5f); // Deep purple
+    private static final DustParticleEffect FRENZY_RING = new DustParticleEffect(new Vector3f(0.85f, 0.2f, 1.0f), 1.2f);  // Bright magenta
 
     private static final Random RNG = new Random();
 
@@ -46,17 +89,16 @@ TeleportPower implements Power {
         // leave if cooldown is active
         if (hasTagPrefix(player, "tp_dodge_cd_")) return false;
 
-        float dodgeChance = 0.99f; // percentage chance to dodge
-        if (RNG.nextFloat() > dodgeChance) return false; // dice roll
+        if (RNG.nextFloat() > PASSIVE_DODGE_CHANCE) return false; // dice roll
 
         // request packet to hide player
-        RenderPackets.hidePlayerFromOthers(player, 8); // how long dodge effect is
+        RenderPackets.hidePlayerFromOthers(player, PASSIVE_HIDE_TICKS);
 
         // window of invincibility (otherwise it would just hit again)
-        setSingleTimerTag(player, "tp_phase_", 14); // keep this one higher in the sequence otherwise damage will just happen again
+        setSingleTimerTag(player, "tp_phase_", PASSIVE_IFRAME_TICKS); // keep this one higher in the sequence otherwise damage will just happen again
 
         // cooldown setting
-        setSingleTimerTag(player, "tp_dodge_cd_", 100); // dodge cooldown in ticks
+        setSingleTimerTag(player, "tp_dodge_cd_", PASSIVE_COOLDOWN_TICKS);
 
         // particles
         var w = player.getServerWorld();
@@ -70,29 +112,108 @@ TeleportPower implements Power {
     // =========================
     // PRIMARY
     // =========================
+
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        // PowerManager will normally call activatePrimaryDoubleBlink directly
-        // but if something calls activatePrimary, we still do the blink.
-        activatePrimaryDoubleBlink(player);
+        if (getTimerLeft(player, BLINK_LOCK) > 0) return;
+
+        int charges = getIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
+        if (charges <= 0) return;
+
+        // consume charge
+        setIntTag(player, BLINK_CHARGES, charges - 1);
+        setSingleTimerTag(player, BLINK_LOCK, PRIMARY_LOCK_TICKS);
+
+        // start recharge if not running
+        if (getTimerLeft(player, BLINK_RECHARGE) < 0) {
+            setSingleTimerTag(player, BLINK_RECHARGE, PRIMARY_RECHARGE_TICKS);
+        }
+
+        blinkForward(player, PRIMARY_BLINK_DIST);
     }
-    private static void blinkForward(ServerPlayerEntity player, double distance) {
+
+    private static void tickBlinkRecharge(ServerPlayerEntity player) {
+        int charges = getIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
+
+        // if full, exit
+        if (charges >= PRIMARY_MAX_CHARGES) {
+            removeTagPrefix(player, BLINK_RECHARGE);
+            return;
+        }
+
+        // start timer if not running and charge has been used
+        if (getTimerLeft(player, BLINK_RECHARGE) < 0) {
+            setSingleTimerTag(player, BLINK_RECHARGE, PRIMARY_RECHARGE_TICKS);
+        }
+
+        // tick timer
+        int leftAfterTick = tickSingleTimer(player, BLINK_RECHARGE);
+        if (leftAfterTick < 0) return;
+
+        // when hit 0, give a charge
+        if (leftAfterTick == 0) {
+            charges = Math.min(PRIMARY_MAX_CHARGES, charges + 1);
+            setIntTag(player, BLINK_CHARGES, charges);
+
+            // If still not full, start next recharge window
+            if (charges < PRIMARY_MAX_CHARGES) {
+                setSingleTimerTag(player, BLINK_RECHARGE, PRIMARY_RECHARGE_TICKS);
+            } else {
+                removeTagPrefix(player, BLINK_RECHARGE);
+            }
+        }
+    }
+
+    private static void updateBlinkCooldownUI(ServerPlayerEntity player) {
+        String key = "Teleport:PRIMARY";
+
+        int charges = getIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
+
+        // hide ui when at full charge
+        if (charges >= PRIMARY_MAX_CHARGES) {
+            CooldownUI.clearCooldown(player, key);
+            return;
+        }
+
+        // show progress towards nearest charge
+        int leftTicks = getTimerLeft(player, BLINK_RECHARGE);
+
+        // if timer isn't present show it anyway
+        if (leftTicks < 0) leftTicks = PRIMARY_RECHARGE_TICKS;
+
+        long endMs = System.currentTimeMillis() + (leftTicks * 50L);
+
+        String suffix = CooldownUI.makeChargeSuffix(
+                charges, PRIMARY_MAX_CHARGES, leftTicks, PRIMARY_RECHARGE_TICKS
+        );
+
+        CooldownUI.setCooldownEnd(player, key, endMs, suffix);
+    }
+
+    private static void blinkForward(ServerPlayerEntity player, double maxDistance) {
         ServerWorld world = player.getServerWorld();
 
         Vec3d eye = player.getEyePos();
         Vec3d look = player.getRotationVec(1.0f);
 
-        // Decide if this blink is allowed to be airborne.
-        // If not looking up you should hopefully go straight and vice versa
-        boolean allowAir = look.y > 0.55; // decides if angle if high enough for air
+        // Scale distance based on pitch (looking down reduces distance)
+        // look.y ranges from 1.0 (straight up) to -1.0 (straight down)
+        double distanceMultiplier = 1.0;
+        if (look.y < 0) {
+            // If looking down, scale distance linearly (e.g., -1.0 pitch = 20% distance)
+            distanceMultiplier = Math.max(0.2, 1.0 + look.y);
+        }
+
+        double actualDistance = maxDistance * distanceMultiplier;
+
+        boolean allowAir = look.y > PRIMARY_AIR_LOOK_THRESHOLD;
         if (!allowAir) {
             look = new Vec3d(look.x, 0.0, look.z);
             if (look.lengthSquared() < 1.0e-6) return;
             look = look.normalize();
         }
 
-        // used to stop at walls, was boring
-        Vec3d desired = eye.add(look.multiply(distance));
+        Vec3d desired = eye.add(look.multiply(actualDistance));
 
         // keep them grounded if possible
         if (!allowAir) {
@@ -109,8 +230,8 @@ TeleportPower implements Power {
         // Origin
         world.spawnParticles(ParticleTypes.PORTAL, origin.x, origin.y + 1, origin.z, 30, 0.4, 0.7, 0.4, 0.1);
         world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, player.getSoundCategory(), 1.0f, 1.2f);
+
         // Sound
-        // particles n sound
         world.playSound(null, player.getBlockPos(),
                 ModSounds.TELEPORTSNAP,
                 player.getSoundCategory(),
@@ -121,6 +242,11 @@ TeleportPower implements Power {
 
         // Destination
         world.spawnParticles(ParticleTypes.PORTAL, safe.x, safe.y + 1, safe.z, 30, 0.4, 0.7, 0.4, 0.1);
+
+        // briefly give haste to refresh attack cooldown instantly
+        player.addStatusEffect(new StatusEffectInstance(
+                StatusEffects.HASTE, 5, 50, true, false, false
+        ));
     }
 
     private static Vec3d findSafeTeleportSpot(ServerWorld world, ServerPlayerEntity player, Vec3d desired) {
@@ -128,56 +254,56 @@ TeleportPower implements Power {
 
         // If looking up enough, allow air placement
         Vec3d look = player.getRotationVec(1.0f);
-        boolean allowAir = look.y > 0.55; // tweak this me
+        boolean allowAir = look.y > PRIMARY_AIR_LOOK_THRESHOLD;
 
-        int[] order = new int[] { 0, -1, -2, -3, 1, 2, 3 };
+        // Try Y-offsets to find a safe spot
+        int[] order = new int[] { 0, 1, -1, 2, -2, 3, -3 };
 
         for (int dy : order) {
             BlockPos feet = base.up(dy);
             BlockPos head = feet.up();
 
+            // Check if space is physically empty (no blocks)
             boolean feetEmpty = world.getBlockState(feet).getCollisionShape(world, feet).isEmpty();
             boolean headEmpty = world.getBlockState(head).getCollisionShape(world, head).isEmpty();
-            if (!feetEmpty || !headEmpty) continue;
+
+            // Check for dangerous fluids (lava)
+            boolean feetSafeFluid = world.getFluidState(feet).isEmpty() || world.getFluidState(feet).isIn(net.minecraft.registry.tag.FluidTags.WATER);
+            boolean headSafeFluid = world.getFluidState(head).isEmpty() || world.getFluidState(head).isIn(net.minecraft.registry.tag.FluidTags.WATER);
+
+            if (!feetEmpty || !headEmpty || !feetSafeFluid || !headSafeFluid) continue;
 
             if (!allowAir) {
                 BlockPos below = feet.down();
                 boolean hasFloor = !world.getBlockState(below).getCollisionShape(world, below).isEmpty();
-                if (!hasFloor) continue;
+                boolean floorSafeFluid = world.getFluidState(below).isEmpty() || world.getFluidState(below).isIn(net.minecraft.registry.tag.FluidTags.WATER);
+                if (!hasFloor || !floorSafeFluid) continue;
             }
 
             return new Vec3d(feet.getX() + 0.5, feet.getY(), feet.getZ() + 0.5);
         }
 
-        // fallback: accept desired even if it's not perfect
+        // If no completely safe spot found near desired, try raycasting to find the last safe spot *before* hitting a wall
+        HitResult hit = world.raycast(new RaycastContext(
+                player.getEyePos(),
+                desired,
+                RaycastContext.ShapeType.COLLIDER,
+                RaycastContext.FluidHandling.NONE,
+                player
+        ));
+
+        if (hit.getType() == HitResult.Type.BLOCK) {
+            // Step back slightly from the wall
+            Vec3d hitPos = hit.getPos();
+            Vec3d direction = desired.subtract(player.getEyePos()).normalize();
+            return hitPos.subtract(direction.multiply(0.5));
+        }
+
         return desired;
     }
 
-    public boolean activatePrimaryDoubleBlink(ServerPlayerEntity player) {
-        // SECOND PRESS
-        if (hasTagPrefix(player, BLINK_WINDOW)) {
-
-            removeTagPrefix(player, BLINK_WINDOW);
-            player.getCommandTags().remove(BLINK_USED_ONCE);
-
-            blinkForward(player, 6.0); // short blink
-
-            return true; // starts cooldown now
-        }
-
-        // First press
-        blinkForward(player, 18.0); // long blink
-
-        player.getCommandTags().add(BLINK_USED_ONCE);
-
-        // 1s window for second press
-        setSingleTimerTag(player, BLINK_WINDOW, 35);
-
-        return false; // dont start cooldown
-    }
-
     @Override
-    public long getPrimaryCooldownMs() { return 6_000; }
+    public long getPrimaryCooldownMs() { return 0; } // Handled by charge system
 
     // =========================
     // SECONDARY
@@ -187,13 +313,11 @@ TeleportPower implements Power {
     public void activateSecondary(ServerPlayerEntity player) {
         if (!(player.getWorld() instanceof ServerWorld world)) return;
 
-        double range = 24.0;
-
-        Entity target = getLookedAtEntity(player, range);
+        Entity target = getLookedAtEntity(player, SECONDARY_RANGE);
 
         // if whiff do a thing
         if (!(target instanceof LivingEntity living)) {
-            SecondaryWhiffFx(player, world, range);
+            SecondaryWhiffFx(player, world, SECONDARY_RANGE);
             return;
         }
 
@@ -206,10 +330,12 @@ TeleportPower implements Power {
         Vec3d pPos = player.getPos();
         Vec3d tPos = target.getPos();
 
-        // Swap
-        safeTeleport(player, tPos.x, tPos.y, tPos.z);
+        // Swap directly to coordinates without safety checks
+        player.teleport(world, tPos.x, tPos.y, tPos.z, player.getYaw(), player.getPitch());
+        player.fallDistance = 0;
+
         target.requestTeleport(pPos.x, pPos.y, pPos.z);
-        faceEntity(player, living); // make player face victim
+        faceEntity(player, living);
 
         // particles
         spawnBlinkTrail(world, pPos, tPos); // player -> target
@@ -217,19 +343,18 @@ TeleportPower implements Power {
 
         world.spawnParticles(ParticleTypes.PORTAL, pPos.x, pPos.y+1, pPos.z, 50, 0.5, 0.8, 0.5, 0.1);
         world.spawnParticles(ParticleTypes.PORTAL, tPos.x, tPos.y+1, tPos.z, 50, 0.5, 0.8, 0.5, 0.1);
-        // sound
-        world.playSound(null, player.getBlockPos(),
-                ModSounds.TELEPORTCLAP,
-                player.getSoundCategory(),
-                0.7f, 1.4f);
-        world.playSound(null, player.getBlockPos(),
-                SoundEvents.ITEM_CHORUS_FRUIT_TELEPORT,
-                player.getSoundCategory(),
-                0.7f, 1.4f);
+
+        world.playSound(null, player.getBlockPos(), ModSounds.TELEPORTCLAP, player.getSoundCategory(), 0.7f, 1.4f);
+        world.playSound(null, player.getBlockPos(), SoundEvents.ITEM_CHORUS_FRUIT_TELEPORT, player.getSoundCategory(), 0.7f, 1.4f);
+
+        // Instantly refresh attack cooldown
+        player.addStatusEffect(new StatusEffectInstance(
+                StatusEffects.HASTE, 5, 50, true, false, false
+        ));
     }
 
     @Override
-    public long getSecondaryCooldownMs() { return 14_000; }
+    public long getSecondaryCooldownMs() { return SECONDARY_COOLDOWN_MS; }
 
     private static void SecondaryWhiffFx(ServerPlayerEntity player, ServerWorld world, double range) {
         Vec3d start = player.getEyePos();
@@ -288,30 +413,38 @@ TeleportPower implements Power {
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
         player.getCommandTags().add("tp_frenzy");
-        setSingleTimerTag(player, "tp_frenzy_ticks_", 120); // 6 seconds
+        setSingleTimerTag(player, "tp_frenzy_ticks_", ULTIMATE_DURATION_TICKS);
         // Attack every N ticks
-        setSingleTimerTag(player, "tp_frenzy_step_", 4); // every 4 ticks
+        setSingleTimerTag(player, "tp_frenzy_step_", ULTIMATE_ATTACK_STEP_INITIAL);
 
         player.getServerWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_SCREAM, player.getSoundCategory(), 0.8f, 1.4f);
     }
 
     @Override
-    public long getUltimateCooldownMs() { return 10_000; }
+    public long getUltimateCooldownMs() { return ULTIMATE_COOLDOWN_MS; }
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
+        setIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
+        removeTagPrefix(player, BLINK_RECHARGE);
+        removeTagPrefix(player, BLINK_LOCK);
+    }
 
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        removeTagPrefix(player, BLINK_CHARGES);
+        removeTagPrefix(player, BLINK_RECHARGE);
+        removeTagPrefix(player, BLINK_LOCK);
     }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        int left = tickSingleTimer(player, BLINK_WINDOW);
 
-        // window expired
-        if (left == 0 && player.getCommandTags().contains(BLINK_USED_ONCE)) {
-            player.getCommandTags().remove(BLINK_USED_ONCE);
-            player.getCommandTags().add(BLINK_CD_REQUEST);
-        }
+        // Primary Charges
+        tickSingleTimer(player, BLINK_LOCK);
+        tickBlinkRecharge(player);
+        updateBlinkCooldownUI(player);
+
         // tick timers
         tickSingleTimer(player, "tp_dodge_cd_");
         tickSingleTimer(player, "tp_phase_");
@@ -323,47 +456,51 @@ TeleportPower implements Power {
     }
 
     private void tickFrenzy(ServerPlayerEntity player) {
-        //player.sendMessage(net.minecraft.text.Text.literal("FRENZY TICK"), true);
-        // countdown
         int ticksLeft = tickSingleTimer(player, "tp_frenzy_ticks_");
         if (ticksLeft <= 0) {
             return;
         }
-        // draw particle circle
         ServerWorld world = player.getServerWorld();
-        spawnFrenzyRadius(world, player, 11.0); // keep similar to the actual radius
+        spawnFrenzyRadius(world, player, ULTIMATE_AURA_RADIUS);
         spawnFrenzyAura(world, player);
 
-        // step timer
         int stepLeft = tickSingleTimer(player, "tp_frenzy_step_");
         if (stepLeft > 0) return;
-        setSingleTimerTag(player, "tp_frenzy_step_", 6);
+        setSingleTimerTag(player, "tp_frenzy_step_", ULTIMATE_ATTACK_STEP_ONGOING);
 
         world = player.getServerWorld();
 
-        // Find targets nearby
-        double radius = 6.0;
-        Box box = new Box(player.getPos(), player.getPos()).expand(radius);
+        Box box = new Box(player.getPos(), player.getPos()).expand(ULTIMATE_SEARCH_RADIUS);
         List<LivingEntity> targets = world.getEntitiesByClass(LivingEntity.class, box,
                 e -> e.isAlive() && e != player);
 
         if (targets.isEmpty()) return;
 
-        LivingEntity target = targets.get(RNG.nextInt(targets.size())); //randomly selects entity in radius
+        LivingEntity target = targets.get(RNG.nextInt(targets.size()));
 
-        // Teleports a bit behind victim
-        Vec3d behind = target.getPos().add(target.getRotationVec(1.0f).multiply(-1.5));
-        safeTeleport(player, behind.x, behind.y, behind.z);
-        // makes face victim
+        // calculate desired spot behind target
+        Vec3d behind = target.getPos().add(target.getRotationVec(1.0f).multiply(ULTIMATE_TELEPORT_OFFSET));
+        // force the Y coordinate to match the target's feet to prevent hovering if target is on a slope
+
+        // use the safe spot finder
+        Vec3d safePos = findSafeTeleportSpot(world, player, behind);
+
+        // Safety Fallback: If the safe spot finder returned a location that is still suffocating
+        // just teleport to the target's exact position.
+        BlockPos feetPos = BlockPos.ofFloored(safePos);
+        BlockPos headPos = feetPos.up();
+        if (!world.getBlockState(feetPos).getCollisionShape(world, feetPos).isEmpty() ||
+                !world.getBlockState(headPos).getCollisionShape(world, headPos).isEmpty()) {
+            safePos = target.getPos();
+        }
+
+        safeTeleport(player, safePos.x, safePos.y, safePos.z);
         faceEntity(player, target);
 
-        /* Attack using held weapon naturally
-        player.swingHand(Hand.MAIN_HAND, true);
-        player.attack(target); */
         forceAttack(player, target);
 
-        // particles
-        world.spawnParticles(ParticleTypes.PORTAL, player.getX(), player.getY() + 1, player.getZ(), 20, 0.3, 0.6, 0.3, 0.08);
+        // strike particles
+        world.spawnParticles(FRENZY_DUST, player.getX(), player.getY() + 1, player.getZ(), 20, 0.3, 0.6, 0.3, 0.08);
         world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, player.getSoundCategory(), 0.6f, 1.5f);
     }
 
@@ -377,25 +514,26 @@ TeleportPower implements Power {
             double z = center.z + Math.sin(angle) * radius;
 
             world.spawnParticles(
-                    ParticleTypes.PORTAL,
+                    FRENZY_RING,
                     x,
                     center.y + 0.1,
                     z,
                     1,
-                    0, 0, 0,
-                    0
+                    0.02, 0.02, 0.02,
+                    0.0
             );
         }
     }
     private static void spawnFrenzyAura(ServerWorld world, ServerPlayerEntity player) {
         Vec3d pos = player.getPos();
 
+
         world.spawnParticles(
-                ParticleTypes.PORTAL,
+                FRENZY_DUST,
                 pos.x,
                 pos.y + 1.0,
                 pos.z,
-                15,
+                3,
                 0.6,
                 1.0,
                 0.6,
@@ -403,11 +541,11 @@ TeleportPower implements Power {
         );
 
         world.spawnParticles(
-                ParticleTypes.REVERSE_PORTAL,
+                ParticleTypes.REVERSE_PORTAL, //
                 pos.x,
                 pos.y + 0.5,
                 pos.z,
-                6,
+                20,
                 0.3,
                 0.6,
                 0.3,
@@ -424,7 +562,7 @@ TeleportPower implements Power {
         Vec3d look = player.getRotationVec(1.0f);
         Vec3d end = start.add(look.multiply(range));
 
-        Box box = player.getBoundingBox().stretch(look.multiply(range)).expand(1.0);
+        Box box = player.getBoundingBox().stretch(look.multiply(range)).expand(SECONDARY_HIT_MARGIN);
 
         var hit = ProjectileUtil.raycast(
                 player,
@@ -433,7 +571,7 @@ TeleportPower implements Power {
                 box,
                 e -> e instanceof LivingEntity && e != player,
                 range * range
-        ); // ProjectileUtil.raycast exists in Yarn 1.20.x :contentReference[oaicite:1]{index=1}
+        );
 
         return hit != null ? hit.getEntity() : null;
     }
@@ -496,20 +634,12 @@ TeleportPower implements Power {
         );
     }
 
-    public boolean consumeBlinkCooldownRequest(ServerPlayerEntity player) { // this was some bullshit
-        if (player.getCommandTags().contains(BLINK_CD_REQUEST)) {
-            player.getCommandTags().remove(BLINK_CD_REQUEST);
-            return true;
-        }
-        return false;
-    }
-
-    private static boolean hasTagPrefix(ServerPlayerEntity p, String prefix) { // helper to test for a tag
+    private static boolean hasTagPrefix(Entity p, String prefix) {
         for (String tag : p.getCommandTags()) if (tag.startsWith(prefix)) return true;
         return false;
     }
 
-    private static void removeTagPrefix(ServerPlayerEntity p, String prefix) { // called to remove tags easily in tick stuff
+    private static void removeTagPrefix(Entity p, String prefix) {
         var it = p.getCommandTags().iterator();
         while (it.hasNext()) {
             String tag = it.next();
@@ -520,19 +650,18 @@ TeleportPower implements Power {
         }
     }
 
-    private static void setSingleTimerTag(ServerPlayerEntity p, String prefix, int ticks) {
+    private static void setSingleTimerTag(Entity p, String prefix, int ticks) {
         removeTagPrefix(p, prefix);
         p.getCommandTags().add(prefix + ticks);
     }
 
-    // does a thing based on a tag
-    private static int tickSingleTimer(ServerPlayerEntity p, String prefix) {
+    private static int tickSingleTimer(Entity p, String prefix) {
         var it = p.getCommandTags().iterator();
         while (it.hasNext()) {
             String tag = it.next();
             if (!tag.startsWith(prefix)) continue;
 
-            int ticks; // removes a tick
+            int ticks;
             try {
                 ticks = Integer.parseInt(tag.substring(prefix.length())) - 1;
             } catch (NumberFormatException e) {
@@ -540,7 +669,7 @@ TeleportPower implements Power {
                 return -1;
             }
 
-            it.remove(); // remove old tag safely
+            it.remove();
 
             if (ticks > 0) {
                 p.getCommandTags().add(prefix + ticks);
@@ -548,6 +677,35 @@ TeleportPower implements Power {
             return ticks;
         }
         return -1;
+    }
+
+    private static int getTimerLeft(Entity e, String prefix) {
+        for (String tag : e.getCommandTags()) {
+            if (!tag.startsWith(prefix)) continue;
+            try {
+                return Integer.parseInt(tag.substring(prefix.length()));
+            } catch (NumberFormatException ex) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    private static int getIntTag(Entity e, String prefix, int fallback) {
+        for (String tag : e.getCommandTags()) {
+            if (!tag.startsWith(prefix)) continue;
+            try {
+                return Integer.parseInt(tag.substring(prefix.length()));
+            } catch (NumberFormatException ex) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    private static void setIntTag(Entity e, String prefix, int value) {
+        removeTagPrefix(e, prefix);
+        e.getCommandTags().add(prefix + value);
     }
 
     private static void spawnBlinkTrail(ServerWorld world, Vec3d from, Vec3d to) {
@@ -595,14 +753,14 @@ TeleportPower implements Power {
 
     @Override
     public String getPrimaryDescription() {
-        return "Teleport a long distance in the direction you're looking and then have an optional shorter teleport that you can use by pressing the" +
-                " ability button again. (this will go on cooldown if not used quick enough). These teleports prioritise bringing you to a safe location (e.g. " +
-                "putting you on the ground instead of the air) and leave a lingering trail between the location of the teleport.";
+        return "You have 3 charges of a teleport that moves you a moderate distance in the direction you're looking. This ability goes on cooldown per charge and " +
+                "prioritises bringing you to a safe location (e.g. putting you on the ground instead of the air). A lingering trail is left between the locations of the teleport and each" +
+                " teleport will reset your attack cooldown, allowing for multi-hit combos.";
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Swap places with the entity you're looking at. The entity will be facing whatever direction they were facing before the teleport, but" +
+        return "Swap places with the entity you're looking at and reset your attack cooldown. The entity will be facing whatever direction they were facing before the teleport, but" +
                 " you will be facing the entity you swapped with. Missing this will still consume the cooldown.";
     }
 
