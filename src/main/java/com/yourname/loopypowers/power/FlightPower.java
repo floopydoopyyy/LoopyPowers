@@ -335,10 +335,10 @@ public class FlightPower implements Power {
     private static final int BOOM_WINDUP_TICKS = 30; // how long windup
     private static final int BOOM_DASH_TICKS = 18;   //
     private static final double BOOM_SPEED = 4.0;    // forward push per tick
-    private static final double BOOM_RADIUS = 3.0;   // knock radius during
+    private static final double BOOM_RADIUS = 4.0;   // knock radius during
     private static final double BOOM_IMPACT_RADIUS = 6.0; // radius if collision explosion
-    private static final float  BOOM_IMPACT_DAMAGE = 6.0f; // damage if in boom
-    private static final double BOOM_IMPACT_KB = 2.2; //knockback from boom
+    private static final float  BOOM_IMPACT_DAMAGE = 15.0f; // damage if in boom
+    private static final double BOOM_IMPACT_KB = 2.8; //knockback from boom
     private static final int BOOM_KNOCKOUT_DURATION = 20 * 3; // how long they're knocked out of flight if collided
 
     @Override

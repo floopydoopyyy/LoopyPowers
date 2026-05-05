@@ -79,7 +79,8 @@ public class Loopypowers implements ModInitializer {
         ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> {
             Power oldPower = PowerManager.getPower(oldPlayer);
             if (oldPower != null) {
-                PowerManager.setPower(newPlayer, oldPower);
+                // Silently assign so we don't spam them with text on respawn
+                PowerManager.setPower(newPlayer, oldPower, true);
             }
 
             int level = PowerManager.getLevel(oldPlayer);

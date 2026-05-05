@@ -54,16 +54,16 @@ public class FirePower implements Power {
        CONSTANTS - PRIMARY
        ============================================================ */
     private static final float PRIMARY_SPEED = 2.6f;
-    private static final float PRIMARY_DIRECT_DAMAGE = 2.0f;
+    private static final float PRIMARY_DIRECT_DAMAGE = 4.5f;
     private static final int PRIMARY_EXPLOSION_POWER = 2;
-    private static final float PRIMARY_EXPLOSION_DAMAGE = 4.0f;
+    private static final float PRIMARY_EXPLOSION_DAMAGE = 4.5f;
     private static final double PRIMARY_SPAWN_OFFSET = 0.6;
 
     /* ============================================================
        CONSTANTS - SECONDARY
        ============================================================ */
     private static final float SECONDARY_EXPLOSION_POWER = 2.5f;
-    private static final float SECONDARY_EXPLOSION_DAMAGE = 6.0f;
+    private static final float SECONDARY_EXPLOSION_DAMAGE = 12.5f;
     private static final double SECONDARY_LAUNCH_STRENGTH = 1.7;
     private static final double SECONDARY_KB_HORIZONTAL = 1.8;
     private static final double SECONDARY_KB_VERTICAL = 0.6;
@@ -71,7 +71,7 @@ public class FirePower implements Power {
     private static final int SECONDARY_HOVER_TICKS = 140;
     private static final int SECONDARY_NO_FALL_TICKS = 200;
 
-    // chance to cook a nice snack
+    // chance to cook a snack
     private static final float COOK_FOOD_CHANCE = 0.35f;
 
     // Hover Mechanics
@@ -95,7 +95,7 @@ public class FirePower implements Power {
     private static final int ULTIMATE_CHARGE_TICKS = 100;
     private static final float ULTIMATE_EXPLOSION_POWER = 30.0f;
     private static final float ULTIMATE_DAMAGE_RADIUS = 10.0f;
-    private static final float ULTIMATE_MAX_DAMAGE = 25.0f;
+    private static final float ULTIMATE_MAX_DAMAGE = 55.0f;
     private static final int ULTIMATE_FIRE_DURATION = 6; // seconds
 
     // Pull

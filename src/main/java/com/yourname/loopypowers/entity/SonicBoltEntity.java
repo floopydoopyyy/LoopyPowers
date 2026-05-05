@@ -35,7 +35,7 @@ public class SonicBoltEntity extends net.minecraft.entity.Entity {
     // push strength
     private static final float  KNOCKBACK_STRENGTH    = 1.0f;
     // direct hit damage
-    private static final float  BASE_DAMAGE           = 5.0f;
+    private static final float  BASE_DAMAGE           = 6.5f;
 
     /* ============================================================
        LIFECYCLE

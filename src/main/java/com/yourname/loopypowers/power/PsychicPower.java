@@ -120,14 +120,14 @@ public class PsychicPower implements Power {
        ============================================================ */
 
     // Passive
-    private static final float LEECH_HEAL       = 1.0f;
+    private static final float LEECH_HEAL       = 2.0f;
     private static final long  LEECH_CDR_MS     = 500;
     private static final int   LEECH_INTERNAL_CD = 10;
 
     // Compel (primary)
-    private static final int    COMPEL_DURATION         = 70;
+    private static final int    COMPEL_DURATION         = 80;
     private static final double COMPEL_STOP_DISTANCE    = 2.3;
-    private static final double COMPEL_MOB_SPEED        = 0.18;
+    private static final double COMPEL_MOB_SPEED        = 0.20;
     private static final double COMPEL_PLAYER_ACCEL     = 0.14;
     private static final double COMPEL_PLAYER_MAX_SPEED = 0.40;
     private static final float  COMPEL_LOOK_STRENGTH    = 0.25f;
@@ -154,9 +154,9 @@ public class PsychicPower implements Power {
     private static final double ULT_PLAYER_ACCEL      = 0.30;
     private static final double ULT_PLAYER_MAX_SPEED  = 0.65;
     private static final double ULT_MOB_SPEED         = 0.36;
-    private static final float  ULT_LOOK_STRENGTH     = 0.4f;
+    private static final float  ULT_LOOK_STRENGTH     = 0.3f;
     private static final double ULT_STOP_DISTANCE     = 1.5;
-    private static final int    ATTACK_COOLDOWN        = 25;
+    private static final int    ATTACK_COOLDOWN        = 35;
 
     // Easter egg
     private static final double COMPEL_CHAT_CHANCE = 0.05;

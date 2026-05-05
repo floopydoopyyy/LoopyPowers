@@ -104,15 +104,15 @@ public class ExplosionPower implements Power {
     private static final int ULT_CHARGE_REFRESH_TICKS = 10;
 
     // DAMAGE AND RADII
-    private static final float IGNITE_DAMAGE = 12.0f;
+    private static final float IGNITE_DAMAGE = 19.5f;
     private static final double IGNITE_DMG_RADIUS = 3.5;
 
-    private static final float BLAST_DAMAGE = 8.0f;
+    private static final float BLAST_DAMAGE = 17.0f;
     private static final double BLAST_DMG_RADIUS = 3.0;
 
-    private static final float ULT_POP_DAMAGE = 11.0f;
+    private static final float ULT_POP_DAMAGE = 15.5f;
     private static final double ULT_POP_DMG_RADIUS = 4.0;
-    private static final float ULT_FINAL_DAMAGE = 16.0f;
+    private static final float ULT_FINAL_DAMAGE = 22.0f;
     private static final double ULT_FINAL_DMG_RADIUS = 5.5;
 
     private static final int ULT_LAUNCH_DELAY_TICKS = 2;
@@ -574,14 +574,14 @@ public class ExplosionPower implements Power {
             w.playSound(null, player.getBlockPos(),
                     ModSounds.EXPLODEBIG,
                     player.getSoundCategory(),
-                    0.95f, 0.85f);
+                    0.8f, 0.85f);
             CameraShake.shakeNearby(player, 14.0, 16, 1.55f);
         } else {
             float pitch = 1.05f + 0.12f * popIndex;
             w.playSound(null, player.getBlockPos(),
                     ModSounds.EXPLODEBIG,
                     player.getSoundCategory(),
-                    0.8f, pitch);
+                    0.75f, pitch);
             CameraShake.shakeNearby(player, 9.0, 8, 0.9f);
         }
     }

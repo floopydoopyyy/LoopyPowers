@@ -58,7 +58,7 @@ public class TeleportPower implements Power {
     private static final float PASSIVE_DODGE_CHANCE = 0.18f; // percentage chance to dodge
     private static final int PASSIVE_HIDE_TICKS = 12;        // how long dodge invisibility effect is
     private static final int PASSIVE_IFRAME_TICKS = 18;      // window of invincibility
-    private static final int PASSIVE_COOLDOWN_TICKS = 280;   // dodge cooldown in ticks
+    private static final int PASSIVE_COOLDOWN_TICKS = 220;   // dodge cooldown in ticks
 
     /* ============================================================
        CONSTANTS - PRIMARY

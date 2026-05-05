@@ -84,7 +84,7 @@ public class TelekinesisPower implements Power {
     // ── Secondary Suspend / throw phase ─────────────────────────────
     private static final int    SUSPEND_TICKS         = 50;
     private static final double SUSPEND_FLOAT_VEL     = 0.05;
-    private static final int    THROW_READY_TICKS     = 40;
+    private static final int    THROW_READY_TICKS     = 45;
     private static final double THROW_SCAN_RANGE      = 14.0;
     private static final double THROW_SCAN_WIDTH      = 2.5;
     private static final double THROW_SPEED_H         = 1.5;
@@ -108,10 +108,10 @@ public class TelekinesisPower implements Power {
     private static final double IMPACT_MIN_SPEED_H  = 0.6;
     private static final double IMPACT_MIN_SPEED_V  = 0.7;
 
-    private static final float  IMPACT_WALL_DAMAGE  = 4.0f;
+    private static final float  IMPACT_WALL_DAMAGE  = 9.0f;
     private static final float  IMPACT_WALL_SCALE   = 2.5f;
 
-    private static final float  IMPACT_FLOOR_DAMAGE = 2.5f;
+    private static final float  IMPACT_FLOOR_DAMAGE = 4.5f;
     private static final float  IMPACT_FLOOR_SCALE  = 1.8f;
 
     // ── Ultimate ──────────────────────────────────

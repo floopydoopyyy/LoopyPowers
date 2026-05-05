@@ -66,7 +66,7 @@ public class SpeedPower implements Power {
 
     // SECONDARY
     private static final int    RUSH_DURATION_TICKS         = 100;     // 5 seconds
-    private static final float  RUSH_DAMAGE                 = 6.0f;    // 3 hearts
+    private static final float  RUSH_DAMAGE                 = 8.5f;
     private static final double RUSH_KNOCKBACK_HORIZONTAL   = 1.4;
     private static final double RUSH_KNOCKBACK_VERTICAL     = 0.55;
     private static final double RUSH_KNOCKBACK_SCAN_RADIUS  = 4.5;
@@ -77,7 +77,7 @@ public class SpeedPower implements Power {
     private static final int    OVERDRIVE_DURATION_TICKS    = 200;     // 10 seconds
     private static final double OVERDRIVE_MIN_SPEED         = 1.4;
     private static final double OVERDRIVE_FORWARD_PUSH      = 0.38;
-    private static final double OVERDRIVE_ENTITY_DAMAGE     = 8.0f;
+    private static final double OVERDRIVE_ENTITY_DAMAGE     = 16.0f;
     private static final double OVERDRIVE_ENTITY_KNOCKBACK  = 1.8;
     private static final double OVERDRIVE_ENTITY_KNOCKBACK_Y = 0.5;
     private static final double OVERDRIVE_COLLISION_SLOW_X  = 0.15;

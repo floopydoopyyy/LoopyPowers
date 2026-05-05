@@ -99,7 +99,7 @@ public class SoundPower implements Power {
 
     // Secondary
     private static final int    BD_PULSE_COUNT       = 6;
-    private static final int    BD_PULSE_GAP_TICKS   = 3;
+    private static final int    BD_PULSE_GAP_TICKS   = 4;
     private static final int    BD_FINAL_DELAY_TICKS = 2;
     private static final double BD_PULL_RADIUS       = 10.0;
     private static final double BD_FINAL_RADIUS      = 7.0;
@@ -107,7 +107,7 @@ public class SoundPower implements Power {
     private static final float  BD_PULL_UP           = 0.02f;
     private static final float  BD_FINAL_KB          = 1.00f;
     private static final float  BD_FINAL_UP          = 0.30f;
-    private static final float  BD_FINAL_DAMAGE      = 7.0f;
+    private static final float  BD_FINAL_DAMAGE      = 11.5f;
     private static final int    BD_FINAL_STUN_TICKS  = 40;
     private static final int    BD_REMOTE_STUN_TICKS = 30;
 
@@ -211,7 +211,7 @@ public class SoundPower implements Power {
         vState.resonatedTicks = 0;
         target.removeStatusEffect(StatusEffects.GLOWING);
 
-        float burstDamageBonus = 4.0f;
+        float burstDamageBonus = 6.0f;
         target.damage(ModDamageTypes.sound(target.getWorld(), caster), burstDamageBonus);
 
         // resets velocity before stunning so they stop moving

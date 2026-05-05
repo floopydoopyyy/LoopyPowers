@@ -458,7 +458,7 @@ public class DarknessPower implements Power {
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 40, 0, true, false));
-            e.addStatusEffect(new StatusEffectInstance(ModEffects.EXPOSED, 20, 0, true, false)); // visual one
+            e.addStatusEffect(new StatusEffectInstance(ModEffects.EXPOSED, 45, 0, true, false)); // visual one
         }
     }
 

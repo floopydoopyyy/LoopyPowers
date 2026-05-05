@@ -41,7 +41,7 @@ public class PowerCommand {
     static {
         POWERS.put("speed",         SpeedPower::new);
         POWERS.put("fire",          FirePower::new);
-        POWERS.put("teleport",      TeleportPower::new);
+        POWERS.put("teleportation",      TeleportPower::new);
         POWERS.put("lightning",     LightningPower::new);
         POWERS.put("flight",        FlightPower::new);
         POWERS.put("blood",         BloodPower::new);

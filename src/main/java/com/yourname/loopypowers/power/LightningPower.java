@@ -74,8 +74,8 @@ public class LightningPower implements Power {
     private static final double CLAP_ANGLE_DEG = 65.0;  // horizontal spread
     private static final double CLAP_VERT_FLAT = 0.45;  // vertical squash on cone check (< 1 = flatter)
 
-    private static final float  CLAP_MAX_DAMAGE    = 8.0f;   // close
-    private static final float  CLAP_MIN_DAMAGE    = 2.5f;   // far
+    private static final float  CLAP_MAX_DAMAGE    = 13.0f;   // close
+    private static final float  CLAP_MIN_DAMAGE    = 4.5f;   // far
     // EGG Tuning
     private static final int PARTY_CHANCE = 650; // 1 in n chance
 
@@ -710,7 +710,7 @@ public class LightningPower implements Power {
         world.spawnParticles(BOLT_WHITE,
                 center.x, center.y + 1.0, center.z, 20, 0.4, 0.8, 0.4, 0.07);
 
-        // cosmetic lightning storm on cast
+        // cosmetic lightning
         for (int i = 0; i < 5; i++) {
             Vec3d lPos = new Vec3d(
                     center.x + (RNG.nextDouble() - 0.5) * 8.0,

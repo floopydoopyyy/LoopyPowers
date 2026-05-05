@@ -62,10 +62,20 @@ public class PowerManager {
     }
 
     /**
-     * Sets a player's power, calling onRemove on the old one and onAssign on
-     * the new one, then persisting immediately so the change survives a crash.
+     * Default alias for setting a power. Triggers the chat announcements.
      */
     public static void setPower(ServerPlayerEntity player, Power power) {
+        setPower(player, power, false);
+    }
+
+    /**
+     * Sets a player's power, calling onRemove on the old one and onAssign on
+     * the new one, then persisting immediately so the change survives a crash.
+     *
+     * @param silent If true, suppresses the "You gained the power" chat messages.
+     *               Used during logins and respawns to avoid spam.
+     */
+    public static void setPower(ServerPlayerEntity player, Power power, boolean silent) {
         Power old = getPower(player);
         if (old != null) old.onRemove(player);
 
@@ -77,8 +87,10 @@ public class PowerManager {
         // Persist immediately so admin commands survive crashes
         PlayerDataStore.save(player);
 
-        player.sendMessage(Text.literal("§eYou gained the power: §6" + power.getName()), false);
-        player.sendMessage(Text.literal("§eType '/power help overview' for ability explanations."));
+        if (!silent) {
+            player.sendMessage(Text.literal("§eYou gained the power: §6" + power.getName()), false);
+            player.sendMessage(Text.literal("§eType '/power help overview' for ability explanations."));
+        }
     }
 
     public static void removePower(ServerPlayerEntity player) {
@@ -370,6 +382,7 @@ public class PowerManager {
             for (Power p : ALL_POWERS) {
                 if (p.getName().equals(name)) {
                     PLAYER_POWERS.put(player.getUuid(), p);
+                    // Silently assign the power on load
                     p.onAssign(player);
                     syncClientFlags(player);
                     break;

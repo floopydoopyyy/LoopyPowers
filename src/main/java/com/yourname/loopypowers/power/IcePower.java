@@ -144,15 +144,15 @@ public class IcePower implements Power {
    PASSIVE
    ============================================================ */
 
-    // Point tuning (more control than “5 stacks”)
+    // Point tuning
     private static final int FRZ_MAX_POINTS = 100;
 
     // Stage thresholds (0 = no freeze)
-    private static final int FRZ_STAGE_1 = 1;    // light particles
-    private static final int FRZ_STAGE_2 = 20;   // Slowness 1
-    private static final int FRZ_STAGE_3 = 50;   // Slowness 2
-    private static final int FRZ_STAGE_4 = 80;   // Slowness 2 + Mining Fatigue 1
-    private static final int FRZ_STAGE_5 = 90;   // Fully frozen
+    private static final int FRZ_STAGE_1 = 10;    // light particles
+    private static final int FRZ_STAGE_2 = 40;   // Slowness 1
+    private static final int FRZ_STAGE_3 = 65;   // Slowness 2
+    private static final int FRZ_STAGE_4 = 75;   // Slowness 2 + Mining Fatigue 1
+    private static final int FRZ_STAGE_5 = 85;   // Fully frozen
 
     // “Quickly thaw out if not being damaged”
     private static final int FRZ_DECAY_DELAY_TICKS = 20;  // how long after last hit before freeze decays
@@ -160,7 +160,7 @@ public class IcePower implements Power {
     private static final int FRZ_DECAY_POINTS_STEP = 5;   // how many points decay
     // Shatter
     private static final int   FRZ_IMMUNE_TICKS = 100;     // time of ice immunity after shatter
-    private static final float SHATTER_BONUS_DAMAGE = 8.0f; // damage on shatter
+    private static final float SHATTER_BONUS_DAMAGE = 9.0f; // damage on shatter
 
     // How many points abilities add
     private static final int FRZ_POINTS_MELEE = 7;  // melee hits
@@ -182,6 +182,22 @@ public class IcePower implements Power {
         return 5;
     }
 
+    /** Calculates the EXACT time until the target thaws and updates the UI timer. */
+    private static void syncFreezeTimer(LivingEntity e, IceVictimState state) {
+        if (state.freezePoints <= 0) {
+            e.removeStatusEffect(ModEffects.DEEPFREEZE);
+            return;
+        }
+
+        // calculate ticks until thaw based on the decay intervals
+        int steps = (int) Math.ceil((double) state.freezePoints / FRZ_DECAY_POINTS_STEP);
+        int ticksRemaining = state.freezeDecayTicks + Math.max(0, (steps - 1) * FRZ_DECAY_STEP_TICKS);
+
+        // remove and reapply to force the UI to update the countdown safely
+        e.removeStatusEffect(ModEffects.DEEPFREEZE);
+        e.addStatusEffect(new StatusEffectInstance(ModEffects.DEEPFREEZE, ticksRemaining, 0, false, false, true));
+    }
+
     private static void applyFreezePoints(ServerPlayerEntity caster, LivingEntity target, int addPoints) {
         if (addPoints <= 0) return;
 
@@ -190,6 +206,9 @@ public class IcePower implements Power {
 
         state.freezePoints = MathHelper.clamp(state.freezePoints + addPoints, 0, FRZ_MAX_POINTS);
         state.freezeDecayTicks = FRZ_DECAY_DELAY_TICKS;
+
+        // force a UI update
+        syncFreezeTimer(target, state);
 
         ServerWorld w = caster.getServerWorld();
         spawnFreezeStageParticles(w, target, getFreezeStage(state.freezePoints));
@@ -287,6 +306,11 @@ public class IcePower implements Power {
                 continue;
             }
 
+            // Sync the effect periodically in case they re-logged / client desyncs
+            if (now % 10 == 0 || !le.hasStatusEffect(ModEffects.DEEPFREEZE)) {
+                syncFreezeTimer(le, state);
+            }
+
             // Stage effects & particles
             int stage = getFreezeStage(points);
             applyFreezeStageEffects(w, le, stage);
@@ -328,18 +352,16 @@ public class IcePower implements Power {
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.MINING_FATIGUE, T, 0, true, false)); // MF1
         }
         if (stage >= 5) {
-            // “can barely move” + mining fatigue stronger
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, T, 4, true, false));        // very slow
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.MINING_FATIGUE, T, 2, true, false));  // heavy mining fatigue
-            e.addStatusEffect(new StatusEffectInstance(ModEffects.DEEPFREEZE, T, 0, false, false, true));  // visual indicator
 
-            // extra movement clamp (feels frozen even if they have speed boosts etc.)
+            // extra movement clamp
             Vec3d v = e.getVelocity();
             e.setVelocity(v.x * 0.25, MathHelper.clamp(v.y, -0.5, 0.5), v.z * 0.25);
             e.velocityModified = true;
             e.fallDistance = 0.0f;
 
-            // strong frozen overlay (visual)
+            // strong frozen overlay
             e.setFrozenTicks(Math.max(e.getFrozenTicks(), 140));
         }
     }
@@ -433,7 +455,7 @@ public class IcePower implements Power {
     private static final int SPIKES_RISE_INTERVAL = 2;
 
     private static final double SPIKES_MAX_Y_VEL = 1.65;
-    private static final float SPIKES_DAMAGE = 3.5f;
+    private static final float SPIKES_DAMAGE = 8.5f;
     private static final double SPIKES_KNOCKUP_Y = 0.75;
     private static final int SPIKES_FREEZE_STACKS = 15;
 
@@ -897,7 +919,7 @@ public class IcePower implements Power {
        SECONDARY
        ============================================================ */
 
-    private static final long SECONDARY_COOLDOWN_MS = 22_000;
+    private static final long SECONDARY_COOLDOWN_MS = 25_000;
 
     private static final int BEAM_CHARGE_TICKS = 22;
     private static final int BEAM_FIRE_TICKS   = 125;
@@ -1261,14 +1283,14 @@ public class IcePower implements Power {
 
     // Shockwave
     private static final int ULT_WAVE_INTERVAL = 16;
-    private static final double ULT_WAVE_SPEED = 1.25;
+    private static final double ULT_WAVE_SPEED = 1.45;
     private static final double ULT_WAVE_MAX_RADIUS = 14.0;
     private static final double ULT_WAVE_THICKNESS = 0.80;
 
     private static final double ULT_WAVE_HEIGHT_OFFSET = 0.10;
     private static final double ULT_WAVE_JUMP_CLEARANCE = 0.55;
 
-    private static final float ULT_WAVE_DAMAGE = 4.0f;
+    private static final float ULT_WAVE_DAMAGE = 5.5f;
     private static final double ULT_WAVE_KB = 0.25;
     private static final double ULT_WAVE_UP = 0.07;
     private static final int ULT_WAVE_FREEZE_STACKS = 35;

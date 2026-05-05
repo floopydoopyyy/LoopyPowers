@@ -197,7 +197,7 @@ public class NaturePower implements Power {
     private static final float GAS_HEIGHT_MAX   = 3.6f;
 
     // Poison
-    private static final int GAS_POISON_TICKS = 80;         // time
+    private static final int GAS_POISON_TICKS = 90;         // time
     private static final int GAS_POISON_AMP   = 2;          // amp
     private static final int GAS_APPLY_INTERVAL_TICKS = 10;  // checks
     private static final int GAS_REAPPLY_THRESHOLD = 35;    // only refresh when low
@@ -508,11 +508,11 @@ public class NaturePower implements Power {
     private static final int VINE_STRIKE_LASHES_PER_TARGET = 3; // extra vine lines per target
     private static final int VINE_STRIKE_EXTRA_RANDOM = 6;      // extra “miss” lashes forward
 
-    // visuals (green vine dust)
+    // visuals
     private static final DustParticleEffect VINE_DUST =
             new DustParticleEffect(new Vector3f(0.10f, 0.85f, 0.12f), 1.35f);
 
-    // pink specks (ultimate only)
+    // pink
     private static final DustParticleEffect VINE_PINK_DUST =
             new DustParticleEffect(new Vector3f(0.95f, 0.35f, 0.85f), 1.05f);
 

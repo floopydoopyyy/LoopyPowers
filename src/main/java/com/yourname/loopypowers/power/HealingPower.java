@@ -307,11 +307,11 @@ public class HealingPower implements Power {
     private static final int ABSORB_DURATION = 40;
 
     // Damage
-    private static final float BURST_BASE_DAMAGE = 4.0f;
-    private static final float BURST_DAMAGE_PER_STORED = 0.6f;
-    private static final float BURST_MAX_SCALING = 20.0f; // cap
+    private static final float BURST_BASE_DAMAGE = 6.0f;
+    private static final float BURST_DAMAGE_PER_STORED = 1.6f;
+    private static final float BURST_MAX_SCALING = 50.0f; // cap
 
-    private static final float ABSORB_DAMAGE_TAKEN_MULT = 0.25f; // player takes this percentage of damage
+    private static final float ABSORB_DAMAGE_TAKEN_MULT = 0.30f; // player takes this percentage of damage
 
     // Expelled debuff tuning
     private static final int EXPELLED_DURATION = 60; // 3 seconds
@@ -321,11 +321,11 @@ public class HealingPower implements Power {
     private static final double BURST_RADIUS = 5.0;
 
     // Knockback
-    private static final float KB_BASE = 0.2f;          // minimum push
-    private static final float KB_PER_STORED = 0.03f;   // scaling per absorbed point
-    private static final float KB_MAX = 1.2f;           // cap
+    private static final float KB_BASE = 0.6f;          // minimum push
+    private static final float KB_PER_STORED = 0.07f;   // scaling per absorbed point
+    private static final float KB_MAX = 2.2f;           // cap
     private static final float KB_VERTICAL = 0.35f;     //  lift
-    private static final float KB_MIN_FALLOFF = 0.2f;   // prevents zero knockback at edge
+    private static final float KB_MIN_FALLOFF = 0.2f;   // prevent knockback at edge
 
     // visual
     private static final int VFX_BASE_PARTICLES = 12;

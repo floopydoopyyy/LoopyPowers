@@ -49,8 +49,8 @@ public class CosmicPower implements Power {
 
     private static final int   FATE_TIMER_DEFAULT     = 200;
     private static final int   FATE_TIMER_MAX         = 300;
-    private static final float FATE_DAMAGE_CAP        = 50.0f;
-    private static final int   FATE_DETONATE_TICKS    = 20;
+    private static final float FATE_DAMAGE_CAP        = 60.0f;
+    private static final int   FATE_DETONATE_TICKS    = 30;
     private static final int   FATE_DETONATE_INTERVAL = 10;
     private static final float MELEE_FATE_RATIO       = 0.8f;
     private static final int   MELEE_TIMER_ADD        = 12;
