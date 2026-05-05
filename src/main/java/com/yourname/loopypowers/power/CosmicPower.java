@@ -656,13 +656,13 @@ public class CosmicPower implements Power {
 
     @Override public String getName()          { return "Cosmic"; }
     @Override public String getPassiveName()   { return "Written in the Stars"; }
-    @Override public String getPrimaryName()   { return "Cosmic Ray"; }
-    @Override public String getSecondaryName() { return "Shooting Star"; }
-    @Override public String getUltimateName()  { return "Black Hole"; }
+    @Override public String getPrimaryName()   { return "Pulsar"; }
+    @Override public String getSecondaryName() { return "Starfall"; }
+    @Override public String getUltimateName()  { return "Event Horizon"; }
 
-    @Override public long getPrimaryCooldownMs()   { return 3000; }
-    @Override public long getSecondaryCooldownMs() { return 8000; }
-    @Override public long getUltimateCooldownMs()  { return 15000; }
+    @Override public long getPrimaryCooldownMs()   { return 7_000; }
+    @Override public long getSecondaryCooldownMs() { return 22_000; }
+    @Override public long getUltimateCooldownMs()  { return 250_000; }
 
     @Override
     public String getOverviewDescription() {

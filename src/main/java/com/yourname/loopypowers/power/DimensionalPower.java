@@ -1241,12 +1241,12 @@ public class DimensionalPower implements Power {
 
     @Override public String getPassiveName()   { return "Instability"; }
     @Override public String getPrimaryName()   { return "Phase Shift"; }
-    @Override public String getSecondaryName() { return "Displacement"; }
+    @Override public String getSecondaryName() { return "Displace"; }
     @Override public String getUltimateName()  { return "Fracture"; }
 
-    @Override public long getPrimaryCooldownMs()   { return 6000; }
-    @Override public long getSecondaryCooldownMs() { return 9000; }
-    @Override public long getUltimateCooldownMs()  { return 20000; }
+    @Override public long getPrimaryCooldownMs()   { return 22_000; }
+    @Override public long getSecondaryCooldownMs() { return 17_000; }
+    @Override public long getUltimateCooldownMs()  { return 330_000; }
 
     @Override
     public String getOverviewDescription() {

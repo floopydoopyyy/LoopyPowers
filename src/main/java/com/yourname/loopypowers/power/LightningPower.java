@@ -943,12 +943,12 @@ public class LightningPower implements Power {
 
     @Override public String getName()          { return "Lightning"; }
     @Override public String getPrimaryName()   { return "Thunderclap"; }
-    @Override public String getSecondaryName() { return "Supercharge"; }
-    @Override public String getUltimateName()  { return "Maelstrom"; }
+    @Override public String getSecondaryName() { return "Overcharge"; }
+    @Override public String getUltimateName()  { return "Stormcaller"; }
 
-    @Override public long getSecondaryCooldownMs() { return 10_000; } // 35 seconds
-    @Override public long getUltimateCooldownMs()  { return 10_000; } // 100 seconds
-    @Override public long getPrimaryCooldownMs()   { return 3_500;  } // 6.5 seconds
+    @Override public long getSecondaryCooldownMs() { return 8_000; } //
+    @Override public long getUltimateCooldownMs()  { return 32_000; } //
+    @Override public long getPrimaryCooldownMs()   { return 365_000;  } //
 
     @Override
     public String getOverviewDescription() {

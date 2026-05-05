@@ -790,9 +790,9 @@ public class SoundPower implements Power {
     @Override public String getSecondaryName() { return "Bass Drop"; }
     @Override public String getUltimateName()  { return "Sonic Shriek"; }
 
-    @Override public long getPrimaryCooldownMs()   { return 2_000; }
-    @Override public long getSecondaryCooldownMs() { return 5_000; }
-    @Override public long getUltimateCooldownMs()  { return 12_000; }
+    @Override public long getPrimaryCooldownMs()   { return 7_000; }
+    @Override public long getSecondaryCooldownMs() { return 26_000; }
+    @Override public long getUltimateCooldownMs()  { return 290_000; }
 
     @Override
     public String getOverviewDescription() {

@@ -840,12 +840,12 @@ public class PsychicPower implements Power {
     @Override public String getName()          { return "Psychic"; }
     @Override public String getPassiveName()   { return "Mind Sap"; }
     @Override public String getPrimaryName()   { return "Compel"; }
-    @Override public String getSecondaryName() { return "Mind Spike"; }
+    @Override public String getSecondaryName() { return "Spike"; }
     @Override public String getUltimateName()  { return "Puppetry"; }
 
-    @Override public long getPrimaryCooldownMs()   { return 4000; }
-    @Override public long getSecondaryCooldownMs() { return 6000; }
-    @Override public long getUltimateCooldownMs()  { return 6000; }
+    @Override public long getPrimaryCooldownMs()   { return 14_000; }
+    @Override public long getSecondaryCooldownMs() { return 29_000; }
+    @Override public long getUltimateCooldownMs()  { return 560_000; }
 
     @Override
     public String getOverviewDescription() {

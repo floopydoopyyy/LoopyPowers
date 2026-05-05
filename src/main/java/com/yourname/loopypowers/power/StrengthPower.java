@@ -55,7 +55,7 @@ public class StrengthPower implements Power {
     private static final double RUSH_SPEED = 1.25;
     private static final double RUSH_HIT_RADIUS = 1.3;
     // Rage
-    private static final int RAGE_TICKS = 20 * 7; // 7s
+    private static final int RAGE_TICKS = 240; // 12s
     private static final int RAGE_STR_AMP = 1;    // Strength II
     private static final int RAGE_RES_AMP = 0;    // Resistance I
     private static final int RAGE_SPEED_AMP = 0;  // Speed I
@@ -1181,21 +1181,21 @@ public class StrengthPower implements Power {
        ============================================================ */
 
     @Override public String getName() { return "Strength"; }
-    @Override public String getPrimaryName() { return "Slam"; }
-    @Override public String getSecondaryName() { return "Bullrush"; }
-    @Override public String getUltimateName() { return "Rage"; }
+    @Override public String getPrimaryName() { return "Seismic Slam"; }
+    @Override public String getSecondaryName() { return "Titan Charge"; }
+    @Override public String getUltimateName() { return "Primal Rage"; }
 
     @Override
-    public long getPrimaryCooldownMs() { return 6_000; }
+    public long getPrimaryCooldownMs() { return 12_500; }
 
     @Override
     public long getSecondaryCooldownMs() {
-        return 9_000;
+        return 18_500;
     }
 
     @Override
     public long getUltimateCooldownMs() {
-        return 20_000;
+        return 280_000;
     }
 
     /* ============================================================

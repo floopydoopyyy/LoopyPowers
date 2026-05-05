@@ -1805,9 +1805,9 @@ public class FortunePower implements Power {
     @Override public String getSecondaryName() { return "Raise The Stakes"; }
     @Override public String getUltimateName() { return "House Rule"; }
 
-    @Override public long getPrimaryCooldownMs() { return 7_000; }
-    @Override public long getSecondaryCooldownMs() { return 10_000; }
-    @Override public long getUltimateCooldownMs() { return 15_000; }
+    @Override public long getPrimaryCooldownMs() { return 26_000; }
+    @Override public long getSecondaryCooldownMs() { return 48_000; }
+    @Override public long getUltimateCooldownMs() { return 540_000; }
 
     @Override
     public String getOverviewDescription() {

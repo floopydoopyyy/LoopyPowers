@@ -411,7 +411,7 @@ public class IcePower implements Power {
        PRIMARY
        ============================================================ */
 
-    private static final long PRIMARY_COOLDOWN_MS = 7_000;
+    private static final long PRIMARY_COOLDOWN_MS = 13_000;
 
     private static final double SPIKES_RANGE = 12.0;
 
@@ -891,7 +891,7 @@ public class IcePower implements Power {
        SECONDARY
        ============================================================ */
 
-    private static final long SECONDARY_COOLDOWN_MS = 9_000;
+    private static final long SECONDARY_COOLDOWN_MS = 22_000;
 
     private static final String BEAM_CHARGE = "ice_bchg_";
     private static final String BEAM_FIRE   = "ice_bfir_";
@@ -1239,7 +1239,7 @@ public class IcePower implements Power {
        ULTIMATE
        ============================================================ */
 
-    private static final long ULT_COOLDOWN_MS = 10_000;
+    private static final long ULT_COOLDOWN_MS = 340_000;
 
     private static final String ULT_ACTIVE = "ice_ult_";
     private static final String ULT_PULSE  = "ice_ultp_";
@@ -1753,9 +1753,9 @@ public class IcePower implements Power {
        ============================================================ */
 
     @Override public String getName() { return "Ice"; }
-    @Override public String getPrimaryName() { return "Ice Spikes"; }
-    @Override public String getSecondaryName() { return "Ice Beam"; }
-    @Override public String getUltimateName() { return "Blizzard"; }
+    @Override public String getPrimaryName() { return "Piercing Spikes"; }
+    @Override public String getSecondaryName() { return "Flash Freeze"; }
+    @Override public String getUltimateName() { return "Ice Age"; }
 
     @Override public long getPrimaryCooldownMs() { return PRIMARY_COOLDOWN_MS; }
     @Override public long getSecondaryCooldownMs() { return SECONDARY_COOLDOWN_MS; }

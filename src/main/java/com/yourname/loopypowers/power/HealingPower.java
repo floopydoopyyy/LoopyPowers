@@ -975,13 +975,13 @@ public class HealingPower implements Power {
     @Override public String getName() { return "Healing Factor"; }
 
     @Override public String getPassiveName() { return "Fast Patch"; }
-    @Override public String getPrimaryName() { return "Cleanse"; }
-    @Override public String getSecondaryName() { return "Expulsion"; }
-    @Override public String getUltimateName() { return "Adaptive Evolution"; }
+    @Override public String getPrimaryName() { return "Purge"; }
+    @Override public String getSecondaryName() { return "Repulse"; }
+    @Override public String getUltimateName() { return "Survival of the Fittest"; }
 
-    @Override public long getPrimaryCooldownMs() { return 3_000; }
-    @Override public long getSecondaryCooldownMs() { return 5_000; }
-    @Override public long getUltimateCooldownMs() { return 7_000; }
+    @Override public long getPrimaryCooldownMs() { return 33_000; }
+    @Override public long getSecondaryCooldownMs() { return 29_000; }
+    @Override public long getUltimateCooldownMs() { return 290_000; }
 
     /*
     100%: Overflow - Strength 2, absorbtion

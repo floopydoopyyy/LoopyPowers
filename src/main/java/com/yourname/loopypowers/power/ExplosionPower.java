@@ -49,7 +49,7 @@ public class ExplosionPower implements Power {
 
     // Secondary: blast
     private static final int BLAST_MAX_CHARGES = 2;
-    private static final int BLAST_RECHARGE_TICKS = 20 * 8; // cooldown per charge
+    private static final int BLAST_RECHARGE_TICKS = 240; // cooldown per charge
     private static final int BLAST_LOCK_TICKS = 4;
     private static final float BLAST_POWER = 2.6f;       // explosion strength
     private static final boolean BLAST_BREAK_BLOCKS = true;
@@ -851,12 +851,12 @@ public class ExplosionPower implements Power {
 
     @Override public String getName() { return "Explosion"; }
     @Override public String getPrimaryName() { return "Ignition"; }
-    @Override public String getSecondaryName() { return "Blast"; }
+    @Override public String getSecondaryName() { return "Propulsion Blast"; }
     @Override public String getUltimateName() { return "Chain Reaction"; }
 
-    @Override public long getPrimaryCooldownMs() { return 9_000; }
+    @Override public long getPrimaryCooldownMs() { return 28_000; }
     @Override public long getSecondaryCooldownMs() { return 0; }
-    @Override public long getUltimateCooldownMs() { return 5_000; }
+    @Override public long getUltimateCooldownMs() { return 460_000; }
 
     @Override
     public String getOverviewDescription() {
@@ -866,7 +866,7 @@ public class ExplosionPower implements Power {
 
     @Override
     public String getPassiveName() {
-        return "Exposure Therapy";
+        return "Shock Absorption";
     }
 
     @Override

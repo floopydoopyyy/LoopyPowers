@@ -903,16 +903,16 @@ public class BloodPower implements Power {
        COOLDOWNS
        ============================================================ */
 
-    @Override public long getPrimaryCooldownMs() { return 6_000; }
-    @Override public long getSecondaryCooldownMs() { return 5_000; }
-    @Override public long getUltimateCooldownMs() { return 5_000; }
+    @Override public long getPrimaryCooldownMs() { return 9_000; }
+    @Override public long getSecondaryCooldownMs() { return 13_500; }
+    @Override public long getUltimateCooldownMs() { return 260_000; }
 
     /* ============================================================
        DISPLAY
        ============================================================ */
 
     @Override public String getName() { return "Blood"; }
-    @Override public String getPrimaryName() { return "Blood Whip"; }
+    @Override public String getPrimaryName() { return "Hemochord"; }
     @Override public String getSecondaryName() { return "Coagulate"; }
     @Override public String getUltimateName() { return "Blood Pact"; }
 
@@ -924,7 +924,7 @@ public class BloodPower implements Power {
 
     @Override
     public String getPassiveName() {
-        return "Revitalisation";
+        return "Sanguine Siphon";
     }
 
     @Override

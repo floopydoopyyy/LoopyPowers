@@ -912,7 +912,7 @@ public class SpeedPower implements Power { // SPEED
     public String getPrimaryName() { return "Dash"; }
 
     @Override
-    public long getPrimaryCooldownMs() { return 5_000; } // 5 seconds
+    public long getPrimaryCooldownMs() { return 6_000; }
 
     @Override
     public String getPrimaryDescription() {
@@ -924,7 +924,7 @@ public class SpeedPower implements Power { // SPEED
     public String getSecondaryName() { return "Rush"; }
 
     @Override
-    public long getSecondaryCooldownMs() { return 5_000; } // 18 seconds
+    public long getSecondaryCooldownMs() { return 18_000; } // 18 seconds
 
     @Override
     public String getSecondaryDescription() {
@@ -933,10 +933,10 @@ public class SpeedPower implements Power { // SPEED
     }
 
     @Override
-    public String getUltimateName() { return "Overdrive"; }
+    public String getUltimateName() { return "Overclock"; }
 
     @Override
-    public long getUltimateCooldownMs() { return 10_000; } // 120 seconds
+    public long getUltimateCooldownMs() { return 400_000; }
 
     @Override
     public String getUltimateDescription() {

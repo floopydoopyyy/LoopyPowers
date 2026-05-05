@@ -913,9 +913,9 @@ public class NaturePower implements Power {
     @Override public String getSecondaryName() { return "Thorn Cage"; }
     @Override public String getUltimateName() { return "Wild Hunt"; }
 
-    @Override public long getPrimaryCooldownMs() { return 5_000; }
-    @Override public long getSecondaryCooldownMs() { return 5_000; }
-    @Override public long getUltimateCooldownMs() { return 8_000; }
+    @Override public long getPrimaryCooldownMs() { return 18_000; }
+    @Override public long getSecondaryCooldownMs() { return 38_000; }
+    @Override public long getUltimateCooldownMs() { return 350_000; }
 
     @Override
     public String getOverviewDescription() {

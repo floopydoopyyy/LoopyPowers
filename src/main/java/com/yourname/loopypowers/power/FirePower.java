@@ -694,7 +694,7 @@ public class FirePower implements Power {
 
     @Override
     public String getSecondaryName() {
-        return "Rising Sun";
+        return "Eruption";
     }
 
     @Override
@@ -715,7 +715,7 @@ public class FirePower implements Power {
 
     @Override
     public String getPassiveName() {
-        return "Heart of fire";
+        return "Hot-blooded";
     }
 
     @Override

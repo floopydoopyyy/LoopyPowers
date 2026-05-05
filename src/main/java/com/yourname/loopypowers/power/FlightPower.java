@@ -555,9 +555,9 @@ public class FlightPower implements Power {
        COOLDOWNS
        ============================================================ */
 
-    @Override public long getPrimaryCooldownMs() { return 4_000; }   // Gust
-    @Override public long getSecondaryCooldownMs() { return 10_000; } // Updraft
-    @Override public long getUltimateCooldownMs() { return 5_000; }  // Sonic Boom
+    @Override public long getPrimaryCooldownMs() { return 7_000; }   // Gust
+    @Override public long getSecondaryCooldownMs() { return 33_000; } // Updraft
+    @Override public long getUltimateCooldownMs() { return 170_000; }  // Sonic Boom
 
     /* ============================================================
        HELPERS

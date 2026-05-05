@@ -695,14 +695,14 @@ public class DarknessPower implements Power {
 
     @Override public String getName() { return "Darkness"; }
 
-    @Override public String getPassiveName() { return "Backstabbing"; }
+    @Override public String getPassiveName() { return "Blindspot"; }
     @Override public String getPrimaryName() { return "Shadow Step"; }
-    @Override public String getSecondaryName() { return "Mist Form"; }
-    @Override public String getUltimateName() { return "Blackout"; }
+    @Override public String getSecondaryName() { return "Umbral Veil"; }
+    @Override public String getUltimateName() { return "Dark Domain"; }
 
-    @Override public long getPrimaryCooldownMs() { return 8_000; }
-    @Override public long getSecondaryCooldownMs() { return 12_000; }
-    @Override public long getUltimateCooldownMs() { return 18_000; }
+    @Override public long getPrimaryCooldownMs() { return 14_000; }
+    @Override public long getSecondaryCooldownMs() { return 25_000; }
+    @Override public long getUltimateCooldownMs() { return 320_000; }
 
     @Override
     public String getOverviewDescription() {
