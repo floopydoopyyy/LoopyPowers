@@ -2,6 +2,7 @@ package com.yourname.loopypowers.power;
 
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.entity.damage.DamageSource;
 
 // This is an interface with mainly getter methods
 
@@ -23,13 +24,18 @@ public interface Power { // Basis for all powers
     // if they don't exist, the attempt should succeed.
     default boolean tryActivatePrimary(ServerPlayerEntity player) {
         activatePrimary(player);
-        return true;}
+        return true;
+    }
+
     default boolean tryActivateSecondary(ServerPlayerEntity player) {
         activateSecondary(player);
-        return true;}
+        return true;
+    }
+
     default boolean tryActivateUltimate(ServerPlayerEntity player) {
         activateUltimate(player);
-        return true;}
+        return true;
+    }
 
     // Active abilities
     void activatePrimary(ServerPlayerEntity player);
@@ -41,32 +47,32 @@ public interface Power { // Basis for all powers
     void activateUltimate(ServerPlayerEntity player);
     long getUltimateCooldownMs();
 
-    //Ability Names
+    // Ability Names
     default String getPassiveName() { return "Passive"; }
+    default String getPrimaryName() { return "Primary"; }
+    default String getSecondaryName() { return "Secondary"; }
+    default String getUltimateName() { return "Ultimate"; }
 
-    default String getPrimaryName() {
-        return "Primary";
-    }
-
-    default String getSecondaryName() {
-        return "Secondary";
-    }
-
-    default String getUltimateName() {
-        return "Ultimate";
-    }
-    // passive on hit effects
-    default void onHit
-    (ServerPlayerEntity attacker,
-     LivingEntity target
-    ) {
+    // passive on hit effects (Attacker side)
+    default void onHit(ServerPlayerEntity attacker, LivingEntity target) {
         // default = nothing
+    }
+
+    // when dealing damage
+    // Returns true to allow the damage, false to cancel it.
+    default boolean onAttack(ServerPlayerEntity attacker, LivingEntity target, net.minecraft.entity.damage.DamageSource source, float amount) {
+        return true;
+    }
+
+    // defensive damage hook
+    // Returns true to allow the damage to proceed, false to cancel the damage entirely.
+    default boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        return true;
     }
 
     String getName();
 
     // HELP / DESCRIPTIONS - for help command
-
     default String getOverviewDescription() {
         return "No overview description set yet.";
     }

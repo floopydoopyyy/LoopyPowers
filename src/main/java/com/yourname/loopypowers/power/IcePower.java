@@ -37,17 +37,63 @@ import java.util.*;
 public class IcePower implements Power {
 
     /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, IceCasterState> CASTER_STATES = new HashMap<>();
+    private static final Map<UUID, IceVictimState> VICTIM_STATES = new HashMap<>();
+
+    private static class SnowmanBuild {
+        int step = 1;
+        int delay = 10;
+        BlockPos pos;
+        SnowmanBuild(BlockPos pos) { this.pos = pos; }
+    }
+
+    private static class IceCasterState {
+        int beamChargeTicks = 0;
+        int beamFireTicks = 0;
+        int ultActiveTicks = 0;
+        int ultPulseTicks = 0;
+        List<SnowmanBuild> snowmen = new ArrayList<>();
+    }
+
+    private static class IceVictimState {
+        int freezePoints = 0;
+        int freezeDecayTicks = 0;
+        int freezeImmuneTicks = 0;
+        int lastSpikeHitTick = -1;
+        int lastWaveHitId = -1;
+        RegistryKey<World> worldKey;
+
+        IceVictimState(RegistryKey<World> worldKey) {
+            this.worldKey = worldKey;
+        }
+    }
+
+    private static IceCasterState getCasterState(ServerPlayerEntity player) {
+        return CASTER_STATES.computeIfAbsent(player.getUuid(), k -> new IceCasterState());
+    }
+
+    private static IceVictimState getVictimState(LivingEntity victim) {
+        ServerWorld w = (ServerWorld) victim.getWorld();
+        return VICTIM_STATES.computeIfAbsent(victim.getUuid(), k -> new IceVictimState(w.getRegistryKey()));
+    }
+
+    /* ============================================================
        BASIC
        ============================================================ */
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        player.getCommandTags().removeIf(tag -> tag.startsWith("ice_"));
+        player.getCommandTags().removeIf(tag -> tag.startsWith("ice_")); // Clean legacy tags
+        CASTER_STATES.put(player.getUuid(), new IceCasterState());
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
         player.getCommandTags().removeIf(tag -> tag.startsWith("ice_"));
+        CASTER_STATES.remove(player.getUuid());
 
         // Remove lingering slow statuses
         player.removeStatusEffect(StatusEffects.SLOWNESS);
@@ -56,8 +102,9 @@ public class IcePower implements Power {
             for (ServerWorld w : player.getServer().getWorlds()) {
                 // Thaw all entities
                 for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
-                    if (e.getCommandTags().stream().anyMatch(tag -> tag.startsWith("ice_"))) {
-                        e.getCommandTags().removeIf(tag -> tag.startsWith("ice_"));
+                    IceVictimState state = VICTIM_STATES.get(e.getUuid());
+                    if (state != null && state.freezePoints > 0) {
+                        state.freezePoints = 0;
                         e.setFrozenTicks(0);
                         e.removeStatusEffect(ModEffects.DEEPFREEZE);
                     }
@@ -97,11 +144,6 @@ public class IcePower implements Power {
    PASSIVE
    ============================================================ */
 
-    // Tags
-    private static final String FRZ_POINTS = "ice_frz_p_"; // ice_frz_p_<0..FRZ_MAX_POINTS>
-    private static final String FRZ_DECAY  = "ice_frz_d_"; // ice_frz_d_<ticks until next decay step>
-    private static final String FRZ_IMMUNE = "ice_frz_i_"; // ice_frz_i_<ticks> (immune after shatter)
-
     // Point tuning (more control than “5 stacks”)
     private static final int FRZ_MAX_POINTS = 100;
 
@@ -129,26 +171,7 @@ public class IcePower implements Power {
     private static final DustParticleEffect FRZ_SHIMMER_DUST =
             new DustParticleEffect(new Vector3f(0.75f, 0.95f, 1.00f), 0.45f);
 
-    // Track entities with freeze state
-    private static final List<FrozenRef> FROZEN = new ArrayList<>();
     private static final Map<RegistryKey<World>, Long> FROZEN_LAST_TICK = new HashMap<>();
-
-    private static final class FrozenRef {
-        final UUID uuid;
-        final RegistryKey<World> worldKey;
-        FrozenRef(UUID uuid, RegistryKey<World> worldKey) {
-            this.uuid = uuid;
-            this.worldKey = worldKey;
-        }
-    }
-
-    private static int getFreezePoints(LivingEntity e) {
-        return getIntTag(e, FRZ_POINTS, 0);
-    }
-
-    private static boolean isFreezeImmune(LivingEntity e) {
-        return getTimerLeft(e, FRZ_IMMUNE) > 0;
-    }
 
     private static int getFreezeStage(int points) {
         if (points < FRZ_STAGE_1) return 0;
@@ -161,28 +184,22 @@ public class IcePower implements Power {
 
     private static void applyFreezePoints(ServerPlayerEntity caster, LivingEntity target, int addPoints) {
         if (addPoints <= 0) return;
-        if (isFreezeImmune(target)) return;
 
-        int cur = getFreezePoints(target);
-        int next = MathHelper.clamp(cur + addPoints, 0, FRZ_MAX_POINTS);
+        IceVictimState state = getVictimState(target);
+        if (state.freezeImmuneTicks > 0) return;
 
-        setIntTag(target, FRZ_POINTS, next);
-
-        // Reset decay timer: they only start thawing after a short delay
-        setSingleTimerTag(target, FRZ_DECAY, FRZ_DECAY_DELAY_TICKS);
-
-        // tick frozen
-        trackFrozen(target);
+        state.freezePoints = MathHelper.clamp(state.freezePoints + addPoints, 0, FRZ_MAX_POINTS);
+        state.freezeDecayTicks = FRZ_DECAY_DELAY_TICKS;
 
         ServerWorld w = caster.getServerWorld();
-        spawnFreezeStageParticles(w, target, getFreezeStage(next));
+        spawnFreezeStageParticles(w, target, getFreezeStage(state.freezePoints));
     }
 
     private static boolean tryShatter(ServerPlayerEntity caster, LivingEntity target) {
-        if (isFreezeImmune(target)) return false;
+        IceVictimState state = getVictimState(target);
+        if (state.freezeImmuneTicks > 0) return false;
 
-        int points = getFreezePoints(target);
-        if (points < FRZ_STAGE_5) return false; // only when fully frozen
+        if (state.freezePoints < FRZ_STAGE_5) return false; // only when fully frozen
 
         ServerWorld w = caster.getServerWorld();
 
@@ -210,9 +227,8 @@ public class IcePower implements Power {
 
         // Clear freeze + grant immunity
         clearFreeze(target);
-        setSingleTimerTag(target, FRZ_IMMUNE, FRZ_IMMUNE_TICKS);
+        state.freezeImmuneTicks = FRZ_IMMUNE_TICKS;
 
-        trackFrozen(target);
         return true;
     }
 
@@ -229,22 +245,14 @@ public class IcePower implements Power {
     }
 
     private static void clearFreeze(LivingEntity e) {
-        removeTagPrefix(e, FRZ_POINTS);
-        removeTagPrefix(e, FRZ_DECAY);
+        IceVictimState state = VICTIM_STATES.get(e.getUuid());
+        if (state != null) {
+            state.freezePoints = 0;
+            state.freezeDecayTicks = 0;
+        }
 
-        // set ticks 0
         e.setFrozenTicks(0);
         e.removeStatusEffect(ModEffects.DEEPFREEZE); // clear visual indicator
-    }
-
-    private static void trackFrozen(LivingEntity e) {
-        UUID id = e.getUuid();
-        RegistryKey<World> key = ((ServerWorld) e.getWorld()).getRegistryKey();
-
-        for (FrozenRef r : FROZEN) {
-            if (r.uuid.equals(id) && r.worldKey.equals(key)) return;
-        }
-        FROZEN.add(new FrozenRef(id, key));
     }
 
     private static void tickFrozenWorld(ServerWorld w) {
@@ -254,45 +262,46 @@ public class IcePower implements Power {
         if (last != null && last == now) return;
         FROZEN_LAST_TICK.put(key, now);
 
-        if (FROZEN.isEmpty()) return;
+        if (VICTIM_STATES.isEmpty()) return;
 
-        Iterator<FrozenRef> it = FROZEN.iterator();
+        Iterator<Map.Entry<UUID, IceVictimState>> it = VICTIM_STATES.entrySet().iterator();
         while (it.hasNext()) {
-            FrozenRef ref = it.next();
-            if (!ref.worldKey.equals(key)) continue;
+            Map.Entry<UUID, IceVictimState> entry = it.next();
+            IceVictimState state = entry.getValue();
 
-            Entity ent = w.getEntity(ref.uuid);
+            if (!state.worldKey.equals(key)) continue;
+
+            Entity ent = w.getEntity(entry.getKey());
             if (!(ent instanceof LivingEntity le) || !le.isAlive()) {
                 it.remove();
                 continue;
             }
 
             // Tick immunity
-            tickSingleTimer(le, FRZ_IMMUNE);
+            if (state.freezeImmuneTicks > 0) state.freezeImmuneTicks--;
 
-            int points = getFreezePoints(le);
-            int stage = getFreezeStage(points);
-
+            int points = state.freezePoints;
             if (points <= 0) {
                 // stop tracking if no freeze + no immunity
-                if (getTimerLeft(le, FRZ_IMMUNE) < 0) it.remove();
+                if (state.freezeImmuneTicks <= 0) it.remove();
                 continue;
             }
 
             // Stage effects & particles
+            int stage = getFreezeStage(points);
             applyFreezeStageEffects(w, le, stage);
 
             // Decay logic:
-            // FRZ_DECAY counts down. When it hits 0, remove points and then schedule next decay step.
-            int dLeft = tickSingleTimer(le, FRZ_DECAY);
-            if (dLeft == 0) {
-                points = Math.max(0, points - FRZ_DECAY_POINTS_STEP);
-                if (points > 0) {
-                    setIntTag(le, FRZ_POINTS, points);
-                    setSingleTimerTag(le, FRZ_DECAY, FRZ_DECAY_STEP_TICKS);
-                } else {
-                    clearFreeze(le);
-                    if (getTimerLeft(le, FRZ_IMMUNE) < 0) it.remove();
+            if (state.freezeDecayTicks > 0) {
+                state.freezeDecayTicks--;
+                if (state.freezeDecayTicks == 0) {
+                    state.freezePoints = Math.max(0, points - FRZ_DECAY_POINTS_STEP);
+                    if (state.freezePoints > 0) {
+                        state.freezeDecayTicks = FRZ_DECAY_STEP_TICKS;
+                    } else {
+                        clearFreeze(le);
+                        if (state.freezeImmuneTicks <= 0) it.remove();
+                    }
                 }
             }
         }
@@ -422,9 +431,6 @@ public class IcePower implements Power {
 
     private static final int SPIKES_MAX_HEIGHT = 3;
     private static final int SPIKES_RISE_INTERVAL = 2;
-
-    // Prevent stacking knockups from multiple spikes in same tick
-    private static final String SPIKE_HIT_TICK = "ice_spkht_";
 
     private static final double SPIKES_MAX_Y_VEL = 1.65;
     private static final float SPIKES_DAMAGE = 3.5f;
@@ -868,9 +874,9 @@ public class IcePower implements Power {
         int nowTick = (int) (w.getTime() & 0x7fffffff);
 
         for (LivingEntity e : hits) {
-            int last = getIntTag(e, SPIKE_HIT_TICK, -1);
-            if (last == nowTick) continue;
-            setIntTag(e, SPIKE_HIT_TICK, nowTick);
+            IceVictimState state = getVictimState(e);
+            if (state.lastSpikeHitTick == nowTick) continue;
+            state.lastSpikeHitTick = nowTick;
 
             // pass attribution
             e.damage(ModDamageTypes.iceSpike(w, caster), SPIKES_DAMAGE);
@@ -892,9 +898,6 @@ public class IcePower implements Power {
        ============================================================ */
 
     private static final long SECONDARY_COOLDOWN_MS = 22_000;
-
-    private static final String BEAM_CHARGE = "ice_bchg_";
-    private static final String BEAM_FIRE   = "ice_bfir_";
 
     private static final int BEAM_CHARGE_TICKS = 22;
     private static final int BEAM_FIRE_TICKS   = 125;
@@ -921,10 +924,11 @@ public class IcePower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        if (getTimerLeft(player, BEAM_CHARGE) > 0) return;
-        if (getTimerLeft(player, BEAM_FIRE) > 0) return;
+        IceCasterState state = getCasterState(player);
+        if (state.beamChargeTicks > 0) return;
+        if (state.beamFireTicks > 0) return;
 
-        setSingleTimerTag(player, BEAM_CHARGE, BEAM_CHARGE_TICKS);
+        state.beamChargeTicks = BEAM_CHARGE_TICKS;
 
         ServerWorld w = player.getServerWorld();
         w.playSound(null, player.getBlockPos(),
@@ -937,13 +941,11 @@ public class IcePower implements Power {
 
     private static void tickBeam(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
-
-        int ch = getTimerLeft(player, BEAM_CHARGE);
-        int bf = getTimerLeft(player, BEAM_FIRE);
+        IceCasterState state = getCasterState(player);
 
         // CHARGING
-        if (ch > 0) {
-            tickSingleTimer(player, BEAM_CHARGE);
+        if (state.beamChargeTicks > 0) {
+            state.beamChargeTicks--;
 
             Vec3d v = player.getVelocity();
             player.setVelocity(0.0, v.y, 0.0);
@@ -953,8 +955,8 @@ public class IcePower implements Power {
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 4, 4, true, false));
             spawnBeamChargeParticles(w, player);
 
-            if (getTimerLeft(player, BEAM_CHARGE) <= 0) {
-                setSingleTimerTag(player, BEAM_FIRE, BEAM_FIRE_TICKS);
+            if (state.beamChargeTicks <= 0) {
+                state.beamFireTicks = BEAM_FIRE_TICKS;
 
                 w.playSound(null, player.getBlockPos(),
                         ModSounds.ICEBEAMLOOP,
@@ -965,8 +967,8 @@ public class IcePower implements Power {
         }
 
         // FIRING
-        if (bf > 0) {
-            tickSingleTimer(player, BEAM_FIRE);
+        if (state.beamFireTicks > 0) {
+            state.beamFireTicks--;
 
             Vec3d v = player.getVelocity();
             player.setVelocity(0.0, v.y, 0.0);
@@ -1016,7 +1018,7 @@ public class IcePower implements Power {
                 applyBeamDamage(w, player, muzzle, end);
             }
 
-            if (getTimerLeft(player, BEAM_FIRE) <= 0) {
+            if (state.beamFireTicks <= 0) {
                 w.playSound(null, player.getBlockPos(),
                         SoundEvents.BLOCK_GLASS_HIT,
                         player.getSoundCategory(),
@@ -1241,9 +1243,6 @@ public class IcePower implements Power {
 
     private static final long ULT_COOLDOWN_MS = 340_000;
 
-    private static final String ULT_ACTIVE = "ice_ult_";
-    private static final String ULT_PULSE  = "ice_ultp_";
-
     private static final int ULT_DURATION_TICKS = 180;
 
     private static final double ULT_BLIZZARD_RADIUS = 11.0;
@@ -1278,9 +1277,6 @@ public class IcePower implements Power {
 
     // egg
     private static final double ULT_SNOWMAN_CHANCE = 0.002; // chance per tick
-    private static final String SNOWMAN_STATE = "ice_sm_state_"; // ice_sm_state_<step>_<x>_<y>_<z>
-
-    private static final String ULT_WAVE_HIT = "ice_ulth_";
 
     // Extra FX
     private static final DustParticleEffect ULT_BLUE_DUST =
@@ -1322,8 +1318,9 @@ public class IcePower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        setSingleTimerTag(player, ULT_ACTIVE, ULT_DURATION_TICKS);
-        setSingleTimerTag(player, ULT_PULSE, 1);
+        IceCasterState state = getCasterState(player);
+        state.ultActiveTicks = ULT_DURATION_TICKS;
+        state.ultPulseTicks = 1;
 
         ServerWorld w = player.getServerWorld();
         w.playSound(null, player.getBlockPos(),
@@ -1336,11 +1333,11 @@ public class IcePower implements Power {
     }
 
     private static void tickUltimate(ServerPlayerEntity player) {
-        int ultLeft = getTimerLeft(player, ULT_ACTIVE);
-        if (ultLeft < 0) return;
+        IceCasterState state = getCasterState(player);
+        if (state.ultActiveTicks <= 0) return;
+        state.ultActiveTicks--;
 
         ServerWorld w = player.getServerWorld();
-        tickSingleTimer(player, ULT_ACTIVE);
 
         // 1. Blizzard Global Effects
         spawnBlizzard(w, player);
@@ -1355,9 +1352,9 @@ public class IcePower implements Power {
 
         // 4. Random Snowman Building
         if (w.random.nextDouble() < ULT_SNOWMAN_CHANCE) {
-            tryStartSnowmanBuild(w, player);
+            tryStartSnowmanBuild(w, player, state);
         }
-        tickActiveSnowmanBuilds(w, player);
+        tickActiveSnowmanBuilds(w, state);
 
         // 5. Water freeze around caster
         if ((player.age % ULT_FROST_EVERY) == 0) {
@@ -1365,13 +1362,13 @@ public class IcePower implements Power {
         }
 
         // 6. Pulse Waves & Loop Sound
-        int pulseLeft = tickSingleTimer(player, ULT_PULSE);
-        if (pulseLeft == 0) {
-            setSingleTimerTag(player, ULT_PULSE, ULT_WAVE_INTERVAL);
-            spawnUltWave(w, player);
-            w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP, player.getSoundCategory(), 0.8f, 0.85f);
-        } else if (pulseLeft < 0) {
-            setSingleTimerTag(player, ULT_PULSE, ULT_WAVE_INTERVAL);
+        if (state.ultPulseTicks > 0) {
+            state.ultPulseTicks--;
+            if (state.ultPulseTicks <= 0) {
+                state.ultPulseTicks = ULT_WAVE_INTERVAL;
+                spawnUltWave(w, player);
+                w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP, player.getSoundCategory(), 0.8f, 0.85f);
+            }
         }
 
         if (player.age % 30 == 0) {
@@ -1597,15 +1594,14 @@ public class IcePower implements Power {
 
             if (Math.abs(dist - wave.radius) > ULT_WAVE_THICKNESS) continue;
 
-            int lastWave = getIntTag(e, ULT_WAVE_HIT, -1);
-            if (lastWave == wave.id) continue;
-            setIntTag(e, ULT_WAVE_HIT, wave.id);
+            IceVictimState state = getVictimState(e);
+            if (state.lastWaveHitId == wave.id) continue;
+            state.lastWaveHitId = wave.id;
 
             Entity ownerEnt = w.getEntity(wave.owner);
             ServerPlayerEntity caster = (ownerEnt instanceof ServerPlayerEntity sp) ? sp : null;
 
             if (caster != null) {
-                // Attributes damage correctly to the caster[cite: 8]
                 e.damage(ModDamageTypes.iceShockwave(w, caster), ULT_WAVE_DAMAGE);
                 if (!tryShatter(caster, e)) {
                     applyFreezePoints(caster, e, ULT_WAVE_FREEZE_STACKS);
@@ -1666,7 +1662,7 @@ public class IcePower implements Power {
     }
 
     // EGG
-    private static void tryStartSnowmanBuild(ServerWorld w, ServerPlayerEntity caster) {
+    private static void tryStartSnowmanBuild(ServerWorld w, ServerPlayerEntity caster, IceCasterState state) {
         double r = w.random.nextDouble() * (ULT_BLIZZARD_RADIUS - 2);
         double a = w.random.nextDouble() * Math.PI * 2.0;
         int x = MathHelper.floor(caster.getX() + Math.cos(a) * r);
@@ -1674,49 +1670,35 @@ public class IcePower implements Power {
 
         BlockPos pos = findSurfaceAirAboveSolid(w, x, z, caster.getBlockY(), true);
         if (pos != null && w.getBlockState(pos).isAir()) {
-            // tag format: ice_sm_build_<step>_<delay>_<x>_<y>_<z>
-            caster.getCommandTags().add("ice_sm_build_1_10_" + pos.getX() + "_" + pos.getY() + "_" + pos.getZ());
+            state.snowmen.add(new SnowmanBuild(pos));
         }
     }
 
-    private static void tickActiveSnowmanBuilds(ServerWorld w, ServerPlayerEntity caster) {
-        Iterator<String> it = caster.getCommandTags().iterator();
-        List<String> newTags = new ArrayList<>();
-        List<String> toRemove = new ArrayList<>();
+    private static void tickActiveSnowmanBuilds(ServerWorld w, IceCasterState state) {
+        Iterator<SnowmanBuild> it = state.snowmen.iterator();
 
         while (it.hasNext()) {
-            String tag = it.next();
-            if (!tag.startsWith("ice_sm_build_")) continue;
+            SnowmanBuild build = it.next();
+            build.delay--;
 
-            toRemove.add(tag);
-            String[] parts = tag.split("_");
-            int step = Integer.parseInt(parts[3]);
-            int delay = Integer.parseInt(parts[4]) - 1;
-            int x = Integer.parseInt(parts[5]);
-            int y = Integer.parseInt(parts[6]);
-            int z = Integer.parseInt(parts[7]);
-            BlockPos basePos = new BlockPos(x, y, z);
-
-            if (delay <= 0) {
-                if (step == 1) { // Place bottom snow
-                    w.setBlockState(basePos, Blocks.SNOW_BLOCK.getDefaultState());
-                    w.playSound(null, basePos, SoundEvents.BLOCK_SNOW_PLACE, SoundCategory.BLOCKS, 1f, 1f);
-                    newTags.add("ice_sm_build_2_15_" + x + "_" + y + "_" + z);
-                } else if (step == 2) { // Place top snow
-                    w.setBlockState(basePos.up(), Blocks.SNOW_BLOCK.getDefaultState());
-                    w.playSound(null, basePos.up(), SoundEvents.BLOCK_SNOW_PLACE, SoundCategory.BLOCKS, 1f, 1.2f);
-                    newTags.add("ice_sm_build_3_15_" + x + "_" + y + "_" + z);
-                } else if (step == 3) { // Place pumpkin (Vanilla triggers golem spawn)
-                    w.setBlockState(basePos.up(2), Blocks.CARVED_PUMPKIN.getDefaultState());
-                    w.spawnParticles(ParticleTypes.SNOWFLAKE, x+0.5, y+2, z+0.5, 20, 0.5, 0.5, 0.5, 0.05);
+            if (build.delay <= 0) {
+                if (build.step == 1) { // Place bottom snow
+                    w.setBlockState(build.pos, Blocks.SNOW_BLOCK.getDefaultState());
+                    w.playSound(null, build.pos, SoundEvents.BLOCK_SNOW_PLACE, SoundCategory.BLOCKS, 1f, 1f);
+                    build.step = 2;
+                    build.delay = 15;
+                } else if (build.step == 2) { // Place top snow
+                    w.setBlockState(build.pos.up(), Blocks.SNOW_BLOCK.getDefaultState());
+                    w.playSound(null, build.pos.up(), SoundEvents.BLOCK_SNOW_PLACE, SoundCategory.BLOCKS, 1f, 1.2f);
+                    build.step = 3;
+                    build.delay = 15;
+                } else if (build.step == 3) { // Place pumpkin (Vanilla triggers golem spawn)
+                    w.setBlockState(build.pos.up(2), Blocks.CARVED_PUMPKIN.getDefaultState());
+                    w.spawnParticles(ParticleTypes.SNOWFLAKE, build.pos.getX()+0.5, build.pos.getY()+2, build.pos.getZ()+0.5, 20, 0.5, 0.5, 0.5, 0.05);
+                    it.remove();
                 }
-            } else {
-                newTags.add("ice_sm_build_" + step + "_" + delay + "_" + x + "_" + y + "_" + z);
             }
         }
-
-        caster.getCommandTags().removeAll(toRemove);
-        caster.getCommandTags().addAll(newTags);
     }
 
     /* ============================================================
@@ -1795,71 +1777,5 @@ public class IcePower implements Power {
     public String getUltimateDescription() {
         return "Cause a blizzard to form around you, freezing and snowing on your surroundings. There will also be shockwaves produced from your location that will damage," +
                 "apply freeze and shatter anyone fully frozen. These shockwaves are visual and can be jumped over (although snow layers make it harder to see)";
-    }
-
-    /* ============================================================
-       TAG HELPERS
-       ============================================================ */
-
-    private static void removeTagPrefix(Entity e, String prefix) {
-        var it = e.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) { it.remove(); return; }
-        }
-    }
-
-    private static void setSingleTimerTag(Entity e, String prefix, int ticks) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + ticks);
-    }
-
-    private static int tickSingleTimer(Entity e, String prefix) {
-        String found = null;
-        for (String tag : e.getCommandTags()) {
-            if (tag.startsWith(prefix)) { found = tag; break; }
-        }
-        if (found == null) return -1;
-
-        e.getCommandTags().remove(found);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(found.substring(prefix.length())) - 1;
-        } catch (NumberFormatException ex) {
-            return -1;
-        }
-
-        if (ticks > 0) e.getCommandTags().add(prefix + ticks);
-        return ticks;
-    }
-
-    private static int getTimerLeft(Entity e, String prefix) {
-        for (String tag : e.getCommandTags()) {
-            if (!tag.startsWith(prefix)) continue;
-            try {
-                return Integer.parseInt(tag.substring(prefix.length()));
-            } catch (NumberFormatException ex) {
-                return -1;
-            }
-        }
-        return -1;
-    }
-
-    private static int getIntTag(Entity e, String prefix, int fallback) {
-        for (String tag : e.getCommandTags()) {
-            if (!tag.startsWith(prefix)) continue;
-            try {
-                return Integer.parseInt(tag.substring(prefix.length()));
-            } catch (NumberFormatException ex) {
-                return fallback;
-            }
-        }
-        return fallback;
-    }
-
-    private static void setIntTag(Entity e, String prefix, int value) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + value);
     }
 }

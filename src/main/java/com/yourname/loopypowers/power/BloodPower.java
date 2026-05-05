@@ -129,20 +129,20 @@ public class BloodPower implements Power {
     private static final String BIND_GUARD = "bl_bind_guard"; // prevents recursion
 
     /* ============================================================
-       PASSIVE
+       PASSIVE (ATTACK HOOK)
        ============================================================ */
 
-    public void tryApplyBleed(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
+    @Override
+    public boolean onAttack(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
         // dodge passive if passive off
-        if (!PassiveManager.isEnabled(attacker)) return;
-        if (target == attacker) return;
-        if (source.getSource() != attacker) return;
-        if (!target.isAlive()) return;
+        if (!PassiveManager.isEnabled(attacker)) return true;
+        if (target == attacker || !target.isAlive() || amount <= 0) return true;
+        if (source.getSource() != attacker) return true;
 
         // if damage is bleed (otherwise it spams)
         if (source.getTypeRegistryEntry().matchesKey(ModDamageTypes.BLEED)
                 || source.getTypeRegistryEntry().matchesKey(ModDamageTypes.BIND)) {
-            return;
+            return true;
         }
 
         target.addStatusEffect(new StatusEffectInstance(ModEffects.BLEED, BLEED_DURATION_TICKS, 0, true, false));
@@ -166,13 +166,16 @@ public class BloodPower implements Power {
         b.totalDmgLeft = totalBleed;
 
         // particles
-        ServerWorld w = attacker.getServerWorld();
-        w.spawnParticles(ParticleTypes.DAMAGE_INDICATOR,
-                target.getX(), target.getY() + 1.0, target.getZ(),
-                4, 0.25, 0.35, 0.25, 0.02);
-        w.playSound(null, target.getBlockPos(),
-                SoundEvents.ENTITY_PLAYER_HURT_SWEET_BERRY_BUSH,
-                attacker.getSoundCategory(), 0.35f, 0.8f);
+        if (attacker.getWorld() instanceof ServerWorld w) {
+            w.spawnParticles(ParticleTypes.DAMAGE_INDICATOR,
+                    target.getX(), target.getY() + 1.0, target.getZ(),
+                    4, 0.25, 0.35, 0.25, 0.02);
+            w.playSound(null, target.getBlockPos(),
+                    SoundEvents.ENTITY_PLAYER_HURT_SWEET_BERRY_BUSH,
+                    attacker.getSoundCategory(), 0.35f, 0.8f);
+        }
+
+        return true;
     }
 
     private void tickBleed(ServerPlayerEntity player) {
@@ -482,7 +485,7 @@ public class BloodPower implements Power {
     }
 
     /* ============================================================
-       ULTIMATE
+       ULTIMATE (VICTIM HOOK)
        ============================================================ */
 
     private static final Map<UUID, BindInstance> ACTIVE_BINDS = new HashMap<>();
@@ -567,79 +570,76 @@ public class BloodPower implements Power {
         );
     }
 
-    public boolean tryBindDamage(ServerPlayerEntity caster, DamageSource source, float amount) {
-        if (amount <= 0) return false;
+    @Override
+    public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        if (amount <= 0) return true;
 
-        BindInstance b = ACTIVE_BINDS.get(caster.getUuid());
-        if (b == null) return false;
+        BindInstance b = ACTIVE_BINDS.get(victim.getUuid());
+        if (b == null) return true;
 
-        if (caster.getCommandTags().contains(BIND_GUARD)) return false;
+        if (victim.getCommandTags().contains(BIND_GUARD)) return true;
 
-        MinecraftServer server = caster.getServer();
-        if (server == null) return false;
+        MinecraftServer server = victim.getServer();
+        if (server == null) return true;
 
         LivingEntity target = null;
         for (ServerWorld w : server.getWorlds()) {
             Entity e = w.getEntity(b.targetUuid);
             if (e instanceof LivingEntity le) { target = le; break; }
         }
-        if (target == null || !target.isAlive()) {
-            ACTIVE_BINDS.remove(caster.getUuid());
-            return false;
+
+        if (target == null || !target.isAlive() || victim.squaredDistanceTo(target) > (BIND_MAX_RANGE * BIND_MAX_RANGE)) {
+            ACTIVE_BINDS.remove(victim.getUuid());
+            return true;
         }
 
-        if (caster.squaredDistanceTo(target) > (BIND_MAX_RANGE * BIND_MAX_RANGE)) {
-            ACTIVE_BINDS.remove(caster.getUuid());
-            return false;
-        }
-
-        if (source.getAttacker() == null && caster.getWorld() instanceof ServerWorld sw) {
+        if (source.getAttacker() == null && victim.getWorld() instanceof ServerWorld sw) {
             long now = sw.getTime();
 
-            float pending = PENDING_ENV_DAMAGE.getOrDefault(caster.getUuid(), 0.0f);
-            pending += amount;
+            float pending = PENDING_ENV_DAMAGE.getOrDefault(victim.getUuid(), 0.0f) + amount;
 
             if (pending > ENV_MAX_CHUNK) pending = ENV_MAX_CHUNK;
 
-            PENDING_ENV_DAMAGE.put(caster.getUuid(), pending);
+            PENDING_ENV_DAMAGE.put(victim.getUuid(), pending);
 
-            long last = LAST_ENV_APPLY.getOrDefault(caster.getUuid(), Long.MIN_VALUE);
+            long last = LAST_ENV_APPLY.getOrDefault(victim.getUuid(), Long.MIN_VALUE);
 
             if ((now - last) < ENV_APPLY_INTERVAL_TICKS) {
-                return true;
+                return false;
             }
 
-            LAST_ENV_APPLY.put(caster.getUuid(), now);
+            LAST_ENV_APPLY.put(victim.getUuid(), now);
             amount = pending;
-            PENDING_ENV_DAMAGE.remove(caster.getUuid());
+            PENDING_ENV_DAMAGE.remove(victim.getUuid());
         }
 
         float reduced = amount * (1.0f - BIND_DAMAGE_REDUCTION);
         float shared  = amount * BIND_DAMAGE_SHARE;
 
-        caster.getCommandTags().add(BIND_GUARD);
+        victim.getCommandTags().add(BIND_GUARD);
         if (target instanceof ServerPlayerEntity spTarget) spTarget.getCommandTags().add(BIND_GUARD);
 
         try {
-            if (reduced > 0.0f) caster.damage(source, reduced);
-            DamageSource bindSrc = ModDamageTypes.bind(target.getWorld(), caster);
+            if (reduced > 0.0f) victim.damage(source, reduced);
+            DamageSource bindSrc = ModDamageTypes.bind(target.getWorld(), victim);
             if (shared > 0.0f) target.damage(bindSrc, shared);
 
-            if (caster.getWorld() instanceof ServerWorld sw) {
+            if (victim.getWorld() instanceof ServerWorld sw) {
                 long now = sw.getTime();
-                long last = LAST_BIND_HIT_FX.getOrDefault(caster.getUuid(), Long.MIN_VALUE);
+                long last = LAST_BIND_HIT_FX.getOrDefault(victim.getUuid(), Long.MIN_VALUE);
 
                 if ((now - last) >= BIND_HIT_FX_COOLDOWN_TICKS) {
-                    LAST_BIND_HIT_FX.put(caster.getUuid(), now);
-                    spawnBindDamageFx(sw, caster, target, amount);
+                    LAST_BIND_HIT_FX.put(victim.getUuid(), now);
+                    spawnBindDamageFx(sw, victim, target, amount);
                 }
             }
 
         } finally {
-            caster.getCommandTags().remove(BIND_GUARD);
+            victim.getCommandTags().remove(BIND_GUARD);
             if (target instanceof ServerPlayerEntity spTarget) spTarget.getCommandTags().remove(BIND_GUARD);
         }
-        return true;
+
+        return false;
     }
 
     private void tickBind(ServerPlayerEntity player) {

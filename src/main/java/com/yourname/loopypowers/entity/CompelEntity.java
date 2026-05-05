@@ -146,7 +146,7 @@ public class CompelEntity extends Entity {
 
         Vec3d currentVel = this.getVelocity();
 
-// Constant steering — blend current direction toward target direction
+        // Constant steering — blend current direction toward target direction
         Vec3d newVel = currentVel.multiply(1.0 - STEERING)
                 .add(toTarget.multiply(STEERING));
 
@@ -264,7 +264,8 @@ public class CompelEntity extends Entity {
 
         if (owner == null) return;
 
-        PsychicPower.applyCompel(target);
+        // FIXED: Passing the owner to the new optimized method signature
+        PsychicPower.applyCompel(this.owner, target);
 
         float radius = 0.25f;
         float pspeed = 0.6f;

@@ -55,12 +55,12 @@ public class DisplaceEntity extends Entity {
             double speed = vel.length();
             Vec3d dir = speed > 1.0e-6 ? vel.normalize() : new Vec3d(0, 0, 1);
 
-            // colours (sizes scaled down for a tighter look)
+            // colours
             DustParticleEffect darkBlue = new DustParticleEffect(new Vector3f(0.05f, 0.1f, 0.4f), 0.8f);
             DustParticleEffect midBlue = new DustParticleEffect(new Vector3f(0.2f, 0.4f, 1.0f), 0.6f);
             DustParticleEffect brightBlue = new DustParticleEffect(new Vector3f(0.6f, 0.8f, 1.0f), 0.4f);
 
-            // core (reduced count and spread)
+            // core
             sw.spawnParticles(brightBlue, this.getX(), this.getY(), this.getZ(), 2, 0.02, 0.02, 0.02, 0.01);
             sw.spawnParticles(midBlue, this.getX(), this.getY(), this.getZ(), 3, 0.05, 0.05, 0.05, 0.02);
 

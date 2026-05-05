@@ -72,7 +72,6 @@ public class PowerManager {
         PLAYER_POWERS.put(player.getUuid(), power);
         power.onAssign(player);
 
-        //setLevel(player, 1);
         syncClientFlags(player);
 
         // Persist immediately so admin commands survive crashes
@@ -203,7 +202,7 @@ public class PowerManager {
 
     /** Applies overrides and multipliers to produce the final cooldown duration. */
     private static long computeFinalCooldownMs(ServerPlayerEntity player, Power power, AbilityTypes type, long baseMs) {
-        long ms = modifyCooldown(player, power, baseMs);
+        long ms = modifyCooldown(player, power, type, baseMs);
 
         Long override = COOLDOWN_OVERRIDE_MS.get(abilityKey(power, type));
         if (override != null) ms = override;
@@ -294,10 +293,10 @@ public class PowerManager {
         ServerPlayNetworking.send(player, AbilityPackets.SYNC_STRENGTH_POWER, buf);
     }
 
-    private static long modifyCooldown(ServerPlayerEntity player, Power power, long baseMs) {
-        if (power instanceof StrengthPower
-                && player.getCommandTags().stream().anyMatch(t -> t.startsWith("st_raging_"))) {
-            return Math.max(250L, (long)(baseMs * 0.20));
+    private static long modifyCooldown(ServerPlayerEntity player, Power power, AbilityTypes type, long baseMs) {
+        // ask StrengthPower if they are raging, but exclude the ultimate ability
+        if (power instanceof StrengthPower && type != AbilityTypes.ULTIMATE && StrengthPower.isRaging(player)) {
+            return Math.max(250L, (long)(baseMs * 0.20)); // 80% reduction
         }
         return baseMs;
     }
@@ -412,5 +411,16 @@ public class PowerManager {
         Map<String, Long> oldMap = COOLDOWN_END_MS.get(oldPlayer.getUuid());
         if (oldMap == null) return;
         COOLDOWN_END_MS.put(newPlayer.getUuid(), new HashMap<>(oldMap));
+    }
+
+    /**
+     * MUST be called when a player disconnects to prevent memory leaks
+     */
+    public static void clearPlayerState(ServerPlayerEntity player) {
+        UUID id = player.getUuid();
+        PLAYER_POWERS.remove(id);
+        PLAYER_LEVELS.remove(id);
+        COOLDOWN_END_MS.remove(id);
+        PLAYER_CD_MULT.remove(id);
     }
 }

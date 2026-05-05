@@ -265,8 +265,8 @@ public class PuppetryEntity extends Entity {
     private void onHit(LivingEntity target, ServerWorld world) {
         if (owner == null) return;
 
-        // Apply the ultimate control tag via PsychicPower
-        PsychicPower.applyUltimateControl(target);
+        // FIXED: Passing the owner to the new optimized method signature
+        PsychicPower.applyUltimateControl(this.owner, target);
 
         // Spiral burst around target
         float radius = 0.25f;

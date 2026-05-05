@@ -857,8 +857,8 @@ public class PowerCommand {
     // ---------- Debug: toggle onepunch ----------
 
     private static int debugToggleOnePunch(CommandContext<ServerCommandSource> ctx) {
-        Loopypowers.onePunchDebugEnabled = !Loopypowers.onePunchDebugEnabled;
-        String state = Loopypowers.onePunchDebugEnabled ? "§aENABLED" : "§cDISABLED";
+        StrengthPower.onePunchDebugEnabled = !StrengthPower.onePunchDebugEnabled;
+        String state = StrengthPower.onePunchDebugEnabled ? "§aENABLED" : "§cDISABLED";
         ctx.getSource().sendFeedback(() -> Text.literal("One Punch mode is now " + state + "§f."), true);
         return 1;
     }

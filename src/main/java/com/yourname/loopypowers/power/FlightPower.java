@@ -4,6 +4,7 @@ import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
@@ -16,29 +17,41 @@ import net.minecraft.util.hit.HitResult;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 
 public class FlightPower implements Power {
     private static final Random RNG = new Random();
 
     /* ============================================================
-       TAGS N TIMERS
+       STATE STORAGE (OPTIMIZED)
        ============================================================ */
 
-    // markers for flight states
-    private static final String FLIGHT_ACTIVE = "fl_flight_active";      // is flying
+    private static final Map<UUID, FlightState> ACTIVE_STATES = new HashMap<>();
 
-    //timer stuff
-    private static final String FLIGHT_STALL_TICKS = "fl_stall_";        // stall
+    private static class FlightState {
+        boolean flightActive = false;
+        boolean heCanFlyUsed = false;
+        boolean glideRequest = false;
+        boolean boomInvuln = false;
 
-    // easter egg stuff
-    private static final String HECANFLY_WINDOW = "fl_hecanfly_window_"; // countdown from assignment
-    private static final String HECANFLY_USED = "fl_hecanfly_used";      // stop spam
+        int stallTicks = 0;
+        int heCanFlyWindow = 0;
+        int trailStep = 0;
+        int soundStep = 0;
+        int wingEnforceStep = 0;
+        int gustEmpowermentTicks = 0;
+        int boomWindup = 0;
+        int boomDash = 0;
+        float boomYaw = 0;
+    }
 
-    // Loop timers for FX cadence
-    private static final String TRAIL_STEP = "fl_trail_step_";           // trail
-    private static final String SOUND_STEP = "fl_sound_step_";           // sound loop
+    private static FlightState getState(ServerPlayerEntity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new FlightState());
+    }
 
     /* ============================================================
        CONSTANTS
@@ -61,18 +74,20 @@ public class FlightPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        // see? i do use these!
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fl_")); // Clean legacy strings
+        FlightState state = getState(player);
+
         equipWings(player);
 
-        // start the timer for the funny
-        setSingleTimerTag(player, HECANFLY_WINDOW, HECANFLY_TICKS);
-        player.getCommandTags().remove(HECANFLY_USED);
+        state.heCanFlyWindow = HECANFLY_TICKS;
+        state.heCanFlyUsed = false;
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
         unequipWings(player); // stops from dropping
         player.getCommandTags().removeIf(tag -> tag.startsWith("fl_"));
+        ACTIVE_STATES.remove(player.getUuid());
         player.removeStatusEffect(ModEffects.GROUNDED);
     }
 
@@ -106,58 +121,65 @@ public class FlightPower implements Power {
         player.equipStack(net.minecraft.entity.EquipmentSlot.CHEST, ItemStack.EMPTY);
     }
 
-    private static final String WING_ENFORCE_STEP = "fl_wing_enforce_"; // countdown tag before wing check
-
     @Override
     public void onTick(ServerPlayerEntity player) {
+        FlightState state = getState(player);
+
         // timers
-        tickSingleTimer(player, FLIGHT_STALL_TICKS);
-        tickSingleTimer(player, HECANFLY_WINDOW);
+        if (state.stallTicks > 0) state.stallTicks--;
+        if (state.heCanFlyWindow > 0) state.heCanFlyWindow--;
 
         // enforce wings
-        int t = tickSingleTimer(player, WING_ENFORCE_STEP);
-        if (t <= 0) {
-            setSingleTimerTag(player, WING_ENFORCE_STEP, 20); // every 20 ticks
+        state.wingEnforceStep--;
+        if (state.wingEnforceStep <= 0) {
+            state.wingEnforceStep = 20; // every 20 ticks
             equipWings(player);
         }
 
-        tickSonicBoomUltimate(player);
+        tickSonicBoomUltimate(player, state);
 
         // while flying tick
-        tickPassiveFlight(player);
+        tickPassiveFlight(player, state);
 
         // speed boost after dash
-        tickGustEmpowerment(player);
+        tickGustEmpowerment(player, state);
 
         // particles while flying
         if (player.isFallFlying()) {
-            tickFlightFx(player);
+            tickFlightFx(player, state);
         } else {
-            removeTagPrefix(player, TRAIL_STEP);
-            removeTagPrefix(player, SOUND_STEP);
+            state.trailStep = 0;
+            state.soundStep = 0;
         }
     }
 
-    public void onDamaged(ServerPlayerEntity player) {
+    @Override
+    public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        FlightState state = getState(victim);
+
+        if (state.boomInvuln) return false; // Invulnerable during boom dash
+
         // Force them downward + lock re-glide
-        Vec3d v = player.getVelocity();
-        player.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
-        player.velocityModified = true;
+        Vec3d v = victim.getVelocity();
+        victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
+        victim.velocityModified = true;
 
-        // Apply visual Grounded effect instead of command tags
-        player.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
+        // Apply visual Grounded effect
+        victim.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
 
-        // Clear flight marker
-        player.getCommandTags().remove(FLIGHT_ACTIVE);
-        removeTagPrefix(player, TRAIL_STEP);
-        removeTagPrefix(player, SOUND_STEP);
+        // Clear flight states
+        state.flightActive = false;
+        state.trailStep = 0;
+        state.soundStep = 0;
 
         // particles
-        ServerWorld w = player.getServerWorld();
-        w.spawnParticles(ParticleTypes.CLOUD, player.getX(), player.getY() + 1.0, player.getZ(),
+        ServerWorld w = victim.getServerWorld();
+        w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
                 8, 0.35, 0.35, 0.35, 0.02);
-        w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
-                player.getSoundCategory(), 0.7f, 0.9f);
+        w.playSound(null, victim.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
+                victim.getSoundCategory(), 0.7f, 0.9f);
+
+        return true; // allow normal damage
     }
 
     /* ============================================================
@@ -166,7 +188,6 @@ public class FlightPower implements Power {
 
     // PRIMARY
     // Gust
-    private static final String GUST_EMPOWERMENT_TICKS = "fl_gust_after_"; // timer tag
     private static final int GUST_EMPOWERMENT_DURATION = 40; // how long movement boost after gust is active
     private static final double GUST_BURST_STRENGTH = 1.0; // strength of boost
     private static final double GUST_EMPOWERMENT_PUSH = 0.06; // how much speed is boosted
@@ -184,14 +205,16 @@ public class FlightPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
+        FlightState state = getState(player);
+
         // the meme
-        if (player.isFallFlying() && hasTagPrefix(player, HECANFLY_WINDOW) && !player.getCommandTags().contains(HECANFLY_USED)) {
+        if (player.isFallFlying() && state.heCanFlyWindow > 0 && !state.heCanFlyUsed) {
             player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
-            player.getCommandTags().add(HECANFLY_USED);
+            state.heCanFlyUsed = true;
         }
 
         // force flight to start
-        player.getCommandTags().add(GLIDE_REQUEST);
+        state.glideRequest = true;
 
         // direction
         Vec3d look = player.getRotationVec(1.0f);
@@ -216,7 +239,7 @@ public class FlightPower implements Power {
         player.velocityModified = true;
 
         // Start speed boost timer
-        setSingleTimerTag(player, GUST_EMPOWERMENT_TICKS, GUST_EMPOWERMENT_DURATION);
+        state.gustEmpowermentTicks = GUST_EMPOWERMENT_DURATION;
 
         // extra particles
         ServerWorld w = player.getServerWorld();
@@ -231,9 +254,9 @@ public class FlightPower implements Power {
         );
     }
 
-    private void tickGustEmpowerment(ServerPlayerEntity player) {
-        int left = tickSingleTimer(player, GUST_EMPOWERMENT_TICKS);
-        if (left <= 0) return;
+    private void tickGustEmpowerment(ServerPlayerEntity player, FlightState state) {
+        if (state.gustEmpowermentTicks <= 0) return;
+        state.gustEmpowermentTicks--;
 
         // only boost when flying
         if (!player.isFallFlying()) return;
@@ -258,7 +281,7 @@ public class FlightPower implements Power {
         player.velocityModified = true;
 
         // extra flight trail
-        if (left % 3 == 0) {
+        if (state.gustEmpowermentTicks % 3 == 0) {
             player.getServerWorld().spawnParticles(
                     ParticleTypes.FIREWORK,
                     player.getX(), player.getY() + 0.6, player.getZ(),
@@ -303,20 +326,10 @@ public class FlightPower implements Power {
         player.velocityModified = true;
 
         // force flight to start after boost
-        player.getCommandTags().add(GLIDE_REQUEST);
+        getState(player).glideRequest = true;
     }
 
     // Ultimate
-
-    // Sonic Boom Ult
-    private static final String BOOM_WINDUP = "fl_boom_windup_";
-    private static final String BOOM_DASH   = "fl_boom_dash_";
-    private static final String BOOM_INVULN = "fl_boom_invuln";
-
-    // directions
-    private static final String BOOM_DX = "fl_boom_dx_";
-    private static final String BOOM_DY = "fl_boom_dy_";
-    private static final String BOOM_DZ = "fl_boom_dz_";
 
     // I LOVE CONSTANTS
     private static final int BOOM_WINDUP_TICKS = 30; // how long windup
@@ -326,8 +339,6 @@ public class FlightPower implements Power {
     private static final double BOOM_IMPACT_RADIUS = 6.0; // radius if collision explosion
     private static final float  BOOM_IMPACT_DAMAGE = 6.0f; // damage if in boom
     private static final double BOOM_IMPACT_KB = 2.2; //knockback from boom
-    private static final String BOOM_YAW = "fl_boom_yaw_"; // angle
-    private static final int BOOM_YAW_SCALE = 10; //
     private static final int BOOM_KNOCKOUT_DURATION = 20 * 3; // how long they're knocked out of flight if collided
 
     @Override
@@ -345,10 +356,12 @@ public class FlightPower implements Power {
         // must be airborne-ish
         if (player.isOnGround() || player.isTouchingWater()) return;
 
+        FlightState state = getState(player);
+
         // start windup
-        setSingleTimerTag(player, BOOM_WINDUP, BOOM_WINDUP_TICKS);
-        removeTagPrefix(player, BOOM_DASH);
-        player.getCommandTags().remove(BOOM_INVULN);
+        state.boomWindup = BOOM_WINDUP_TICKS;
+        state.boomDash = 0;
+        state.boomInvuln = false;
 
         // stop movement
         player.setVelocity(0, 0, 0);
@@ -365,14 +378,14 @@ public class FlightPower implements Power {
                 1, 0, 0, 0, 0);
     }
 
-    private void tickSonicBoomUltimate(ServerPlayerEntity player) {
+    private void tickSonicBoomUltimate(ServerPlayerEntity player, FlightState state) {
         if (player.isCreative() || player.isSpectator()) return;
 
         ServerWorld world = player.getServerWorld();
 
         // windup
-        if (hasTagPrefix(player, BOOM_WINDUP)) {
-            int left = tickSingleTimer(player, BOOM_WINDUP);
+        if (state.boomWindup > 0) {
+            state.boomWindup--;
 
             // camerashake
             CameraShake.shakeNearby(player,
@@ -386,7 +399,7 @@ public class FlightPower implements Power {
             player.fallDistance = 0;
 
             // charge particles
-            if (left % 2 == 0) {
+            if (state.boomWindup % 2 == 0) {
                 world.spawnParticles(ParticleTypes.CLOUD,
                         player.getX(), player.getY() + 1.0, player.getZ(),
                         6, 0.35, 0.45, 0.35, 0.01);
@@ -396,15 +409,14 @@ public class FlightPower implements Power {
             }
 
             // windup done, start silly push
-            if (left <= 0) {
+            if (state.boomWindup <= 0) {
                 // lock direction and push
                 Vec3d dir = player.getRotationVec(1.0f).normalize();
-                float yaw = player.getYaw(); // degrees
-                setStaticIntTag(player, BOOM_YAW, Math.round(yaw * BOOM_YAW_SCALE));
+                state.boomYaw = player.getYaw(); // lock angle
 
                 // start dash timer + invuln
-                setSingleTimerTag(player, BOOM_DASH, BOOM_DASH_TICKS);
-                player.getCommandTags().add(BOOM_INVULN);
+                state.boomDash = BOOM_DASH_TICKS;
+                state.boomInvuln = true;
 
                 // launch
                 Vec3d launch = dir.multiply(BOOM_SPEED);
@@ -419,14 +431,13 @@ public class FlightPower implements Power {
             return; // don’t do ult while winding up
         }
         // BIG PUSH
-        if (hasTagPrefix(player, BOOM_DASH)) {
-            int left = tickSingleTimer(player, BOOM_DASH);
+        if (state.boomDash > 0) {
+            state.boomDash--;
 
-            float yaw = getBoomYaw(player);
             float pitch = player.getPitch(); // allows verticality
 
             // convert yaw to actual direction
-            float yawRad = (float) Math.toRadians(yaw);
+            float yawRad = (float) Math.toRadians(state.boomYaw);
             float pitchRad = (float) Math.toRadians(pitch);
 
             double x = -Math.sin(yawRad) * Math.cos(pitchRad);
@@ -470,15 +481,15 @@ public class FlightPower implements Power {
 
             if (collided) {
                 doBoomImpact(world, player);
-                clearBoomState(player);
+                clearBoomState(state);
 
                 if (player.isFallFlying()) player.stopFallFlying();
                 return;
             }
 
             // no collision, just make them keep speed
-            if (left <= 0) {
-                clearBoomState(player);
+            if (state.boomDash <= 0) {
+                clearBoomState(state);
             }
         }
     }
@@ -487,50 +498,49 @@ public class FlightPower implements Power {
     /* ============================================================
        PASSIVE TICK SECTIONS
        ============================================================ */
-    private static final String GLIDE_REQUEST = "fl_glide_req"; // marker tag (no number)
 
-    private void tickPassiveFlight(ServerPlayerEntity player) {
+    private void tickPassiveFlight(ServerPlayerEntity player, FlightState state) {
         if (player.isCreative() || player.isSpectator()) return;
 
         // force flight cancel if hurt
         if (player.hasStatusEffect(ModEffects.GROUNDED)) {
             if (player.isFallFlying()) player.stopFallFlying();
-            player.getCommandTags().remove(FLIGHT_ACTIVE);
+            state.flightActive = false;
             return;
         }
 
         // crouching stops flight
         if (player.isFallFlying() && player.isSneaking()) {
             player.stopFallFlying();
-            player.getCommandTags().remove(FLIGHT_ACTIVE);
-            removeTagPrefix(player, TRAIL_STEP);
-            removeTagPrefix(player, SOUND_STEP);
+            state.flightActive = false;
+            state.trailStep = 0;
+            state.soundStep = 0;
             return;
         }
 
-        if (player.getCommandTags().contains(GLIDE_REQUEST)) {
-            player.getCommandTags().remove(GLIDE_REQUEST);
+        if (state.glideRequest) {
+            state.glideRequest = false;
 
             if (!player.isOnGround() && !player.isTouchingWater() && !player.isFallFlying()) {
                 player.startFallFlying();
-                player.getCommandTags().add(FLIGHT_ACTIVE);
+                state.flightActive = true;
             }
         }
 
         // make particles for flight
         if (player.isFallFlying()) {
-            player.getCommandTags().add(FLIGHT_ACTIVE);
+            state.flightActive = true;
         } else {
-            player.getCommandTags().remove(FLIGHT_ACTIVE);
+            state.flightActive = false;
         }
     }
 
-    private void tickFlightFx(ServerPlayerEntity player) {
+    private void tickFlightFx(ServerPlayerEntity player, FlightState state) {
         ServerWorld w = player.getServerWorld();
 
-        int t = tickSingleTimer(player, TRAIL_STEP);
-        if (t <= 0) {
-            setSingleTimerTag(player, TRAIL_STEP, TRAIL_INTERVAL);
+        state.trailStep--;
+        if (state.trailStep <= 0) {
+            state.trailStep = TRAIL_INTERVAL;
 
             // spawn trail slightly behind
             Vec3d vel = player.getVelocity();
@@ -543,9 +553,9 @@ public class FlightPower implements Power {
                     2, 0.08, 0.06, 0.08, 0.005);
         }
 
-        int s = tickSingleTimer(player, SOUND_STEP);
-        if (s <= 0) {
-            setSingleTimerTag(player, SOUND_STEP, SOUND_INTERVAL);
+        state.soundStep--;
+        if (state.soundStep <= 0) {
+            state.soundStep = SOUND_INTERVAL;
             w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP, player.getSoundCategory(), //sound
                     0.35f, 1.35f);
         }
@@ -562,71 +572,6 @@ public class FlightPower implements Power {
     /* ============================================================
        HELPERS
        ============================================================ */
-
-    private static boolean hasTagPrefix(ServerPlayerEntity p, String prefix) {
-        for (String tag : p.getCommandTags()) if (tag.startsWith(prefix)) return true;
-        return false;
-    }
-
-    private static void removeTagPrefix(ServerPlayerEntity p, String prefix) {
-        var it = p.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) {
-                it.remove();
-                return; // remove ONE (matches your “single timer” convention)
-            }
-        }
-    }
-
-    private static void setSingleTimerTag(ServerPlayerEntity p, String prefix, int ticks) {
-        removeTagPrefix(p, prefix);
-        p.getCommandTags().add(prefix + ticks);
-    }
-
-    private static void setStaticIntTag(ServerPlayerEntity p, String prefix, int value) {
-        removeTagPrefix(p, prefix);
-        p.getCommandTags().add(prefix + value);
-    }
-
-    private static int getStaticIntTag(ServerPlayerEntity p, String prefix) {
-        for (String tag : p.getCommandTags()) {
-            if (tag.startsWith(prefix)) {
-                try {
-                    return Integer.parseInt(tag.substring(prefix.length()));
-                } catch (NumberFormatException e) {
-                    return Integer.MIN_VALUE;
-                }
-            }
-        }
-        return Integer.MIN_VALUE;
-    }
-
-    private static int tickSingleTimer(ServerPlayerEntity p, String prefix) {
-        String found = null;
-        for (String tag : p.getCommandTags()) {
-            if (tag.startsWith(prefix)) { found = tag; break; }
-        }
-        if (found == null) return -1;
-
-        p.getCommandTags().remove(found);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(found.substring(prefix.length())) - 1;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-
-        if (ticks > 0) p.getCommandTags().add(prefix + ticks);
-        return ticks;
-    }
-
-    private float getBoomYaw(ServerPlayerEntity p) { // helper: grabs the direction of the tunnel so the player can't just move
-        int raw = getStaticIntTag(p, BOOM_YAW);
-        if (raw == Integer.MIN_VALUE) return p.getYaw();
-        return raw / (float)BOOM_YAW_SCALE;
-    }
 
     private void spawnBoomTunnel(ServerWorld w, ServerPlayerEntity p, Vec3d dir) { // to be honest this is kind of a useless method
         Vec3d pos = p.getPos().add(0, 1.0, 0); // but it pushes things in the path away (allegedly)
@@ -714,17 +659,10 @@ public class FlightPower implements Power {
         player.velocityModified = true;
     }
 
-    private void clearBoomState(ServerPlayerEntity player) {
-        removeTagPrefix(player, BOOM_DASH);
-        player.getCommandTags().remove(BOOM_INVULN);
-        removeTagPrefix(player, BOOM_YAW);
-        removeTagPrefix(player, BOOM_DX);
-        removeTagPrefix(player, BOOM_DY);
-        removeTagPrefix(player, BOOM_DZ);
-    }
-
-    public boolean isBoomInvulnerable(ServerPlayerEntity player) {
-        return player.getCommandTags().contains(BOOM_INVULN);
+    private void clearBoomState(FlightState state) {
+        state.boomDash = 0;
+        state.boomInvuln = false;
+        state.boomYaw = 0;
     }
 
     /* ============================================================
@@ -755,12 +693,12 @@ public class FlightPower implements Power {
 
     @Override
     public String getPrimaryDescription() {
-        return "Can only be used while flying. Gain a burst of momentum in the direction that you're looking and gain a brief speed boost after.";
+        return "Gain a burst of momentum in the direction that you're looking and gain a brief speed boost after.";
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Cannot be used while flying. Shoot yourself into the air and enter flight. If you are grounded this ability cannot be used.";
+        return "Shoot yourself into the air and enter flight. If you are grounded this ability cannot be used.";
     }
 
     @Override

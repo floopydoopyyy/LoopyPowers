@@ -23,7 +23,26 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 public class FirePower implements Power {
+
+    /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, FireState> ACTIVE_STATES = new HashMap<>();
+
+    private static class FireState {
+        int hoverTicks = 0;
+        int ultChargeTicks = 0;
+    }
+
+    private static FireState getState(ServerPlayerEntity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new FireState());
+    }
 
     /* ============================================================
        CONSTANTS - PASSIVE
@@ -101,6 +120,9 @@ public class FirePower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fire_")); // Clean legacy tags
+        ACTIVE_STATES.put(player.getUuid(), new FireState());
+
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.FIRE_RESISTANCE,
                 PASSIVE_FIRE_RESIST_DURATION,
@@ -113,6 +135,8 @@ public class FirePower implements Power {
     @Override
     public void onRemove(ServerPlayerEntity player) {
         player.getCommandTags().removeIf(tag -> tag.startsWith("fire_"));
+        ACTIVE_STATES.remove(player.getUuid());
+
         player.removeStatusEffect(StatusEffects.FIRE_RESISTANCE);
         player.removeStatusEffect(ModEffects.BRACED);
         player.removeStatusEffect(StatusEffects.RESISTANCE);
@@ -126,6 +150,8 @@ public class FirePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        FireState state = getState(player);
+
         // PASSIVES
         if (PassiveManager.isEnabled(player)) {
             StatusEffectInstance fireRes = player.getStatusEffect(StatusEffects.FIRE_RESISTANCE);
@@ -141,12 +167,14 @@ public class FirePower implements Power {
         }
 
         // SECONDARY
-        if (player.getCommandTags().contains("fire_hover"))
-            tickHover(player);
+        if (state.hoverTicks > 0) {
+            tickHover(player, state);
+        }
 
         // ULTIMATE
-        if (player.getCommandTags().contains("fire_ultimate_charge"))
-            tickUltimateCharge(player);
+        if (state.ultChargeTicks > 0) {
+            tickUltimateCharge(player, state);
+        }
     }
 
     @Override
@@ -208,8 +236,8 @@ public class FirePower implements Power {
 
         launchExplosion(player);
 
-        player.getCommandTags().add("fire_hover");
-        player.getCommandTags().add("fire_hover_ticks_" + SECONDARY_HOVER_TICKS);
+        FireState state = getState(player);
+        state.hoverTicks = SECONDARY_HOVER_TICKS;
 
         // snack time
         if (player.getServerWorld().random.nextFloat() < COOK_FOOD_CHANCE) {
@@ -315,11 +343,10 @@ public class FirePower implements Power {
         });
     }
 
-    private void tickHover(ServerPlayerEntity player) {
+    private void tickHover(ServerPlayerEntity player, FireState state) {
 
         if (player.isOnGround() || player.isSneaking()) {
-            player.getCommandTags().remove("fire_hover");
-            player.getCommandTags().removeIf(tag -> tag.startsWith("fire_hover_ticks_"));
+            state.hoverTicks = 0;
             return;
         }
 
@@ -352,7 +379,8 @@ public class FirePower implements Power {
         player.fallDistance = 0;
 
         spawnHoverParticles(player);
-        tickHoverTimer(player);
+
+        state.hoverTicks--;
     }
 
     private void spawnHoverParticles(ServerPlayerEntity player) {
@@ -384,28 +412,6 @@ public class FirePower implements Power {
         );
     }
 
-    private void tickHoverTimer(ServerPlayerEntity player) {
-
-        for (String tag : player.getCommandTags()) {
-
-            if (tag.startsWith("fire_hover_ticks_")) {
-
-                int ticks = Integer.parseInt(tag.substring(17)) - 1;
-
-                player.getCommandTags().remove(tag);
-
-                if (ticks > 0) {
-                    player.getCommandTags().add("fire_hover_ticks_" + ticks);
-                }
-                else {
-                    player.getCommandTags().remove("fire_hover");
-                }
-
-                break;
-            }
-        }
-    }
-
     /* ============================================================
        ULTIMATE
        ============================================================ */
@@ -413,8 +419,8 @@ public class FirePower implements Power {
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
 
-        player.getCommandTags().add("fire_ultimate_charge");
-        player.getCommandTags().add("fire_ultimate_charge_ticks_" + ULTIMATE_CHARGE_TICKS);
+        FireState state = getState(player);
+        state.ultChargeTicks = ULTIMATE_CHARGE_TICKS;
 
         CameraShake.shakeNearby(player, ULT_START_SHAKE_RADIUS, ULT_START_SHAKE_TIME, ULT_START_SHAKE_INTENSITY);
 
@@ -428,35 +434,20 @@ public class FirePower implements Power {
         );
     }
 
-    private void tickUltimateCharge(ServerPlayerEntity player) {
+    private void tickUltimateCharge(ServerPlayerEntity player, FireState state) {
 
         var world = player.getServerWorld();
 
-        final String prefix = "fire_ultimate_charge_ticks_";
+        state.ultChargeTicks--;
 
-        int ticksRemaining = 0;
-
-        for (String tag : player.getCommandTags()) {
-            if (tag.startsWith(prefix)) {
-
-                ticksRemaining = Integer.parseInt(tag.substring(prefix.length()));
-
-                player.getCommandTags().remove(tag);
-
-                if (ticksRemaining > 1) {
-                    player.getCommandTags().add(prefix + (ticksRemaining - 1));
-                } else {
-                    player.getCommandTags().remove("fire_ultimate_charge");
-                    detonateUltimate(player);
-                    return;
-                }
-                break;
-            }
+        if (state.ultChargeTicks <= 0) {
+            detonateUltimate(player);
+            return;
         }
 
-        float progress = 1f - (ticksRemaining / (float) ULTIMATE_CHARGE_TICKS);
+        float progress = 1f - (state.ultChargeTicks / (float) ULTIMATE_CHARGE_TICKS);
 
-        applyUltimateChargeEffects(player, world, progress, ticksRemaining);
+        applyUltimateChargeEffects(player, world, progress, state.ultChargeTicks);
     }
 
     private void applyUltimateChargeEffects(
@@ -548,6 +539,7 @@ public class FirePower implements Power {
             CameraShake.shakeNearby(player, 60, 3, 1.2f);
         }
     }
+
     private void pullEntitiesToward(
             ServerPlayerEntity player,
             ServerWorld world,
@@ -621,6 +613,7 @@ public class FirePower implements Power {
                 0.5f
         );
     }
+
     private void applyLOSExplosionDamage(
             ServerPlayerEntity sourcePlayer,
             float radius,

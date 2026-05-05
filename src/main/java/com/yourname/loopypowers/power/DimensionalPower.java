@@ -19,6 +19,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.particle.DustParticleEffect;
 import org.joml.Vector3f;
 import java.util.*;
@@ -26,11 +27,29 @@ import java.util.*;
 public class DimensionalPower implements Power {
 
     /* ============================================================
-       TAGS / CONSTANTS
+       STATE STORAGE (OPTIMIZED)
        ============================================================ */
 
-    private static final String PHASE_TAG        = "int_phase_";        // passive + primary
-    private static final String DISPLACED_TAG    = "int_displaced_";    // projectile ability
+    private static final Map<UUID, DimensionalState> PLAYER_STATES = new HashMap<>();
+    private static final Map<UUID, Map<UUID, Integer>> ACTIVE_DISPLACEMENTS = new HashMap<>();
+    private static final Map<UUID, FractureState> ACTIVE_FRACTURES = new HashMap<>();
+
+    private static class DimensionalState {
+        double phaseChance = BASE_PHASE_CHANCE;
+        int passiveCdTicks = 0;
+        int phaseTicks = 0;
+        int immuneTicks = 0;
+        int phaseShiftTicks = 0;
+        net.minecraft.world.GameMode prevMode = net.minecraft.world.GameMode.SURVIVAL;
+    }
+
+    private DimensionalState getState(ServerPlayerEntity player) {
+        return PLAYER_STATES.computeIfAbsent(player.getUuid(), k -> new DimensionalState());
+    }
+
+    /* ============================================================
+       CONSTANTS
+       ============================================================ */
 
     private static final int PASSIVE_PHASE_TICKS = 40;
     private static final int PASSIVE_COOLDOWN    = 50;
@@ -44,10 +63,6 @@ public class DimensionalPower implements Power {
 
     private static final float SITUATIONAL_DIMENSION_CHANCE = 0.25f; // chance to adapt to specific events when flickering
     private static final float SILLY_EXIT_CHANCE = 0.03f; // chance to bring something stupid back
-
-    private static final String PHASE_CHANCE_TAG = "int_phase_chance_";
-    private static final String IMMUNE_TAG = "int_immune_";
-    private static final String PASSIVE_CD_TAG = "int_passive_cd_";
 
     // PRIMARY
     private static final int PHASE_SHIFT_DURATION = 55;
@@ -68,54 +83,47 @@ public class DimensionalPower implements Power {
     private static final double EXIT_KNOCKBACK_STRENGTH = 0.8;
     private static final double EXIT_VERTICAL_BOOST = 0.15;
 
-    private static final String PHASE_SHIFT_TAG = "int_phase_shift_";
-
     /* ============================================================
        ESSENTIAL
        ============================================================ */
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        removeTagPrefix(player, "int_");
+        player.getCommandTags().removeIf(tag -> tag.startsWith("int_")); // Cleanup legacy string tags just in case
+        PLAYER_STATES.remove(player.getUuid());
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        // Restore gamemode if phasing
-        net.minecraft.world.GameMode prevMode = null;
-        for (String tag : player.getCommandTags()) {
-            if (tag.startsWith("int_prev_gm_")) {
-                try {
-                    int gmId = Integer.parseInt(tag.substring("int_prev_gm_".length()));
-                    prevMode = net.minecraft.world.GameMode.byId(gmId);
-                } catch (Exception ignored) {}
-                break;
-            }
-        }
+        DimensionalState state = PLAYER_STATES.remove(player.getUuid());
 
         // Return them to survival if they were trapped in spectator mode by the ability
-        if (prevMode != null && player.interactionManager.getGameMode() == net.minecraft.world.GameMode.SPECTATOR) {
-            player.changeGameMode(prevMode);
+        if (state != null && state.phaseShiftTicks > 0 && player.interactionManager.getGameMode() == net.minecraft.world.GameMode.SPECTATOR) {
+            player.changeGameMode(state.prevMode);
         }
 
-        removeTagPrefix(player, "int_");
+        player.getCommandTags().removeIf(tag -> tag.startsWith("int_"));
 
         // Clear active ultimate fractures to prevent permanent slow zones
         ACTIVE_FRACTURES.remove(player.getUuid());
 
         // Sweep for entities that were displaced by the secondary
-        if (player.getServer() != null) {
+        Map<UUID, Integer> myDisplacements = ACTIVE_DISPLACEMENTS.remove(player.getUuid());
+        if (myDisplacements != null && player.getServer() != null) {
             for (ServerWorld w : player.getServer().getWorlds()) {
-                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
-                    if (hasTag(e, DISPLACED_TAG)) {
-                        removeTagPrefix(e, DISPLACED_TAG);
-                        e.removeStatusEffect(StatusEffects.INVISIBILITY);
-                        e.removeStatusEffect(StatusEffects.WEAKNESS);
-                        e.removeStatusEffect(StatusEffects.RESISTANCE);
-                        e.removeStatusEffect(StatusEffects.MINING_FATIGUE);
-                        if (e instanceof MobEntity mob) mob.setAiDisabled(false);
+                for (UUID targetId : myDisplacements.keySet()) {
+                    Entity e = w.getEntity(targetId);
+                    if (e instanceof LivingEntity le) {
+                        le.removeStatusEffect(StatusEffects.INVISIBILITY);
+                        le.removeStatusEffect(StatusEffects.WEAKNESS);
+                        le.removeStatusEffect(StatusEffects.RESISTANCE);
+                        le.removeStatusEffect(StatusEffects.MINING_FATIGUE);
+                        if (le instanceof MobEntity mob) mob.setAiDisabled(false);
                     }
-                    // Free entities stuck inside the ultimate
+                }
+
+                // Free entities stuck inside the ultimate
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
                     e.removeStatusEffect(ModEffects.FRACTURED);
                     e.removeStatusEffect(ModEffects.DISPLACED);
                 }
@@ -131,79 +139,90 @@ public class DimensionalPower implements Power {
     @Override
     public void onTick(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
+        DimensionalState state = getState(player);
 
-        handlePassive(player);
-        handlePhaseShift(player);
+        handlePassive(player, state, world);
+        handlePhaseShift(player, state, world);
         handleFracture(player); // ultimate tick
 
-        for (LivingEntity e : world.getEntitiesByClass(
-                LivingEntity.class,
-                player.getBoundingBox().expand(30),
-                LivingEntity::isAlive)) {
+        // Process Displacements owned by this specific player without scanning the world
+        Map<UUID, Integer> displaced = ACTIVE_DISPLACEMENTS.get(player.getUuid());
+        if (displaced != null && !displaced.isEmpty()) {
+            Iterator<Map.Entry<UUID, Integer>> it = displaced.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<UUID, Integer> entry = it.next();
+                Entity ent = world.getEntity(entry.getKey());
 
-            if (e == player) continue;
+                if (!(ent instanceof LivingEntity target) || !target.isAlive()) {
+                    it.remove();
+                    continue;
+                }
 
-            handleDisplace(e, world);
+                int ticksLeft = entry.getValue() - 1;
+                if (ticksLeft <= 0) {
+                    if (target instanceof MobEntity mob) mob.setAiDisabled(false);
+                    it.remove();
+                } else {
+                    entry.setValue(ticksLeft);
+                    tickDisplaceTarget(target, world);
+                }
+            }
         }
+    }
+
+    @Override
+    public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        DimensionalState state = getState(victim);
+
+        // Fast fail if immune from passive
+        if (state.immuneTicks > 0) return false;
+
+        // Increase phase chance on hit
+        state.phaseChance = Math.min(MAX_PHASE_CHANCE, state.phaseChance + DAMAGE_CHANCE_GAIN);
+        return true;
     }
 
     /* ============================================================
        PASSIVE
        ============================================================ */
 
-    public void onDamaged(ServerPlayerEntity player) {
-        increasePhaseChance(player);
-    }
-
-    private void handlePassive(ServerPlayerEntity player) {
-        if (hasTag(player, PHASE_SHIFT_TAG)) return;
-        // dodge passive if passive off
+    private void handlePassive(ServerPlayerEntity player, DimensionalState state, ServerWorld world) {
+        if (state.phaseShiftTicks > 0) return;
         if (!PassiveManager.isEnabled(player)) return;
 
-        ServerWorld world = player.getServerWorld();
-
         // handle flicker first if phasing
-        if (getTagTicks(player, PHASE_TAG) > 0) {
-            handleFlicker(player, world);
+        if (state.phaseTicks > 0) {
+            handleFlicker(player, state, world);
             return;
-        }
-
-        // remove immunity
-        if (getTagTicks(player, PHASE_TAG) <= 0) {
-            removeTagPrefix(player, IMMUNE_TAG);
         }
 
         // Then tick cooldown
-        if (hasTag(player, PASSIVE_CD_TAG)) {
-            tickTag(player, PASSIVE_CD_TAG);
+        if (state.passiveCdTicks > 0) {
+            state.passiveCdTicks--;
             return;
         }
 
-        // Get current chance
-        double chance = getPhaseChance(player);
-
         // Roll
-        if (world.random.nextDouble() < chance) {
-            startPassivePhase(player);
+        if (world.random.nextDouble() < state.phaseChance) {
+            startPassivePhase(player, state);
 
             // Reset chance after proc
-            setPhaseChance(player, BASE_PHASE_CHANCE);
+            state.phaseChance = BASE_PHASE_CHANCE;
 
             // Start cooldown
-            player.getCommandTags().add(PASSIVE_CD_TAG + PASSIVE_COOLDOWN);
+            state.passiveCdTicks = PASSIVE_COOLDOWN;
         }
     }
 
-    private void startPassivePhase(ServerPlayerEntity player) {
-        removeTagPrefix(player, PHASE_TAG);
-        player.getCommandTags().add(PHASE_TAG + PASSIVE_PHASE_TICKS);
+    private void startPassivePhase(ServerPlayerEntity player, DimensionalState state) {
+        state.phaseTicks = PASSIVE_PHASE_TICKS;
 
         player.getServerWorld().playSound(null, player.getBlockPos(),
                 ModSounds.FLICKER,
                 player.getSoundCategory(), 0.5f, 1.2f);
     }
 
-    private void handleFlicker(ServerPlayerEntity player, ServerWorld world) {
+    private void handleFlicker(ServerPlayerEntity player, DimensionalState state, ServerWorld world) {
 
         long time = world.getTime();
 
@@ -266,14 +285,13 @@ public class DimensionalPower implements Power {
         }
 
         // damage immunity
-        if (!hasTag(player, IMMUNE_TAG)) {
-            player.getCommandTags().add(IMMUNE_TAG + getTagTicks(player, PHASE_TAG));
-        }
+        state.immuneTicks = state.phaseTicks;
 
-        boolean active = tickTag(player, PHASE_TAG);
+        state.phaseTicks--;
 
         // if the tag just expired and the player is fully returning
-        if (!active) {
+        if (state.phaseTicks <= 0) {
+            state.immuneTicks = 0;
             triggerSituationalFlicker(player, world);
         }
     }
@@ -366,28 +384,6 @@ public class DimensionalPower implements Power {
         }
     }
 
-    private double getPhaseChance(ServerPlayerEntity player) {
-        for (String tag : player.getCommandTags()) {
-            if (tag.startsWith(PHASE_CHANCE_TAG)) {
-                try {
-                    return Double.parseDouble(tag.substring(PHASE_CHANCE_TAG.length()));
-                } catch (Exception ignored) {}
-            }
-        }
-        return BASE_PHASE_CHANCE;
-    }
-
-    private void setPhaseChance(ServerPlayerEntity player, double value) {
-        removeTagPrefix(player, PHASE_CHANCE_TAG);
-        player.getCommandTags().add(PHASE_CHANCE_TAG + value);
-    }
-
-    private void increasePhaseChance(ServerPlayerEntity player) {
-        double current = getPhaseChance(player);
-        current = Math.min(MAX_PHASE_CHANCE, current + DAMAGE_CHANCE_GAIN);
-        setPhaseChance(player, current);
-    }
-
     /* ============================================================
        PRIMARY
        ============================================================ */
@@ -395,17 +391,14 @@ public class DimensionalPower implements Power {
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
+        DimensionalState state = getState(player);
 
         // clear passive
-        removeTagPrefix(player, PHASE_TAG);
-        removeTagPrefix(player, IMMUNE_TAG);
+        state.phaseTicks = 0;
+        state.immuneTicks = 0;
 
-        removeTagPrefix(player, PHASE_SHIFT_TAG);
-        player.getCommandTags().add(PHASE_SHIFT_TAG + PHASE_SHIFT_DURATION);
-
-        // store their current gamemode before overriding it
-        removeTagPrefix(player, "int_prev_gm_");
-        player.getCommandTags().add("int_prev_gm_" + player.interactionManager.getGameMode().getId());
+        state.phaseShiftTicks = PHASE_SHIFT_DURATION;
+        state.prevMode = player.interactionManager.getGameMode();
 
         // switch to spectator
         player.changeGameMode(net.minecraft.world.GameMode.SPECTATOR);
@@ -417,15 +410,15 @@ public class DimensionalPower implements Power {
                 player.getSoundCategory(), ENTRY_SOUND_VOL, ENTRY_SOUND_PITCH);
     }
 
-    private void handlePhaseShift(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+    private void handlePhaseShift(ServerPlayerEntity player, DimensionalState state, ServerWorld world) {
+        if (state.phaseShiftTicks <= 0) return;
 
-        boolean active = tickTag(player, PHASE_SHIFT_TAG);
+        state.phaseShiftTicks--;
 
-        if (!active) {
+        if (state.phaseShiftTicks <= 0) {
             // if ended, exit
             if (player.interactionManager.getGameMode() == net.minecraft.world.GameMode.SPECTATOR) {
-                exitPhaseShift(player, world);
+                exitPhaseShift(player, state, world);
             }
             return;
         }
@@ -449,25 +442,10 @@ public class DimensionalPower implements Power {
         }
     }
 
-    private void exitPhaseShift(ServerPlayerEntity player, ServerWorld world) {
-
-        // figure out what gamemode they were in (defaulting to survival if something broke)
-        net.minecraft.world.GameMode prevMode = net.minecraft.world.GameMode.SURVIVAL;
-        Iterator<String> it = player.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith("int_prev_gm_")) {
-                try {
-                    int gmId = Integer.parseInt(tag.substring("int_prev_gm_".length()));
-                    prevMode = net.minecraft.world.GameMode.byId(gmId);
-                } catch (Exception ignored) {}
-                it.remove();
-                break;
-            }
-        }
+    private void exitPhaseShift(ServerPlayerEntity player, DimensionalState state, ServerWorld world) {
 
         // back to previous gamemode
-        player.changeGameMode(prevMode);
+        player.changeGameMode(state.prevMode);
 
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
@@ -722,17 +700,12 @@ public class DimensionalPower implements Power {
                 player.getSoundCategory(), 0.6f, 1.4f);
     }
 
-    private void handleDisplace(LivingEntity entity, ServerWorld world) {
-        boolean active = tickTag(entity, DISPLACED_TAG);
+    // PUBLIC STATIC EXPOSED FOR THE PROJECTILE TO CALL
+    public static void applyDisplace(ServerPlayerEntity caster, LivingEntity target, int durationTicks) {
+        ACTIVE_DISPLACEMENTS.computeIfAbsent(caster.getUuid(), k -> new HashMap<>()).put(target.getUuid(), durationTicks);
+    }
 
-        // restore ai if unaffected
-        if (!active) {
-            if (entity instanceof MobEntity mob) {
-                mob.setAiDisabled(false);
-            }
-            return;
-        }
-
+    private void tickDisplaceTarget(LivingEntity entity, ServerWorld world) {
         // set velocity to 0
         entity.setVelocity(Vec3d.ZERO);
         entity.velocityModified = true;
@@ -820,9 +793,6 @@ public class DimensionalPower implements Power {
     private static final double MAX_STEP_DOWN = 2.5;  // how much it can drop
     private static final int SEARCH_DOWN = 6;         // how far down to search
     private static final int SEARCH_UP = 2;           // how upward it can correct
-
-    // -- MULTIPLAYER FIX: Store fractures in a map bound to the player's UUID!
-    private static final Map<UUID, FractureState> ACTIVE_FRACTURES = new HashMap<>();
 
     private static class FractureState {
         java.util.List<java.util.List<Vec3d>> cracks = new java.util.ArrayList<>();
@@ -1258,18 +1228,6 @@ public class DimensionalPower implements Power {
     public String getPassiveDescription() {
         return "You have a constant chance to start 'flickering', when flickering you cannot receive any damage from any source and have a chance to adapt to certain events. The chance to flicker increases when taking damage" +
                 " and goes on cooldown briefly after flickering.";
-                /*
-                "Falling - Briefly slow down and gain slow falling\n" +
-                "Drowning - Gain an air bubble to replenish your air.\n" +
-                "Freezing - Reset your freeze.\n" +
-                "Levitating - Get anchored, pulling you down.\n" +
-                "Blindness/darkness - Get a bright light that removes the effect.\n" +
-                "Poison/wither - Gain a cleanse that removes the effect\n" +
-                "Starving - Enter a world of food to replenish your hunger\n" +
-                "Fire - Gain a splash of water to put it out\n" +
-                "Slowness - Gain a brief burst of speed and remove the effect\n" +
-                "These are not all guaranteed to happen.";
-                */
     }
 
     @Override
@@ -1289,57 +1247,5 @@ public class DimensionalPower implements Power {
         return "Create a 'fracture' at your location, this creates a series of cracks along the ground that create isolated 'sections' that entities must remain in." +
                 " Any entities touching these cracks will be significantly slowed and take constant damage, the caster does not receive damage or slowness from these cracks." +
                 " The intention of this is to force groups to become isolated, making it easier to take duels and kill groups.";
-    }
-
-    /* ============================================================
-       HELPERS
-       ============================================================ */
-
-    public static boolean hasTag(LivingEntity entity, String prefix) {
-        for (String tag : entity.getCommandTags()) {
-            if (tag.startsWith(prefix)) return true;
-        }
-        return false;
-    }
-
-    private static boolean tickTag(LivingEntity entity, String prefix) {
-        Iterator<String> it = entity.getCommandTags().iterator();
-        String newTag = null;
-        boolean active = false;
-
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) {
-                try {
-                    int ticks = Integer.parseInt(tag.substring(prefix.length())) - 1;
-                    it.remove();
-                    if (ticks > 0) {
-                        newTag = prefix + ticks;
-                        active = true;
-                    }
-                } catch (NumberFormatException ignored) {
-                    it.remove();
-                }
-                break;
-            }
-        }
-
-        if (newTag != null) entity.getCommandTags().add(newTag);
-        return active;
-    }
-
-    public static void removeTagPrefix(Entity e, String prefix) {
-        e.getCommandTags().removeIf(s -> s.startsWith(prefix));
-    }
-
-    private int getTagTicks(LivingEntity entity, String prefix) {
-        for (String tag : entity.getCommandTags()) {
-            if (tag.startsWith(prefix)) {
-                try {
-                    return Integer.parseInt(tag.substring(prefix.length()));
-                } catch (Exception ignored) {}
-            }
-        }
-        return 0;
     }
 }
