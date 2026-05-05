@@ -942,7 +942,7 @@ public class DimensionalPower implements Power {
                         ModEffects.FRACTURED,
                         40,
                         0,
-                        false, true, true
+                        false, false, true
                 ));
             }
         }

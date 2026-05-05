@@ -320,11 +320,6 @@ public class PsychicPower implements Power {
                 player.getSoundCategory(), 0.7f, 1.2f);
     }
 
-    /**
-     * Called by CompelEntity when it hits a target.
-     * NOTE: CompelEntity must be updated to pass the caster as the first argument:
-     *   PsychicPower.applyCompel((ServerPlayerEntity) getOwner(), target)
-     */
     public static void applyCompel(ServerPlayerEntity caster, LivingEntity target) {
         PsychicState state = getState(caster);
         // Overwrite any existing entry to reset the timer
@@ -345,10 +340,6 @@ public class PsychicPower implements Power {
         }
     }
 
-    /**
-     * OPTIMIZATION: Replaces a broad 20-block getEntitiesByClass scan (every tick)
-     * with direct iteration over only the entities we know are compelled.
-     */
     private static void tickCompel(ServerPlayerEntity player, PsychicState state) {
         // DEBUG: test control by compelling the caster itself towards the nearest entity
         if (player.getCommandTags().contains("psy_debug")) {
@@ -479,7 +470,7 @@ public class PsychicPower implements Power {
                 new SpikedEntry(target.getUuid(), target.getWorld().getRegistryKey()));
 
         target.addStatusEffect(new StatusEffectInstance(
-                ModEffects.STUN, SPIKE_STUN_DURATION, SPIKE_STUN_AMPLIFIER, false, true, true));
+                ModEffects.STUN, SPIKE_STUN_DURATION, SPIKE_STUN_AMPLIFIER, false, false, true));
         target.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, SPIKE_STUN_DURATION + SPIKE_SLOW_DURATION, SPIKE_SLOW_AMPLIFIER, false, false, true));
         target.addStatusEffect(new StatusEffectInstance(
