@@ -36,12 +36,7 @@ public class FortunePower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        removeTagPrefix(player, PRIM_FX);
-        removeTagPrefix(player, SEC_FX);
-        removeTagPrefix(player, ULT_ACTIVE);
-
-        removeTagPrefix(player, LUCK_POINTS);
-        removeTagPrefix(player, LUCK_DECAY);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fo_"));
 
         breakDuel(player.getUuid());
 
@@ -53,12 +48,7 @@ public class FortunePower implements Power {
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, PRIM_FX);
-        removeTagPrefix(player, SEC_FX);
-        removeTagPrefix(player, ULT_ACTIVE);
-
-        removeTagPrefix(player, LUCK_POINTS);
-        removeTagPrefix(player, LUCK_DECAY);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fo_"));
 
         breakDuel(player.getUuid());
 
@@ -66,6 +56,11 @@ public class FortunePower implements Power {
         if (server != null) {
             removeHouseNow(server, player.getUuid());
         }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
@@ -730,6 +725,8 @@ public class FortunePower implements Power {
     private static final int HOUSE_RULE_INTERVAL_TICKS = 80; // every 4s
     private static final int HOUSE_RULE_MIN_PLAYERS_TO_ANNOUNCE = 1;
 
+    private static final float RULE_WOOLIAM_CHANCE = 0.01f; // EGG!!!
+
     // Roulette
     private static final float RULE_ROULETTE_DAMAGE = 7.0f;
 
@@ -792,7 +789,8 @@ public class FortunePower implements Power {
         SMOKE_MACHINE,
         SPOTLIGHT,
         JACKPOT,
-        CARD_COUNTER
+        CARD_COUNTER,
+        WOOLIAM_INVASION
     }
 
     private static final Map<UUID, HouseState> ACTIVE_HOUSES = new HashMap<>();
@@ -1038,19 +1036,23 @@ public class FortunePower implements Power {
             case JACKPOT -> armJackpot(w, st);
 
             case CARD_COUNTER -> doCardCounter(w, st);
+
+            case WOOLIAM_INVASION -> spawnWooliamInvasion(w, st);
         }
     }
 
     private static HouseRule rollRule(ServerWorld w, HouseRule current) {
-        HouseRule[] all = HouseRule.values();
-        if (all.length == 1) return all[0];
+        if (w.random.nextFloat() < RULE_WOOLIAM_CHANCE) {
+            return HouseRule.WOOLIAM_INVASION;
+        }
 
+        HouseRule[] all = HouseRule.values();
         HouseRule pick;
         int guard = 0;
         do {
             pick = all[w.random.nextInt(all.length)];
             guard++;
-        } while (pick == current && guard < 10);
+        } while ((pick == current || pick == HouseRule.WOOLIAM_INVASION) && guard < 10);
 
         return pick;
     }
@@ -1073,6 +1075,7 @@ public class FortunePower implements Power {
             case SPOTLIGHT -> "Spotlight";
             case JACKPOT -> "Jackpot";
             case CARD_COUNTER -> "Card Counter";
+            case WOOLIAM_INVASION -> "Wooliam";
         };
 
         String desc = switch (rule) { // rule descriptions
@@ -1092,6 +1095,7 @@ public class FortunePower implements Power {
             case SPOTLIGHT -> "Someone is glowing and takes extra damage.";
             case JACKPOT -> "The next hit is amplified.";
             case CARD_COUNTER -> "Owner's luck is set to the max.";
+            case WOOLIAM_INVASION -> "";
         };
 
         Text msg = Text.literal("§6§l[HOUSE RULE]§r §e" + name + " §7- " + desc); // outputs rule
@@ -1338,6 +1342,31 @@ public class FortunePower implements Power {
                     mob.getX(), mob.getY() + mob.getHeight() * 0.5, mob.getZ(),
                     10, 0.25, 0.25, 0.25, 0.02);
         }
+    }
+
+    // EGG - SEND THE WOOLIAMS
+    private static void spawnWooliamInvasion(ServerWorld w, HouseState st) {
+        // 20 woolliam
+        for (int i = 0; i < 20; i++) {
+            net.minecraft.entity.passive.SheepEntity sheep = net.minecraft.entity.EntityType.SHEEP.create(w);
+            if (sheep != null) {
+                BlockPos p = randomInsidePos(w, st, 1);
+                sheep.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
+                sheep.setCustomName(Text.literal("wooliam"));
+                w.spawnEntity(sheep);
+                w.spawnParticles(ParticleTypes.POOF, sheep.getX(), sheep.getY() + 0.5, sheep.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
+            }
+        }
+        // 1 hamuel
+        net.minecraft.entity.passive.PigEntity pig = net.minecraft.entity.EntityType.PIG.create(w);
+        if (pig != null) {
+            BlockPos p = randomInsidePos(w, st, 1);
+            pig.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
+            pig.setCustomName(Text.literal("hamuel"));
+            w.spawnEntity(pig);
+            w.spawnParticles(ParticleTypes.POOF, pig.getX(), pig.getY() + 0.5, pig.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
+        }
+        w.playSound(null, st.center, SoundEvents.ENTITY_SHEEP_AMBIENT, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);
     }
 
     // gets random spot in area, for mob spawning

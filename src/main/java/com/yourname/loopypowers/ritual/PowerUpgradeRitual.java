@@ -79,7 +79,13 @@ public class PowerUpgradeRitual implements Ritual {
 
     @Override
     public boolean tick(ServerWorld world) {
-        if (player.isRemoved() || !player.isAlive()) return true;
+        if (player.isRemoved() || !player.isAlive()) {
+            if (player instanceof ServerPlayerEntity sp) {
+                cancelRitual(sp);
+            }
+            return true;
+        }
+
         if (!(player instanceof ServerPlayerEntity sp)) return true;
 
         ticks++;
@@ -131,8 +137,11 @@ public class PowerUpgradeRitual implements Ritual {
         sp.setOnGround(true);
         sp.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 5, 10, true, false, false));
-        sp.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.RESISTANCE, 5, 255, true, false, false));
+    }
+
+    private void cancelRitual(ServerPlayerEntity sp) {
+        sp.removeStatusEffect(StatusEffects.SLOWNESS);
+        sp.removeStatusEffect(StatusEffects.BLINDNESS);
     }
 
     /* ============================================================
@@ -383,7 +392,6 @@ public class PowerUpgradeRitual implements Ritual {
 
         Vec3d  pos      = sp.getPos();
         double progress = (double) t / STAGE_3_TICKS;
-        long   time     = world.getTime();
 
         // decay shake
         int shakeInterval = (progress < 0.50) ? SHAKE_STAGE_3_INTERVAL : SHAKE_STAGE_2_INTERVAL;
@@ -411,39 +419,6 @@ public class PowerUpgradeRitual implements Ritual {
                         pos.y + 7.0 + world.random.nextDouble() * 5.0,
                         pos.z + Math.sin(angle) * r,
                         1, 0.02, -0.12, 0.02, 0.004);
-            }
-        }
-
-        // halo ring
-        if (t % 2 == 0) {
-            int    haloPoints = 20;
-            double haloR      = 1.4 - progress * 0.6;
-            double haloSpeed  = time * 0.12;
-            for (int i = 0; i < haloPoints; i++) {
-                double angle = haloSpeed + i * Math.PI * 2.0 / haloPoints;
-                DustParticleEffect col = (i % 3 == 0) ? MAGENTA
-                        : (i % 3 == 1) ? WHITE
-                        : PURPLE;
-                world.spawnParticles(col,
-                        pos.x + Math.cos(angle) * haloR,
-                        pos.y + 1.85,
-                        pos.z + Math.sin(angle) * haloR,
-                        1, 0.01, 0.02, 0.01, 0.005);
-            }
-        }
-
-        // inner halo ring anticlockwise
-        if (t % 3 == 0) {
-            int    innerPoints = 12;
-            double innerR      = 0.8 - progress * 0.25;
-            double innerSpeed  = -time * 0.09;
-            for (int i = 0; i < innerPoints; i++) {
-                double angle = innerSpeed + i * Math.PI * 2.0 / innerPoints;
-                world.spawnParticles(VIOLET,
-                        pos.x + Math.cos(angle) * innerR,
-                        pos.y + 1.6,
-                        pos.z + Math.sin(angle) * innerR,
-                        1, 0.01, 0.015, 0.01, 0.004);
             }
         }
 
@@ -493,7 +468,6 @@ public class PowerUpgradeRitual implements Ritual {
         // cleanup
         sp.removeStatusEffect(StatusEffects.LEVITATION);
         sp.removeStatusEffect(StatusEffects.BLINDNESS);
-        sp.removeStatusEffect(StatusEffects.RESISTANCE);
         sp.removeStatusEffect(StatusEffects.SLOWNESS);
         sp.setVelocity(Vec3d.ZERO);
         sp.velocityModified = true;
@@ -544,7 +518,7 @@ public class PowerUpgradeRitual implements Ritual {
                 SoundCategory.PLAYERS, 0.8f, 1.4f);
 
         sp.sendMessage(
-                net.minecraft.text.Text.literal("§dYour connection has been strengthened to Level 2."),
+                net.minecraft.text.Text.literal("§dYour bond has been strengthened to Level 2."),
                 false
         );
     }

@@ -140,7 +140,7 @@ public class BlackHoleEntity extends Entity {
         spawnAllParticles(world, center, lifeProgress);
 
         // Loop Ambient Sound
-        if (life % 15 == 0) {
+        if (life % 30 == 0) {
             playBlackHoleLoop(world, center);
         }
     }
@@ -151,21 +151,27 @@ public class BlackHoleEntity extends Entity {
 
     private boolean pullAndDamageEntities(ServerWorld world, Vec3d center) { // applied to closer entities
         boolean dealtDamage = false;
-        List<LivingEntity> nearby = world.getEntitiesByClass(
-                LivingEntity.class,
+
+        // Scan for all entities
+        List<Entity> nearby = world.getEntitiesByClass(
+                Entity.class,
                 new net.minecraft.util.math.Box(center, center).expand(OUTER_RADIUS),
-                e -> e.isAlive() && e != owner
+                e -> e.isAlive() && e != owner && e != this && !e.isSpectator()
         );
 
-        for (LivingEntity e : nearby) {
+        for (Entity e : nearby) {
             Vec3d toCenter = center.subtract(e.getPos());
             double dist = toCenter.length();
             if (dist < 0.01) continue;
 
             if (dist <= INNER_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, INNER_PULL);
-                applyInnerRingEffects(world, e);
-                dealtDamage = true;
+
+                // Only damage and apply effects if it's actually alive
+                if (e instanceof LivingEntity living) {
+                    applyInnerRingEffects(world, living);
+                    dealtDamage = true;
+                }
 
             } else if (dist <= MID_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, MID_PULL);
@@ -178,7 +184,7 @@ public class BlackHoleEntity extends Entity {
         return dealtDamage;
     }
 
-    private void applyOrbitalPull(LivingEntity entity, Vec3d toCenter, double dist, double strength) { // applied to further entities
+    private void applyOrbitalPull(Entity entity, Vec3d toCenter, double dist, double strength) { // applied to further entities
         Vec3d inward = toCenter.normalize();
 
         // tangent — perpendicular to inward on the horizontal plane
@@ -230,8 +236,8 @@ public class BlackHoleEntity extends Entity {
                         p.getBlockPos(),
                         ModSounds.DARKNESSLOOP,
                         net.minecraft.sound.SoundCategory.PLAYERS,
-                        0.8f,
-                        1.3f
+                        0.9f,
+                        0.7f
                 );
             }
         }

@@ -82,7 +82,13 @@ public class SeveranceRitual implements Ritual {
        ============================================================ */
 
     public boolean tick(ServerWorld world) {
-        if (player.isRemoved() || !player.isAlive()) return true;
+        if (player.isRemoved() || !player.isAlive()) {
+            if (player instanceof ServerPlayerEntity sp) {
+                cancelRitual(sp);
+            }
+            return true;
+        }
+
         if (!(player instanceof ServerPlayerEntity sp)) return true;
 
         ticks++;
@@ -136,8 +142,14 @@ public class SeveranceRitual implements Ritual {
         sp.setOnGround(true);
         sp.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 5, 10, true, false, false));
-        sp.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.RESISTANCE, 5, 255, true, false, false));
+    }
+
+    private void cancelRitual(ServerPlayerEntity sp) {
+        sp.removeStatusEffect(StatusEffects.SLOWNESS);
+        sp.removeStatusEffect(StatusEffects.BLINDNESS);
+        sp.removeStatusEffect(StatusEffects.DARKNESS);
+        sp.removeStatusEffect(StatusEffects.WEAKNESS);
+        sp.removeStatusEffect(StatusEffects.NAUSEA);
     }
 
     /* ============================================================
@@ -679,7 +691,6 @@ public class SeveranceRitual implements Ritual {
         PowerManager.removePower(sp);
 
         // Clean up status effects
-        sp.removeStatusEffect(StatusEffects.RESISTANCE);
         sp.removeStatusEffect(StatusEffects.SLOWNESS);
         sp.removeStatusEffect(StatusEffects.BLINDNESS);
         sp.removeStatusEffect(StatusEffects.DARKNESS);

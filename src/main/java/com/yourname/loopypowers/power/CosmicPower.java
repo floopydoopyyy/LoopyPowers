@@ -4,6 +4,7 @@ import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.entity.BlackHoleEntity;
 import com.yourname.loopypowers.entity.ModEntities;
+import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
@@ -82,7 +83,49 @@ public class CosmicPower implements Power {
        ============================================================ */
 
     @Override
-    public void onAssign(ServerPlayerEntity player) {}
+    public void onAssign(ServerPlayerEntity player) {
+        removeTagPrefix(player, "cos_");
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        // Clear personal tags and effects
+        removeTagPrefix(player, "cos_");
+        player.removeStatusEffect(ModEffects.BRACED);
+        player.removeStatusEffect(ModEffects.FATE);
+
+        // Sweep for fate tags and black holes
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
+                    // Check if this specific player is the owner of the fate
+                    boolean isOwner = false;
+                    for (String tag : e.getCommandTags()) {
+                        if (tag.equals(FATE_OWNER_TAG + player.getUuid().toString())) {
+                            isOwner = true;
+                            break;
+                        }
+                    }
+                    if (isOwner) {
+                        removeTagPrefix(e, "cos_");
+                        e.removeStatusEffect(ModEffects.FATE);
+                    }
+                }
+
+                // Despawn active black holes
+                for (BlackHoleEntity bh : w.getEntitiesByClass(BlackHoleEntity.class, player.getBoundingBox().expand(150), Entity::isAlive)) {
+                    if (player.equals(bh.getOwner())) {
+                        bh.discard();
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
@@ -351,6 +394,10 @@ public class CosmicPower implements Power {
             double y = pos.y + 0.8;
             world.spawnParticles(ParticleTypes.ELECTRIC_SPARK, x, y, z, 1,
                     (pos.x - x) * 0.2, 0.02, (pos.z - z) * 0.2, 0);
+        }
+
+        if (entity instanceof ServerPlayerEntity targetPlayer) {
+            CameraShake.shakeNearby(targetPlayer, 5, 10, 0.06f);
         }
     }
 
@@ -627,14 +674,14 @@ public class CosmicPower implements Power {
     @Override
     public String getPassiveDescription() {
         return "This is what your entire power revolves around. Your basic melee hits and some abilities apply a debuff called Fate, there are two elements to this debuff:" +
-                " /n Fate damage: This is the amount of damage Fate currently stores, it increases with the hits you do and is indicated by the amount of dust coming off the" +
+                " \n Fate damage: This is the amount of damage Fate currently stores, it increases with the hits you do and is indicated by the amount of dust coming off the" +
                 " effected entity. This has a hard cap, when an entity has reached max damage, hitting it will play a sound and display star particles." +
-                " /n Fate Timer: This is the time until the stored fate damage is quickly applied, it is indicated by the orbiting sun around the entity, with faster orbit speeds" +
+                "\n Fate Timer: This is the time until the stored fate damage is quickly applied, it is indicated by the orbiting sun around the entity, with faster orbit speeds" +
                 " meaning it is closer to detonation and extra fire particles will also appear when about to detonate." +
-                " /n When the timer expires, the entity will explode and have the debuff removed, quickly taking all of the damage that was stored over a few seconds." +
+                " \n When the timer expires, the entity will explode and have the debuff removed, quickly taking all of the damage that was stored over a few seconds." +
                 " They will then be immune to building fate for a long time (if they survive)." +
-                "/n" +
-                "/n But, your melee hits do significantly less damage and the lost damage is stored as Fate, melee hits also increase the countdown timer, giving you more time to build fate.";
+                "\n" +
+                "\n But, your melee hits do significantly less damage and the lost damage is stored as Fate, melee hits also increase the countdown timer, giving you more time to build fate.";
     }
 
     @Override
@@ -654,9 +701,9 @@ public class CosmicPower implements Power {
     @Override
     public String getUltimateDescription() {
         return "Summon a slow-moving black hole a few blocks in front of you." +
-                "/n This black hole travels slowly in the direction you cast it, having a large pull radius that gets stronger the closer entities are to the centre." +
-                "/n Any entities in the centre of the black hole will take constant damage (this does not apply Fate damage) and their Fate timer will be quickly drained down." +
-                "/n Essentially, this is a way to quickly drain fate and explode groups of entities over an area.";
+                "\n This black hole travels slowly in the direction you cast it, having a large pull radius that gets stronger the closer entities are to the centre." +
+                "\n Any entities in the centre of the black hole will take constant damage (this does not apply Fate damage) and their Fate timer will be quickly drained down." +
+                "\n Essentially, this is a way to quickly drain fate and explode groups of entities over an area.";
     }
 
     /* ============================================================

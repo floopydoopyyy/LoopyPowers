@@ -32,6 +32,10 @@ public class FlightPower implements Power {
     //timer stuff
     private static final String FLIGHT_STALL_TICKS = "fl_stall_";        // stall
 
+    // easter egg stuff
+    private static final String HECANFLY_WINDOW = "fl_hecanfly_window_"; // countdown from assignment
+    private static final String HECANFLY_USED = "fl_hecanfly_used";      // stop spam
+
     // Loop timers for FX cadence
     private static final String TRAIL_STEP = "fl_trail_step_";           // trail
     private static final String SOUND_STEP = "fl_sound_step_";           // sound loop
@@ -48,6 +52,9 @@ public class FlightPower implements Power {
     private static final int TRAIL_INTERVAL = 2;   // particle trail delay in flight
     private static final int SOUND_INTERVAL = 10;  // sound loop delay
 
+    // hah
+    private static final int HECANFLY_TICKS = 20 * 30; // 30 seconds
+
     /* ============================================================
        BASIC
        ============================================================ */
@@ -56,10 +63,22 @@ public class FlightPower implements Power {
     public void onAssign(ServerPlayerEntity player) {
         // see? i do use these!
         equipWings(player);
+
+        // start the timer for the funny
+        setSingleTimerTag(player, HECANFLY_WINDOW, HECANFLY_TICKS);
+        player.getCommandTags().remove(HECANFLY_USED);
     }
+
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        unequipWings(player);
+        unequipWings(player); // stops from dropping
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fl_"));
+        player.removeStatusEffect(ModEffects.GROUNDED);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     private static void equipWings(ServerPlayerEntity player) { // adds wings and should put chestplate in inventory
@@ -93,6 +112,7 @@ public class FlightPower implements Power {
     public void onTick(ServerPlayerEntity player) {
         // timers
         tickSingleTimer(player, FLIGHT_STALL_TICKS);
+        tickSingleTimer(player, HECANFLY_WINDOW);
 
         // enforce wings
         int t = tickSingleTimer(player, WING_ENFORCE_STEP);
@@ -158,16 +178,18 @@ public class FlightPower implements Power {
             player.sendMessage(net.minecraft.text.Text.literal("§7You're grounded."), true);
             return false;
         }
-        /* if (!player.isFallFlying()) {
-            player.sendMessage(net.minecraft.text.Text.literal("§7You must be flying to use Gust."), true);
-            return false;
-        } */
         activatePrimary(player);
         return true;
     }
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
+        // the meme
+        if (player.isFallFlying() && hasTagPrefix(player, HECANFLY_WINDOW) && !player.getCommandTags().contains(HECANFLY_USED)) {
+            player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
+            player.getCommandTags().add(HECANFLY_USED);
+        }
+
         // force flight to start
         player.getCommandTags().add(GLIDE_REQUEST);
 
@@ -248,11 +270,6 @@ public class FlightPower implements Power {
     // SECONDARY
     @Override
     public boolean tryActivateSecondary(ServerPlayerEntity player) { // must be grounded and unbound to use updraft
-        /* // stops player from using if flying
-        if (player.isFallFlying()) {
-            player.sendMessage(net.minecraft.text.Text.literal("§7You must be on the ground to use updraft."), true);
-            return false;
-        } */
         if (player.hasStatusEffect(ModEffects.GROUNDED)) {
             player.sendMessage(net.minecraft.text.Text.literal("§7You're grounded."), true);
             return false;

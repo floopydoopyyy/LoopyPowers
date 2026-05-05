@@ -96,10 +96,28 @@ public class SpeedPower implements Power { // SPEED
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("speed_") || tag.startsWith("overdrive_"));
         // passive
         player.addStatusEffect(
                 new StatusEffectInstance(StatusEffects.SPEED, 40, PASSIVE_SPEED_AMPLIFIER, true, false)
         );
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        // Strip active tags
+        player.getCommandTags().removeIf(tag -> tag.startsWith("speed_") || tag.startsWith("overdrive_"));
+
+        // Strip lingering buffs
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.HASTE);
+        player.removeStatusEffect(StatusEffects.JUMP_BOOST);
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override

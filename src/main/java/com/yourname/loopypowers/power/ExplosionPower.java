@@ -107,37 +107,34 @@ public class ExplosionPower implements Power {
     private static final double ULT_LAUNCH_KICK_Y = 0.12;
     private static final double ULT_LAUNCH_STORE_SCALE = 8000.0;
 
+    // funnies
+    private static final float GLASS_CONVERT_CHANCE = 0.07f; // silly glass
+    private static final float WHY_SOUND_CHANCE = 0.005f; // i regret this
+
     /* ============================================================
        BASIC
        ============================================================ */
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
+        removeAllTagPrefix(player, "ex_");
         setIntTag(player, BLAST_CHARGES, BLAST_MAX_CHARGES);
-        removeTagPrefix(player, BLAST_RECHARGE);
-        removeTagPrefix(player, BLAST_LOCK);
-        removeTagPrefix(player, IGNITING);
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
-        removeTagPrefix(player, NO_SELF_EXP_DMG);
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, IGNITING);
-        removeTagPrefix(player, BLAST_CHARGES);
-        removeTagPrefix(player, BLAST_RECHARGE);
-        removeTagPrefix(player, BLAST_LOCK);
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
-        removeTagPrefix(player, NO_SELF_EXP_DMG);
-        removeTagPrefix(player, ULT_WARN);
-        removeTagPrefix(player, ULT_AIR);
-        removeTagPrefix(player, ULT_STAGE);
-        removeTagPrefix(player, ULT_LAUNCH_T);
-        removeTagPrefix(player, ULT_LAUNCH_X);
-        removeTagPrefix(player, ULT_LAUNCH_Y);
-        removeTagPrefix(player, ULT_LAUNCH_Z);
+        // Strip all explosion power tags cleanly
+        removeAllTagPrefix(player, "ex_");
+
+        // Strip any lingering statuses
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+        player.removeStatusEffect(ModEffects.BRACED);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
@@ -245,7 +242,7 @@ public class ExplosionPower implements Power {
         Vec3d center = player.getPos().add(0, 0.1, 0);
 
         explodeAt(w, center, IGNITE_POWER, IGNITE_BREAK_BLOCKS);
-        applyExplosionDamage(player, w, center, IGNITE_DMG_RADIUS, IGNITE_DAMAGE, false);
+        applyExplosionDamage(player, w, center, IGNITE_DMG_RADIUS, IGNITE_DAMAGE, false, false);
 
         Vec3d v = player.getVelocity();
         player.setVelocity(v.x, Math.max(v.y, 0.65), v.z);
@@ -283,7 +280,7 @@ public class ExplosionPower implements Power {
         setSingleTimerTag(player, NO_SELF_EXP_DMG, 6);
 
         explodeAt(w, origin, BLAST_POWER, BLAST_BREAK_BLOCKS);
-        applyExplosionDamage(player, w, origin, BLAST_DMG_RADIUS, BLAST_DAMAGE, false);
+        applyExplosionDamage(player, w, origin, BLAST_DMG_RADIUS, BLAST_DAMAGE, false, true);
 
         applyRecoil(player, origin);
 
@@ -386,15 +383,7 @@ public class ExplosionPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WARN);
-        removeTagPrefix(player, ULT_AIR);
-        removeTagPrefix(player, ULT_STAGE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
-        removeTagPrefix(player, ULT_LAUNCH_T);
-        removeTagPrefix(player, ULT_LAUNCH_X);
-        removeTagPrefix(player, ULT_LAUNCH_Y);
-        removeTagPrefix(player, ULT_LAUNCH_Z);
+        removeAllTagPrefix(player, "ex_ult_");
 
         setSingleTimerTag(player, ULT_ACTIVE, ULT_TOTAL_TICKS);
         setSingleTimerTag(player, ULT_AIR, ULT_FIZZLE_AIR_TICKS);
@@ -444,11 +433,7 @@ public class ExplosionPower implements Power {
 
             int warnLeft = tickSingleTimer(player, ULT_WARN);
             if (warnLeft == 0) {
-                removeTagPrefix(player, ULT_WARN);
-                removeTagPrefix(player, ULT_AIR);
-                removeTagPrefix(player, ULT_STAGE);
-                removeTagPrefix(player, ULT_WAITING_LAND);
-                removeTagPrefix(player, ULT_ACTIVE);
+                removeAllTagPrefix(player, "ex_ult_");
 
                 doUltPop(player, true, 3);
             }
@@ -471,11 +456,7 @@ public class ExplosionPower implements Power {
     }
 
     public static void cancelUltimate(ServerPlayerEntity player, ServerWorld w) {
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WARN);
-        removeTagPrefix(player, ULT_AIR);
-        removeTagPrefix(player, ULT_STAGE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
+        removeAllTagPrefix(player, "ex_ult_");
 
         w.playSound(null, player.getBlockPos(),
                 SoundEvents.BLOCK_FIRE_EXTINGUISH,
@@ -560,10 +541,10 @@ public class ExplosionPower implements Power {
 
         if (finisher) {
             explodeAt(w, origin, ULT_FINAL_POWER, ULT_FINAL_BREAK_BLOCKS);
-            applyExplosionDamage(player, w, origin, ULT_FINAL_DMG_RADIUS, ULT_FINAL_DAMAGE, true);
+            applyExplosionDamage(player, w, origin, ULT_FINAL_DMG_RADIUS, ULT_FINAL_DAMAGE, true, false);
         } else {
             explodeAt(w, origin, ULT_POP_POWER, ULT_POP_BREAK_BLOCKS);
-            applyExplosionDamage(player, w, origin, ULT_POP_DMG_RADIUS, ULT_POP_DAMAGE, true);
+            applyExplosionDamage(player, w, origin, ULT_POP_DMG_RADIUS, ULT_POP_DAMAGE, true, false);
         }
 
         Vec3d look = player.getRotationVec(1.0f);
@@ -682,12 +663,10 @@ public class ExplosionPower implements Power {
                 World.ExplosionSourceType.NONE
         );
 
-        // --- NEW CUSTOM VISUALS ---
-        // Spawn the giant explosion cloud emitter manually so it looks grand
+        // explosion
         w.spawnParticles(net.minecraft.particle.ParticleTypes.EXPLOSION_EMITTER,
                 pos.x, pos.y, pos.z, 1, 0.0, 0.0, 0.0, 0.0);
 
-        // Add some flying fiery debris and thick smoke, scaling with the explosion power
         w.spawnParticles(net.minecraft.particle.ParticleTypes.CAMPFIRE_COSY_SMOKE,
                 pos.x, pos.y, pos.z, (int)(power * 15), power * 0.4, power * 0.4, power * 0.4, 0.05);
         w.spawnParticles(net.minecraft.particle.ParticleTypes.LAVA,
@@ -754,6 +733,15 @@ public class ExplosionPower implements Power {
 
             // Actually break the blocks we collected
             for (BlockPos targetPos : blocksToBreak) {
+                net.minecraft.block.BlockState state = w.getBlockState(targetPos);
+
+                // the glassing easter egg
+                if (state.isIn(net.minecraft.registry.tag.BlockTags.SAND) && w.random.nextFloat() < GLASS_CONVERT_CHANCE) {
+                    w.setBlockState(targetPos, net.minecraft.block.Blocks.GLASS.getDefaultState());
+                    w.playSound(null, targetPos, SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.BLOCKS, 0.5f, 2.6f);
+                    continue;
+                }
+
                 // To stop lag and mining abuse, we mimic vanilla "decay"
                 // The larger the explosion, the lower the chance a block drops as an item.
                 boolean shouldDrop = w.random.nextFloat() < (1.0F / Math.max(1.0F, breakPower * 1.5f));
@@ -763,7 +751,7 @@ public class ExplosionPower implements Power {
     }
 
     private static void applyExplosionDamage(ServerPlayerEntity caster, ServerWorld w,
-                                             Vec3d center, double radius, float maxDamage, boolean isUltimate) {
+                                             Vec3d center, double radius, float maxDamage, boolean isUltimate, boolean isSecondary) {
 
         Box box = new Box(center, center).expand(radius, radius, radius);
 
@@ -789,7 +777,15 @@ public class ExplosionPower implements Power {
                 knockMul = 0.25;
             }
 
+            boolean wasAlive = e.getHealth() > 0;
             e.damage(src, dmg);
+
+            // the "WHY" easter egg
+            if (isSecondary && wasAlive && e.getHealth() <= 0 && e instanceof ServerPlayerEntity) {
+                if (w.random.nextFloat() < WHY_SOUND_CHANCE) {
+                    w.playSound(null, e.getBlockPos(), ModSounds.WHY, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
+                }
+            }
 
             Vec3d push = e.getPos().subtract(center);
             Vec3d horiz = new Vec3d(push.x, 0.0, push.z);
@@ -864,8 +860,8 @@ public class ExplosionPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "To be honest, this power is a weird one to describe. I would say it is more movement focussed as all of your abilities allow you to deal high" +
-                "damage and have great movement. But you have to be smart about it since you're not immune to fall damage. (you are immune to your own explosions)";
+        return "Explosion is a high damage, combo-based and movement-oriented power, where abilities are intended to be used together to move quickly and deal high amounts of group damage." +
+                " While also offering some other utilities, like being able to resist all forms of explosion damage, including creepers, end crystals etc. And can also be very destructive.";
     }
 
     @Override

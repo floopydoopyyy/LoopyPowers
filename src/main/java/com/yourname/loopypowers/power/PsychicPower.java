@@ -19,6 +19,11 @@ import net.minecraft.util.math.Vec3d;
 import com.yourname.loopypowers.entity.CompelEntity;
 import com.yourname.loopypowers.entity.ModEntities;
 
+// --- NEW IMPORTS ---
+import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import com.yourname.loopypowers.network.AbilityPackets;
+
 import java.util.Iterator;
 
 public class PsychicPower implements Power {
@@ -97,7 +102,44 @@ public class PsychicPower implements Power {
        ============================================================ */
 
     @Override
-    public void onAssign(ServerPlayerEntity player) {}
+    public void onAssign(ServerPlayerEntity player) {
+        removeTagPrefix(player, "psy_");
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        // Clear personal cooldown tags
+        removeTagPrefix(player, "psy_");
+
+        // Forcefully release all controlled entities across the entire server
+        // Without this, enemies will remain stunned/controlled forever since onTick no longer runs!
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+
+                // Clear active projectiles so they don't hit after the power is removed
+                w.getEntitiesByClass(CompelEntity.class, player.getBoundingBox().expand(150), e -> player.equals(e.getOwner())).forEach(Entity::discard);
+                w.getEntitiesByClass(PuppetryEntity.class, player.getBoundingBox().expand(150), e -> player.equals(e.getOwner())).forEach(Entity::discard);
+
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
+                    if (hasTag(e, "psy_")) {
+                        removeTagPrefix(e, COMPEL_TAG);
+                        removeTagPrefix(e, SPIKE_TAG);
+                        removeTagPrefix(e, ULT_CONTROL_TAG);
+                        e.removeStatusEffect(ModEffects.COMPELLED);
+                        e.removeStatusEffect(ModEffects.STUN);
+                        e.removeStatusEffect(ModEffects.POSSESSED);
+                        e.removeStatusEffect(StatusEffects.SLOWNESS);
+                        e.removeStatusEffect(StatusEffects.MINING_FATIGUE);
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
@@ -420,8 +462,24 @@ public class PsychicPower implements Power {
                 LivingEntity::isAlive)) {
 
             boolean active = tickTag(e, SPIKE_TAG);
-            if (active) spawnSpikeAuraParticles(world, e);
+            if (active) {
+                spawnSpikeAuraParticles(world, e);
+
+                // Send a 15-tick subtle shake every 10 ticks to avoid network spam
+                if (e instanceof ServerPlayerEntity targetPlayer) {
+                    if (world.getTime() % 10 == 0) {
+                        shake(targetPlayer, 15, 0.05f);
+                    }
+                }
+            }
         }
+    }
+
+    public static void shake(ServerPlayerEntity target, int ticks, float strength) {
+        var buf = PacketByteBufs.create();
+        buf.writeInt(ticks);
+        buf.writeFloat(strength);
+        ServerPlayNetworking.send(target, AbilityPackets.CAMERA_SHAKE, buf);
     }
 
     private void spawnSpikeImpactParticles(ServerWorld world, LivingEntity entity) {
@@ -820,7 +878,7 @@ public class PsychicPower implements Power {
     public String getUltimateDescription() {
         return "Shoot a large, slow-moving projectile that moves towards your cursor. This is similar to compel but with a larger size and hitbox and a slower speed and shorter lifespan." +
                 " On hit, the entity becomes controlled:" +
-                " Controlled targets are forced to walk and look towards your crosshair and will automatically attack the closest entity, if they are able to attack, this had a range limit and entities will not walk towards the cursor if too far." +
+                " Controlled targets are forced to walk and look towards your crosshair and will automatically attack the closest entity (if they are able to attack). This had a range limit and entities will not walk towards the cursor if too far." +
                 " Controlled players will also have constant mining fatigue, making it hider to mine and making them hit slower, forced attacks when controlled will not account for this.";
     }
 

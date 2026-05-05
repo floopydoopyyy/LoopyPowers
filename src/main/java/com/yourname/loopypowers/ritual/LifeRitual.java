@@ -108,7 +108,14 @@ public class LifeRitual implements Ritual {
        ============================================================ */
 
     public boolean tick(ServerWorld world) {
-        if (player.isRemoved() || !player.isAlive()) return true;
+        // if they die or disconnect mid-ritual, clean up and cancel it
+        if (player.isRemoved() || !player.isAlive()) {
+            if (player instanceof ServerPlayerEntity sp) {
+                cancelRitual(sp);
+            }
+            return true;
+        }
+
         if (!(player instanceof ServerPlayerEntity sp)) return true;
 
         ticks++;
@@ -168,8 +175,12 @@ public class LifeRitual implements Ritual {
         sp.setOnGround(true);
         sp.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 5, 10, true, false, false));
-        sp.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.RESISTANCE, 5, 255, true, false, false));
+    }
+
+    private void cancelRitual(ServerPlayerEntity sp) {
+        sp.removeStatusEffect(StatusEffects.SLOWNESS);
+        sp.removeStatusEffect(StatusEffects.BLINDNESS);
+        sp.removeStatusEffect(StatusEffects.REGENERATION);
     }
 
     /* ============================================================
@@ -714,7 +725,6 @@ public class LifeRitual implements Ritual {
 
         sp.removeStatusEffect(StatusEffects.LEVITATION);
         sp.removeStatusEffect(StatusEffects.BLINDNESS);
-        sp.removeStatusEffect(StatusEffects.RESISTANCE);
         sp.removeStatusEffect(StatusEffects.SLOWNESS);
         sp.removeStatusEffect(StatusEffects.REGENERATION);
         sp.heal(4.0f);

@@ -7,13 +7,14 @@ import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.projectile.ProjectileEntity;
-import net.minecraft.entity.projectile.ProjectileUtil;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
@@ -27,13 +28,14 @@ public class BloodClotEntity extends ProjectileEntity {
     private int maxLife = 60; // makes sure
     private int slowTicks = 70;
     private int weakTicks = 70;
-    private float hitDamage = 2.0f; // // damage on hit
+    private float hitDamage = 2.0f; // damage on hit
 
     private static final DustParticleEffect BLOOD_DUST =
-            new DustParticleEffect(new Vector3f(0.75f, 0.05f, 0.05f), 1.9f); // particle effects
+            new DustParticleEffect(new Vector3f(0.75f, 0.05f, 0.05f), 1.2f);
 
     public BloodClotEntity(EntityType<? extends BloodClotEntity> type, World world) {
         super(type, world);
+        this.setNoGravity(true); // ensures it flies completely straight
     }
 
     public void setTuning(int maxLife, int slowTicks, int weakTicks, float hitDamage) {
@@ -45,7 +47,13 @@ public class BloodClotEntity extends ProjectileEntity {
 
     @Override
     public void tick() {
+        Vec3d start = this.getPos();
+        Vec3d v = this.getVelocity();
+        Vec3d end = start.add(v);
+
         super.tick();
+
+        if (this.isRemoved()) return;
 
         // particles
         if (!this.getWorld().isClient() && this.getWorld() instanceof ServerWorld sw) {
@@ -54,25 +62,25 @@ public class BloodClotEntity extends ProjectileEntity {
             // main particle
             sw.spawnParticles(BLOOD_DUST,
                     p.x, p.y, p.z,
-                    10,              // count (more = thicker)
-                    0.10, 0.10, 0.10, // spread (bigger = chunkier blob)
+                    4,
+                    0.05, 0.05, 0.05,
                     0.0
             );
 
             // extra core in middle
             sw.spawnParticles(BLOOD_DUST,
                     p.x, p.y, p.z,
-                    4,
-                    0.03, 0.03, 0.03,
+                    2,
+                    0.02, 0.02, 0.02,
                     0.0
             );
 
             // outer effects
-            if (this.random.nextFloat() < 0.35f) {
+            if (this.random.nextFloat() < 0.25f) {
                 sw.spawnParticles(ParticleTypes.DAMAGE_INDICATOR,
                         p.x, p.y, p.z,
-                        2,
-                        0.08, 0.08, 0.08,
+                        1,
+                        0.05, 0.05, 0.05,
                         0.0
                 );
             }
@@ -85,22 +93,21 @@ public class BloodClotEntity extends ProjectileEntity {
             return;
         }
 
-        Vec3d start = this.getPos();
-        Vec3d v = this.getVelocity();
-        Vec3d end = start.add(v);
+        Box sweepBox = new Box(start, end).expand(1.2);
+        LivingEntity hitTarget = null;
+        double closestDist = Double.MAX_VALUE;
 
-        // hits entity
-        EntityHitResult ehr = ProjectileUtil.getEntityCollision(
-                this.getWorld(),
-                this,
-                start,
-                end,
-                this.getBoundingBox().stretch(v).expand(0.3),
-                this::canHitEntity
-        );
+        for (Entity e : this.getWorld().getOtherEntities(this, sweepBox, this::canHitEntity)) {
+            double d = start.squaredDistanceTo(e.getPos());
+            if (d < closestDist) {
+                closestDist = d;
+                hitTarget = (LivingEntity) e;
+            }
+        }
 
-        if (ehr != null) {
-            onEntityHit(ehr);
+        // if anything was in the box, hit the closest one immediately
+        if (hitTarget != null) {
+            onEntityHit(new EntityHitResult(hitTarget));
             return;
         }
 
@@ -118,11 +125,7 @@ public class BloodClotEntity extends ProjectileEntity {
             return;
         }
 
-        // move and gravity
-        this.setVelocity(this.getVelocity().add(0.0, -0.03, 0.0));
-        this.move(net.minecraft.entity.MovementType.SELF, v);
-        // drag
-        this.setVelocity(this.getVelocity().multiply(0.985));
+        this.setPos(end.x, end.y, end.z);
     }
 
     private boolean canHitEntity(Entity e) {
@@ -158,10 +161,6 @@ public class BloodClotEntity extends ProjectileEntity {
 
         final LivingEntity owner = (this.getOwner() instanceof LivingEntity le) ? le : null;
 
-        // apply debuffs
-        target.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, slowTicks, 1, true, true));
-        target.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, weakTicks, 0, true, true));
-
         // hit damage
         if (hitDamage > 0.0f) {
             DamageSource src = (owner != null)
@@ -171,10 +170,18 @@ public class BloodClotEntity extends ProjectileEntity {
             target.damage(src, hitDamage);
         }
 
-        // extra bleed on hit
-        if (owner != null && !this.getWorld().isClient()) {
-            BloodPower.applyBleedFromProjectile(owner, target, 1.5f, 20 * 3, 17);
+        if (owner instanceof ServerPlayerEntity sp && !this.getWorld().isClient()) {
+            if (BloodPower.isBleeding(target)) {
+                // target is bleeding - pop them
+                BloodPower.popBleed(target, sp);
+            } else {
+                // target is NOT bleeding - apply normal debuffs
+                target.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, slowTicks, 2, true, true));
+                target.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, weakTicks, 1, true, true));
+                BloodPower.applyBleedFromProjectile(owner, target, BloodPower.CLOT_BLEED_DAMAGE, BloodPower.CLOT_BLEED_DURATION, BloodPower.CLOT_BLEED_INTERVAL);
+            }
         }
+
         splat();
     }
 

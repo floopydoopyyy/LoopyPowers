@@ -11,9 +11,11 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.particle.DustParticleEffect;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.*;
@@ -35,14 +37,45 @@ public class NaturePower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        // nothing required yet
+        removeCageNow(player);
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        // cleanup cage
+        // Cleanup personal buffs
+        player.removeStatusEffect(StatusEffects.REGENERATION);
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.HASTE);
+
+        // Cleanup cage
         removeCageNow(player);
-        // cleanup hunt marks
+
+        // Cleanup global lists (Gas and Vines)
+        GAS.removeIf(g -> g.owner.equals(player.getUuid()));
+
+        if (player.getServer() != null) {
+            Iterator<VineBind> it = VINES.iterator();
+            while (it.hasNext()) {
+                VineBind b = it.next();
+                if (b.owner.equals(player.getUuid())) {
+                    ServerWorld w = player.getServer().getWorld(b.worldKey);
+                    if (w != null) {
+                        Entity ent = w.getEntity(b.target);
+                        if (ent instanceof LivingEntity le) {
+                            le.removeStatusEffect(StatusEffects.SLOWNESS);
+                            le.removeStatusEffect(StatusEffects.GLOWING);
+                            le.removeStatusEffect(ModEffects.TETHERED);
+                        }
+                    }
+                    it.remove();
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
@@ -120,6 +153,9 @@ public class NaturePower implements Power {
     private static final int GAS_PARTICLES_MIN = 30;
     private static final int GAS_PARTICLES_MAX = 110;
 
+    // stinky
+    private static final float STINK_CHANCE = 0.02f;
+
     // make green dust
     private static final DustParticleEffect GAS_DUST =
             new DustParticleEffect(new Vector3f(0.12f, 0.95f, 0.18f), 1.75f);
@@ -158,8 +194,11 @@ public class NaturePower implements Power {
         int seed = (int)(w.getTime() ^ player.getUuid().getLeastSignificantBits());
         GAS.add(new GasInstance(player.getUuid(), w.getRegistryKey(), spawn, GAS_DURATION_TICKS, seed));
 
+        // The stink easter egg
+        net.minecraft.sound.SoundEvent sound = w.random.nextFloat() < STINK_CHANCE ? ModSounds.STINK : ModSounds.SPRAY;
+
         w.playSound(null, player.getBlockPos(),
-                ModSounds.SPRAY,
+                sound,
                 player.getSoundCategory(),
                 0.8f, 0.9f);
 
@@ -278,7 +317,7 @@ public class NaturePower implements Power {
 
                 if ((dx * dx + dz * dz) > r2) continue;
 
-                // apply poison without “reset spamming”
+                // apply poison
                 StatusEffectInstance cur = e.getStatusEffect(StatusEffects.POISON);
                 if (cur == null || cur.getDuration() <= GAS_REAPPLY_THRESHOLD) {
                     e.addStatusEffect(new StatusEffectInstance(
@@ -296,12 +335,14 @@ public class NaturePower implements Power {
        SECONDARY
        ============================================================ */
 
-    private static final int CAGE_LIFETIME_TICKS = 240; // 6s
+    private static final int CAGE_LIFETIME_TICKS = 240; // time up
 
     private static final int CAGE_RADIUS = 12;
     private static final int CAGE_POINTS = 68; // ring density
     private static final int CAGE_HEIGHT = 6;
     private static final int CAGE_THICKNESS = 2;
+
+    private static final float WHIFF_ANIMAL_CHANCE = 0.05f;
 
     // store blocks for cleanup
     private static final Map<UUID, CageState> CAGES = new HashMap<>();
@@ -358,7 +399,6 @@ public class NaturePower implements Power {
                 }
             }
         }
-
         CAGES.put(player.getUuid(), state);
         player.swingHand(Hand.MAIN_HAND, true);
     }
@@ -936,6 +976,21 @@ public class NaturePower implements Power {
                 w.breakBlock(pos, false); // drop boolean does nothing for some reason.
             }
         }
+    }
+
+    // POWER HELPERS
+    // healing - cleanse ult
+    public static boolean cleanseVines(ServerPlayerEntity player) {
+        boolean removed = false;
+        Iterator<VineBind> it = VINES.iterator();
+        while (it.hasNext()) {
+            VineBind b = it.next();
+            if (b.target.equals(player.getUuid())) {
+                it.remove();
+                removed = true;
+            }
+        }
+        return removed;
     }
 
 

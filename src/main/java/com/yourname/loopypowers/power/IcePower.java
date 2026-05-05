@@ -42,18 +42,37 @@ public class IcePower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        removeTagPrefix(player, BEAM_CHARGE);
-        removeTagPrefix(player, BEAM_FIRE);
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_PULSE);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("ice_"));
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, BEAM_CHARGE);
-        removeTagPrefix(player, BEAM_FIRE);
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_PULSE);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("ice_"));
+
+        // Remove lingering slow statuses
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                // Thaw all entities
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
+                    if (e.getCommandTags().stream().anyMatch(tag -> tag.startsWith("ice_"))) {
+                        e.getCommandTags().removeIf(tag -> tag.startsWith("ice_"));
+                        e.setFrozenTicks(0);
+                        e.removeStatusEffect(ModEffects.DEEPFREEZE);
+                    }
+                }
+
+                // Clear any pending global instances owned by this player
+                SPIKE_CASTS.removeIf(sc -> sc.owner.equals(player.getUuid()));
+                ULT_WAVES.removeIf(uw -> uw.owner.equals(player.getUuid()));
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override

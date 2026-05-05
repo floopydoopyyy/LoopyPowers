@@ -73,6 +73,49 @@ public class TeleportPower implements Power {
 
     private static final Random RNG = new Random();
 
+    /* ============================================================
+       LIFECYCLE
+       ============================================================ */
+
+    @Override
+    public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("tp_"));
+        setIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("tp_"));
+        player.removeStatusEffect(StatusEffects.HASTE);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
+
+    @Override
+    public void onTick(ServerPlayerEntity player) {
+
+        // Primary Charges
+        tickSingleTimer(player, BLINK_LOCK);
+        tickBlinkRecharge(player);
+        updateBlinkCooldownUI(player);
+
+        // tick timers
+        tickSingleTimer(player, "tp_dodge_cd_");
+        tickSingleTimer(player, "tp_phase_");
+        tickSingleTimer(player, "tp_frenzy_cd_");
+
+        if (hasTagPrefix(player, "tp_frenzy_ticks_")) {
+            tickFrenzy(player);
+        }
+    }
+
+    @Override
+    public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
+    }
+
     // =========================
     // PASSIVE
     // =========================
@@ -423,38 +466,6 @@ public class TeleportPower implements Power {
     @Override
     public long getUltimateCooldownMs() { return ULTIMATE_COOLDOWN_MS; }
 
-    @Override
-    public void onAssign(ServerPlayerEntity player) {
-        setIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
-        removeTagPrefix(player, BLINK_RECHARGE);
-        removeTagPrefix(player, BLINK_LOCK);
-    }
-
-    @Override
-    public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, BLINK_CHARGES);
-        removeTagPrefix(player, BLINK_RECHARGE);
-        removeTagPrefix(player, BLINK_LOCK);
-    }
-
-    @Override
-    public void onTick(ServerPlayerEntity player) {
-
-        // Primary Charges
-        tickSingleTimer(player, BLINK_LOCK);
-        tickBlinkRecharge(player);
-        updateBlinkCooldownUI(player);
-
-        // tick timers
-        tickSingleTimer(player, "tp_dodge_cd_");
-        tickSingleTimer(player, "tp_phase_");
-        tickSingleTimer(player, "tp_frenzy_cd_");
-
-        if (hasTagPrefix(player, "tp_frenzy_ticks_")) {
-            tickFrenzy(player);
-        }
-    }
-
     private void tickFrenzy(ServerPlayerEntity player) {
         int ticksLeft = tickSingleTimer(player, "tp_frenzy_ticks_");
         if (ticksLeft <= 0) {
@@ -730,7 +741,7 @@ public class TeleportPower implements Power {
     }
 
     // names
-    @Override public String getName() { return "Teleport"; }
+    @Override public String getName() { return "Teleportation"; }
     @Override public String getPrimaryName() { return "Blink"; }
     @Override public String getSecondaryName() { return "Boogie Woogie"; }
     @Override public String getUltimateName() { return "Frenzy"; }

@@ -66,16 +66,23 @@ public class StrengthPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        // no
+        player.getCommandTags().removeIf(tag -> tag.startsWith("st_"));
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        // cleanup
-        removeTagPrefix(player, RUSHING);
-        removeTagPrefix(player, RUSH_DIR);
-        removeTagPrefix(player, RUSH_HIT_LOCK);
-        removeTagPrefix(player, RAGING);
+        // cleanup tags
+        player.getCommandTags().removeIf(tag -> tag.startsWith("st_"));
+
+        // cleanup lingering buffs
+        player.removeStatusEffect(StatusEffects.STRENGTH);
+        player.removeStatusEffect(StatusEffects.RESISTANCE);
+        player.removeStatusEffect(StatusEffects.SPEED);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
@@ -1279,9 +1286,9 @@ public class StrengthPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Strength is obviously meant to be a simple, close range brawler that is able to quickly close distances and deal insane damage up close" +
-                "but do very little at range. All abilities are meant to compliment the high damage of the normal hits and these abilities are" +
-                "destructive to the nearby environment.";
+        return "Strength is meant to be a simple, rushdown-type kit that is able to quickly close distances and deal insane damage up close" +
+                " but do very little at range. All abilities are meant to compliment the high damage of the normal hits and these abilities are" +
+                " destructive to the nearby environment.";
     }
 
     @Override
@@ -1311,6 +1318,6 @@ public class StrengthPower implements Power {
     @Override
     public String getUltimateDescription() {
         return "Empower yourself greatly, gaining extra strength, resistance and speed. During this ultimate your ability cooldowns will also" +
-                "be greatly decreased and your abilities will be reset on use.";
+                " be greatly decreased and your abilities will be reset on use.";
     }
 }

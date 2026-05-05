@@ -19,6 +19,7 @@ public class ModEffects {
     public static final StatusEffect POSSESSED = new PossessedEffect();
     public static final StatusEffect GROUNDED = new GroundedEffect();
     public static final StatusEffect BRACED = new BracedEffect();
+    public static final StatusEffect DISPLACED = new DisplacedEffect();
 
     public static void register() {
         Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "fate"), FATE);
@@ -33,5 +34,6 @@ public class ModEffects {
         Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "possessed"), POSSESSED);
         Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "grounded"), GROUNDED);
         Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "braced"), BRACED);
+        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "displaced"), DISPLACED);
     }
 }

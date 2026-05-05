@@ -3,6 +3,7 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.RenderPackets;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
@@ -36,14 +37,30 @@ public class DarknessPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        removeTagPrefix(player, ULT_ACTIVE);
+        removeTagPrefix(player, "dk_");
         removeBlackoutNow(player.getServer(), player.getUuid());
+        player.setNoGravity(false);
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, ULT_ACTIVE);
+        // Clear all generic tags
+        removeTagPrefix(player, "dk_");
+
+        // Ensure blackout gets killed globally
         removeBlackoutNow(player.getServer(), player.getUuid());
+
+        // Reset mist form stuff
+        player.setNoGravity(false);
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.JUMP_BOOST);
+        player.removeStatusEffect(StatusEffects.WEAKNESS);
+        player.removeStatusEffect(StatusEffects.INVISIBILITY);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
@@ -571,7 +588,6 @@ public class DarknessPower implements Power {
     /**
      called from global hook and picks if the boost is the backstab, ultimate or both.
      */
-    // DarknessPower.java - Replace the relevant section in tryAdjustDarknessDamage
     public static boolean tryAdjustDarknessDamage(LivingEntity victim, DamageSource source, float amount) {
         if (amount <= 0) return false;
 
@@ -642,6 +658,11 @@ public class DarknessPower implements Power {
             if (didBackstab && didExposed) {
                 w.playSound(null, victim.getBlockPos(), ModSounds.BIGSTAB, attacker.getSoundCategory(), 0.9f, 0.8f);
                 w.spawnParticles(ParticleTypes.CRIT, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 15, 0.3, 0.3, 0.3, 0.1);
+
+                if (victim instanceof ServerPlayerEntity targetPlayer) {
+                    // shake
+                    CameraShake.shakeNearby(targetPlayer, 3, 10, 0.06f);
+                }
             }
 
         } finally {

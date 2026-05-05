@@ -9,8 +9,12 @@ public interface Power { // Basis for all powers
 
     // Called once when the player gets the power
     void onAssign(ServerPlayerEntity player);
-// take a guess
+
+    // Called when the player loses the power (switches classes)
     default void onRemove(ServerPlayerEntity player) {}
+
+    // Called when the player dies
+    default void onDeath(ServerPlayerEntity player) {}
 
     // Called every tick (20 times per second)
     void onTick(ServerPlayerEntity player);
@@ -38,30 +42,30 @@ public interface Power { // Basis for all powers
     long getUltimateCooldownMs();
 
     //Ability Names
-        default String getPassiveName() { return "Passive"; }
+    default String getPassiveName() { return "Passive"; }
 
-        default String getPrimaryName() {
-            return "Primary";
-        }
+    default String getPrimaryName() {
+        return "Primary";
+    }
 
-        default String getSecondaryName() {
-            return "Secondary";
-        }
+    default String getSecondaryName() {
+        return "Secondary";
+    }
 
-        default String getUltimateName() {
-            return "Ultimate";
-        }
-        // passive on hit effects
-        default void onHit
-        (ServerPlayerEntity attacker,
-         LivingEntity target
-        ) {
-            // default = nothing
-        }
+    default String getUltimateName() {
+        return "Ultimate";
+    }
+    // passive on hit effects
+    default void onHit
+    (ServerPlayerEntity attacker,
+     LivingEntity target
+    ) {
+        // default = nothing
+    }
 
     String getName();
 
-        // HELP / DESCRIPTIONS - for help command
+    // HELP / DESCRIPTIONS - for help command
 
     default String getOverviewDescription() {
         return "No overview description set yet.";

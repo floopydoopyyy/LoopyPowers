@@ -2,15 +2,19 @@ package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Hand;
+import org.joml.Vector3f;
 
 import java.util.Iterator;
 
@@ -26,6 +30,8 @@ public class HealingPower implements Power {
     private static final String ABSORB_TAG = "hf_absorb_";
     private static final String ULT_TAG = "hf_ult_";
 
+    // Bio-energy healing particles (Pinkish-Red)
+    private static final DustParticleEffect HEAL_DUST = new DustParticleEffect(new Vector3f(0.9f, 0.2f, 0.4f), 1.2f);
 
     /* ============================================================
        BASIC
@@ -34,13 +40,7 @@ public class HealingPower implements Power {
     @Override
     public void onAssign(ServerPlayerEntity player) {
         // remove any existing tags (safety cleanup)
-        removeTagPrefix(player, PASSIVE_TAG);
-        removeTagPrefix(player, ABSORB_TAG);
-        removeTagPrefix(player, ABSORB_STORED);
-        removeTagPrefix(player, ULT_TAG);
-        removeTagPrefix(player, ULT_PHASE);
-        removeTagPrefix(player, LS_TAG);
-        removeTagPrefix(player, SMOOTH_TAG);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("hf_"));
 
         // enable passive
         player.getCommandTags().add(PASSIVE_TAG + PASSIVE_DELAY);
@@ -48,13 +48,21 @@ public class HealingPower implements Power {
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, PASSIVE_TAG);
-        removeTagPrefix(player, ABSORB_TAG);
-        removeTagPrefix(player, ABSORB_STORED);
-        removeTagPrefix(player, ULT_TAG);
-        removeTagPrefix(player, ULT_PHASE);
-        removeTagPrefix(player, LS_TAG);
-        removeTagPrefix(player, SMOOTH_TAG);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("hf_"));
+
+        // Strip any buffs/debuffs given by the power
+        player.removeStatusEffect(StatusEffects.STRENGTH);
+        player.removeStatusEffect(StatusEffects.ABSORPTION);
+        player.removeStatusEffect(StatusEffects.REGENERATION);
+        player.removeStatusEffect(StatusEffects.RESISTANCE);
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+        player.removeStatusEffect(StatusEffects.GLOWING);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
@@ -96,6 +104,17 @@ public class HealingPower implements Power {
                 if (ticks <= 0) {
                     float maxHeal = player.getMaxHealth();
 
+                    // Only emit particles if health is actually going up
+                    if (player.getHealth() < maxHeal) {
+                        player.getServerWorld().spawnParticles(
+                                HEAL_DUST,
+                                player.getX(),
+                                player.getBodyY(0.5),
+                                player.getZ(),
+                                2, 0.3, 0.5, 0.3, 0.01
+                        );
+                    }
+
                     // small continuous heal
                     player.heal(HEALING); // not regeneration as they would not regen when hungry
 
@@ -135,24 +154,38 @@ public class HealingPower implements Power {
         // blood
         removed += removeBleed(player) ? 1 : 0;
 
+        // nature (Tethered)
+        removed += NaturePower.cleanseVines(player) ? 1 : 0;
+
         // these are cleared first as they may have associated status effects
         removed += removeTagEffects(player,
                 // sound
                 "sd_resonated_",
                 "sd_dampened_",
-                "sd_stun_lock_",
                 // ice
                 "ice_frz_p_",   // freeze points
-                "ice_frz_d_"   // decay timer
-                //"ice_frz_i_"    // immunity timer
+                "ice_frz_d_",   // decay timer
+                // dimensional
+                "int_displaced_",
+                // psychic
+                "psy_compel_",
+                "psy_ult_ctrl_",
+                // cosmic
+                "cos_fate_dmg_",
+                "cos_fate_timer_",
+                "cos_fate_deton_",
+                // telekinesis
+                "tk_suspend_",
+                "tk_choke_"
         );
 
-        // Copy effects first (avoids concurrent modification issues)
-        for (StatusEffectInstance effect : new java.util.ArrayList<>(player.getStatusEffects())) {
+        // copy effects safely using active statuses
+        for (net.minecraft.entity.effect.StatusEffect effectType : new java.util.ArrayList<>(player.getActiveStatusEffects().keySet())) {
 
-            if (effect.getEffectType().isBeneficial()) continue;
+            // keep the good stuff
+            if (effectType.getCategory() == net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) continue;
 
-            player.removeStatusEffect(effect.getEffectType());
+            player.removeStatusEffect(effectType);
             removed++;
         }
 
@@ -188,6 +221,16 @@ public class HealingPower implements Power {
                 3,
                 0.7, 0.9, 0.7,
                 0.1
+        );
+
+        w.spawnParticles(
+                HEAL_DUST,
+                player.getX(),
+                player.getBodyY(0.5),
+                player.getZ(),
+                30,
+                0.6, 0.8, 0.6,
+                0.05
         );
 
         // sound
@@ -247,6 +290,8 @@ public class HealingPower implements Power {
     private static final float BURST_DAMAGE_PER_STORED = 0.6f;
     private static final float BURST_MAX_SCALING = 20.0f; // cap
 
+    private static final float ABSORB_DAMAGE_TAKEN_MULT = 0.25f; // player takes this percentage of damage
+
     // Expelled debuff tuning
     private static final int EXPELLED_DURATION = 60; // 3 seconds
     private static final int EXPELLED_AMPLIFIER = 0; // always low level
@@ -270,7 +315,6 @@ public class HealingPower implements Power {
     private static final float VFX_SUPER_SHINE_THRESHOLD = 16.0f;
 
     private static final int EXPELLED_PARTICLES = 6;
-    private static final double EXPELLED_PARTICLE_SPREAD = 0.4;
 
     private static final String ABSORB_STORED = "hf_absorb_stored_";
 
@@ -295,15 +339,26 @@ public class HealingPower implements Power {
                 // constant fx
                 ServerWorld w = player.getServerWorld();
 
+                float stored = getStoredAbsorb(player);
+                float capped = Math.min(stored, BURST_MAX_SCALING);
+                float intensity = capped / BURST_MAX_SCALING; // 0.0 to 1.0 scaling
+
+                int sparkCount = 2 + (int)(intensity * 5); // 2 to 7 sparks per tick
+
                 w.spawnParticles(
                         ParticleTypes.ELECTRIC_SPARK,
                         player.getX(),
                         player.getBodyY(0.5),
                         player.getZ(),
-                        2,                  // per tick
-                        0.5, 0.6, 0.5,      // spread
-                        0.02
+                        sparkCount,
+                        0.5, 0.6, 0.5,
+                        0.02 + (intensity * 0.05) // speed ramps up
                 );
+
+                // extra fx when higher charges
+                if (intensity > 0.5f && w.getTime() % 5 == 0) {
+                    w.spawnParticles(ParticleTypes.END_ROD, player.getX(), player.getBodyY(0.5), player.getZ(), 1, 0.5, 0.6, 0.5, 0.01);
+                }
 
                 int ticks;
                 try {
@@ -407,6 +462,16 @@ public class HealingPower implements Power {
                     0, 0, 0,
                     0
             );
+
+            w.spawnParticles(
+                    HEAL_DUST,
+                    px + ox,
+                    py + oy,
+                    pz + oz,
+                    15,
+                    0.4, 0.4, 0.4,
+                    0.05
+            );
         }
 
         // mid-tier shine
@@ -441,7 +506,7 @@ public class HealingPower implements Power {
             if (e == player) continue;
 
             // damage
-            e.damage(player.getDamageSources().magic(), burstDamage);
+            e.damage(ModDamageTypes.absorbpulse(w, player), burstDamage);
 
             // knockback
             double dx = e.getX() - player.getX();
@@ -484,18 +549,20 @@ public class HealingPower implements Power {
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(),
                 1.0f, pitch);
+
+        CameraShake.shakeNearby(player, 6.0, 10, 0.7f);
     }
 
     private void applyAndCleanse(ServerPlayerEntity player, LivingEntity target) {
         ServerWorld w = player.getServerWorld();
 
-        // Copy player's effects to avoid concurrent modification
+        // fetch active effects safely
         java.util.List<StatusEffectInstance> effects =
-                new java.util.ArrayList<>(player.getStatusEffects());
+                new java.util.ArrayList<>(player.getActiveStatusEffects().values());
 
         for (StatusEffectInstance effect : effects) {
-            // only take negative effects
-            if (effect.getEffectType().isBeneficial()) continue;
+            // only take negative effects (catch all categories just in case)
+            if (effect.getEffectType().getCategory() == net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) continue;
 
             // apply weakened version
             target.addStatusEffect(new StatusEffectInstance(
@@ -604,12 +671,17 @@ public class HealingPower implements Power {
         for (String tag : player.getCommandTags()) {
             if (tag.startsWith(ABSORB_TAG) && !tag.startsWith(ABSORB_STORED)) {
 
-                // split damage
-                float absorbed = amount * 0.8f;
-                float applied = amount * 0.2f;
+                // split damage using the constant multiplier
+                float applied = amount * ABSORB_DAMAGE_TAKEN_MULT;
+                float absorbed = amount * (1.0f - ABSORB_DAMAGE_TAKEN_MULT);
 
                 // store absorbed portion
                 addToStoredAbsorb(player, absorbed);
+
+                // Get updated store to scale on-hit FX
+                float newStored = getStoredAbsorb(player);
+                float capped = Math.min(newStored, BURST_MAX_SCALING);
+                float intensity = capped / BURST_MAX_SCALING; // 0.0 to 1.0
 
                 // uses custom damage type to avoid recursion
                 player.damage(
@@ -617,11 +689,18 @@ public class HealingPower implements Power {
                         applied
                 );
 
-                // fx
+                // ramping sound
+                float pitch = 0.8f + (intensity * 1.2f);
+                player.getServerWorld().playSound(null, player.getBlockPos(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, pitch);
+
+                // ramping fx
+                int fxCount = 5 + (int)(intensity * 15);
                 player.getServerWorld().spawnParticles(
                         ParticleTypes.TOTEM_OF_UNDYING,
                         player.getX(), player.getBodyY(0.5), player.getZ(),
-                        2, 0.2, 0.3, 0.2, 0.01
+                        fxCount,
+                        0.2 + intensity * 0.2, 0.3 + intensity * 0.2, 0.2 + intensity * 0.2,
+                        0.01 + intensity * 0.05
                 );
 
                 return true; // cancel original damage
@@ -642,6 +721,8 @@ public class HealingPower implements Power {
     private static final int ULT_DURATION = 180;
 
     private static final int EFFECT_REFRESH = 30;
+
+    private static final float MEDIC_SOUND_CHANCE = 0.5f;
 
     // lifesteal scaling
     private static final float LS_HIGH = 0.35f;
@@ -690,6 +771,16 @@ public class HealingPower implements Power {
                         2,              // low count
                         0.4, 0.6, 0.4,  // spread
                         0.01
+                );
+
+                w.spawnParticles(
+                        HEAL_DUST,
+                        player.getX(),
+                        player.getBodyY(0.5),
+                        player.getZ(),
+                        3,
+                        0.5, 0.6, 0.5,
+                        0.02
                 );
 
                 // occasional other
@@ -742,10 +833,14 @@ public class HealingPower implements Power {
                                 0.1
                         );
 
+                        net.minecraft.sound.SoundEvent sound = w.random.nextFloat() < MEDIC_SOUND_CHANCE ? ModSounds.MEDIC : SoundEvents.ENTITY_ENDER_DRAGON_FLAP;
+
                         w.playSound(null, player.getBlockPos(),
-                                SoundEvents.ENTITY_ENDER_DRAGON_GROWL,
+                                sound,
                                 player.getSoundCategory(),
-                                0.8f, 1.4f);
+                                0.9f, 1.0f);
+
+                        CameraShake.shakeNearby(player, 6.0, 13, 0.7f);
                     }
                 }
 
@@ -850,9 +945,10 @@ public class HealingPower implements Power {
     private void tryCleanse(ServerPlayerEntity player, int ticks, int interval) {
         if (ticks % interval != 0) return;
 
-        for (StatusEffectInstance effect : new java.util.ArrayList<>(player.getStatusEffects())) {
-            if (!effect.getEffectType().isBeneficial()) {
-                player.removeStatusEffect(effect.getEffectType());
+        // safe checking using category instead of isBeneficial
+        for (net.minecraft.entity.effect.StatusEffect effectType : new java.util.ArrayList<>(player.getActiveStatusEffects().keySet())) {
+            if (effectType.getCategory() != net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) {
+                player.removeStatusEffect(effectType);
                 break;
             }
         }

@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.manager;
 
 import com.yourname.loopypowers.CooldownUI;
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.network.AbilityPackets;
 import com.yourname.loopypowers.power.*;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -77,7 +78,8 @@ public class PowerManager {
         // Persist immediately so admin commands survive crashes
         PlayerDataStore.save(player);
 
-        player.sendMessage(Text.literal("§aYou gained: §e" + power.getName()), false);
+        player.sendMessage(Text.literal("§eYou gained the power: §6" + power.getName()), false);
+        player.sendMessage(Text.literal("§eType '/power help overview' for ability explanations."));
     }
 
     public static void removePower(ServerPlayerEntity player) {
@@ -87,7 +89,7 @@ public class PowerManager {
         clearAllCooldowns(player);
         player.clearStatusEffects();
 
-        // Save the now-empty state so the file reflects the removal
+        // Save the now-empty state so the file also has this
         PlayerDataStore.save(player);
     }
 
@@ -221,6 +223,13 @@ public class PowerManager {
         Power power = PLAYER_POWERS.get(player.getUuid());
         if (power == null) return;
 
+        // Displaced lock
+        // EXCEPTIONS
+        if (player.hasStatusEffect(ModEffects.DISPLACED) && !(power instanceof HealingPower)) {
+            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+            return;
+        }
+
         String key = abilityKey(power, AbilityTypes.PRIMARY);
         if (!isCooldownReady(player, key)) return;
 
@@ -231,8 +240,13 @@ public class PowerManager {
     }
 
     public static void useSecondary(ServerPlayerEntity player) {
+        if (player.hasStatusEffect(ModEffects.DISPLACED)) {
+            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+            return;
+        }
+
         if (getLevel(player) < 2) {
-            CooldownUI.pushActionbarOverride(player, "§cYou must be connection level 2 to use your secondary.", 30);
+            CooldownUI.pushActionbarOverride(player, "§cYou must be level 2 to use your secondary.", 30);
             return;
         }
 
@@ -249,8 +263,13 @@ public class PowerManager {
     }
 
     public static void useUltimate(ServerPlayerEntity player) {
+        if (player.hasStatusEffect(ModEffects.DISPLACED)) {
+            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+            return;
+        }
+
         if (getLevel(player) < 3) {
-            CooldownUI.pushActionbarOverride(player, "§cYou must be connection level 3 to use your ultimate.", 30);
+            CooldownUI.pushActionbarOverride(player, "§cYou must be level 3 to use your ultimate.", 30);
             return;
         }
 
@@ -311,7 +330,7 @@ public class PowerManager {
         int current = getLevel(player);
         if (current < 3) {
             setLevel(player, current + 1);
-            player.sendMessage(Text.literal("§bYour power evolved to Level " + (current + 1) + "!"), false);
+            player.sendMessage(Text.literal("§bYour bond evolved to Level " + (current + 1) + "!"), false);
         }
     }
 

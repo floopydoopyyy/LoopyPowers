@@ -5,7 +5,6 @@ import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.generation.ModOreGeneration;
 import com.yourname.loopypowers.item.ModItems;
-import com.yourname.loopypowers.manager.AbilityTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PlayerDataStore;
 import com.yourname.loopypowers.manager.PowerManager;
@@ -21,14 +20,19 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.mob.ZombieEntity;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +43,17 @@ public class Loopypowers implements ModInitializer {
 
     public static final String MOD_ID = "loopypowers";
     public static final Logger LOGGER  = LoggerFactory.getLogger(MOD_ID);
+
+    // chance for onepunch
+    private static final float ONE_PUNCH_CHANCE = 0.05f;
+
+    // flower planting odds
+    private static final float FLOWER_CORPSE_CHANCE = 0.15f;
+    // pvz zombie kill odds
+    private static final float PVZ_KILL_CHANCE = 0.03f;
+
+    // if the debug setting is toggled
+    public static boolean onePunchDebugEnabled = false;
 
     @Override
     public void onInitialize() {
@@ -92,6 +107,16 @@ public class Loopypowers implements ModInitializer {
             PowerManager.copyCooldowns(oldPlayer, newPlayer);
             PlayerDataStore.save(newPlayer);
         });
+
+        // death hook
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
+            if (entity instanceof ServerPlayerEntity sp) {
+                Power power = PowerManager.getPower(sp);
+                if (power != null) {
+                    power.onDeath(sp);
+                }
+            }
+        });
     }
 
     /* ============================================================
@@ -102,12 +127,6 @@ public class Loopypowers implements ModInitializer {
         registerMeleeHitCallback();
         registerDamageHook();
     }
-
-    // how often they get sent to the stratosphere normally
-    private static final float ONE_PUNCH_CHANCE = 0.05f;
-
-    // if the debug setting is toggled
-    public static boolean onePunchDebugEnabled = false;
 
     private void registerMeleeHitCallback() {
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
@@ -229,6 +248,32 @@ public class Loopypowers implements ModInitializer {
 
                     return false;
                 }
+
+                // plant flower on corpse
+                if (attackerPower instanceof NaturePower && amount >= victim.getHealth()) {
+                    if (victim.getWorld() instanceof ServerWorld sw) {
+
+                        // plant a flower
+                        BlockPos under = victim.getBlockPos().down();
+                        if (sw.getBlockState(under).isOf(Blocks.GRASS_BLOCK) && sw.getBlockState(victim.getBlockPos()).isAir()) {
+                            if (sw.random.nextFloat() < FLOWER_CORPSE_CHANCE) {
+                                Block[] flowers = {Blocks.DANDELION, Blocks.POPPY, Blocks.BLUE_ORCHID, Blocks.ALLIUM, Blocks.AZURE_BLUET, Blocks.RED_TULIP, Blocks.ORANGE_TULIP, Blocks.WHITE_TULIP, Blocks.PINK_TULIP, Blocks.OXEYE_DAISY, Blocks.CORNFLOWER, Blocks.LILY_OF_THE_VALLEY};
+                                Block flower = flowers[sw.random.nextInt(flowers.length)];
+                                sw.setBlockState(victim.getBlockPos(), flower.getDefaultState());
+                                victim.getWorld().playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_GRASS_PLACE, SoundCategory.BLOCKS, 0.6f, 1.0f);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // PVZ GW2 funny pop sound
+            if (victim instanceof ZombieEntity && amount >= victim.getHealth()) {
+                if (source.isOf(ModDamageTypes.THORN) || source.isOf(ModDamageTypes.VINE_BIND)) {
+                    if (victim.getWorld().random.nextFloat() < PVZ_KILL_CHANCE) {
+                        victim.getWorld().playSound(null, victim.getBlockPos(), ModSounds.PVZPOP, net.minecraft.sound.SoundCategory.HOSTILE, 0.7f, 1.0f);
+                    }
+                }
             }
 
             // ── VICTIM-SIDE ───────────────────────────────────────────────────
@@ -309,20 +354,20 @@ public class Loopypowers implements ModInitializer {
                 return true;
             }
 
-            if (victimPower instanceof DimensionalPower) {
-                if (DimensionalPower.hasTag(victimPlayer, "int_immune_")) return false;
-            }
-
             if (victimPower instanceof DimensionalPower dp) {
+                if (DimensionalPower.hasTag(victimPlayer, "int_immune_")) return false;
+
+                // FIXED: Actually call onDamaged so your passive triggers again!
                 dp.onDamaged(victimPlayer);
             }
 
-            // ── GLOBAL: DISPLACEMENT IMMUNITY ────────────────────────────────
+            // ── GLOBAL ────────────────────────────────
+            // DISPLACE IMMUNITY
 
-            if (DimensionalPower.hasTag(victim, "int_displaced_")) return false;
+            if (victim.hasStatusEffect(ModEffects.DISPLACED)) return false;
 
             if (source.getAttacker() instanceof LivingEntity attacker) {
-                if (DimensionalPower.hasTag(attacker, "int_displaced_")) return false;
+                return !attacker.hasStatusEffect(ModEffects.DISPLACED);
             }
 
             return true;
@@ -338,20 +383,24 @@ public class Loopypowers implements ModInitializer {
     }
 
     private void onServerTick(MinecraftServer server) {
+        // GLOBAL TICKS (Runs exactly once per server tick)
+        RitualManager.tick(server);
+
+        // DIMENSION TICKS (Runs once for overworld, once for nether, once for end)
         for (ServerWorld world : server.getWorlds()) {
             FortunePower.tickHousesWorld(world);
         }
 
+        // PLAYER TICKS
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             tickPlayer(player);
         }
     }
 
     private void tickPlayer(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
-
+        // note to self: only stuff that is ticked PER PLAYER should be here
+        // I hate modding.
         CooldownUI.tick(player);
-        RitualManager.tick(world);
 
         Power power = PowerManager.getPower(player);
         if (power == null) return;

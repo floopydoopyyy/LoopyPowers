@@ -71,7 +71,14 @@ public class PowerRitual implements Ritual {
 
     /** return true when done */
     public boolean tick(ServerWorld world) {
-        if (player.isRemoved() || !player.isAlive()) return true;
+        // if they die/disconnect mid-ritual, clean up and cancel it
+        if (player.isRemoved() || !player.isAlive()) {
+            if (player instanceof ServerPlayerEntity sp) {
+                cancelRitual(sp);
+            }
+            return true;
+        }
+
         if (!(player instanceof ServerPlayerEntity sp)) return true;
 
         ticks++;
@@ -141,8 +148,14 @@ public class PowerRitual implements Ritual {
 
         sp.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 5, 10, true, false, false));
-        sp.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.RESISTANCE, 5, 255, true, false, false));
+
+        // intentionally removed resistance so players can be killed during it
+    }
+
+    /** cleans up if the ritual is interrupted by death or disconnect */
+    private void cancelRitual(ServerPlayerEntity sp) {
+        sp.removeStatusEffect(StatusEffects.SLOWNESS);
+        sp.removeStatusEffect(StatusEffects.BLINDNESS);
     }
 
     /* ============================================================
@@ -423,7 +436,6 @@ public class PowerRitual implements Ritual {
         // remove effects
         sp.removeStatusEffect(StatusEffects.LEVITATION);
         sp.removeStatusEffect(StatusEffects.BLINDNESS);
-        sp.removeStatusEffect(StatusEffects.RESISTANCE);
         sp.heal(2.0f);
 
         // final particles

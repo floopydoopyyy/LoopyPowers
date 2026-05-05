@@ -12,6 +12,9 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -49,6 +52,9 @@ public class FirePower implements Power {
     private static final int SECONDARY_HOVER_TICKS = 140;
     private static final int SECONDARY_NO_FALL_TICKS = 200;
 
+    // chance to cook a nice snack
+    private static final float COOK_FOOD_CHANCE = 0.35f;
+
     // Hover Mechanics
     private static final double HOVER_LIFT_FORCE = 0.045;
     private static final double HOVER_GRAVITY_LIMIT = -0.08;
@@ -81,8 +87,8 @@ public class FirePower implements Power {
     private static final double ULTIMATE_PULL_VERTICAL_MODIFIER = 0.2;
 
     // Camera Shake
-    private static final int ULT_START_SHAKE_DURATION = 30;
-    private static final int ULT_START_SHAKE_AMPLITUDE = 100;
+    private static final int ULT_START_SHAKE_RADIUS = 30;
+    private static final int ULT_START_SHAKE_TIME = 100;
     private static final float ULT_START_SHAKE_INTENSITY = 0.6f;
 
     private static final int ULT_DETONATE_SHAKE_DURATION = 50;
@@ -105,9 +111,23 @@ public class FirePower implements Power {
     }
 
     @Override
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fire_"));
+        player.removeStatusEffect(StatusEffects.FIRE_RESISTANCE);
+        player.removeStatusEffect(ModEffects.BRACED);
+        player.removeStatusEffect(StatusEffects.RESISTANCE);
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
+
+    @Override
     public void onTick(ServerPlayerEntity player) {
         // PASSIVES
-        if (!PassiveManager.isEnabled(player)) {
+        if (PassiveManager.isEnabled(player)) {
             StatusEffectInstance fireRes = player.getStatusEffect(StatusEffects.FIRE_RESISTANCE);
             if (fireRes == null || fireRes.getDuration() < 100) {
                 player.addStatusEffect(new StatusEffectInstance(
@@ -191,9 +211,43 @@ public class FirePower implements Power {
         player.getCommandTags().add("fire_hover");
         player.getCommandTags().add("fire_hover_ticks_" + SECONDARY_HOVER_TICKS);
 
+        // snack time
+        if (player.getServerWorld().random.nextFloat() < COOK_FOOD_CHANCE) {
+            tryCookSnack(player);
+        }
+
         CameraShake.shakeNearby(player, SECONDARY_SHAKE_DURATION, SECONDARY_SHAKE_AMPLITUDE, SECONDARY_SHAKE_INTENSITY);
 
         PowerManager.clearAbilityCooldown(player, AbilityTypes.PRIMARY);
+    }
+
+    private void tryCookSnack(ServerPlayerEntity player) { // check if player is holding a cookable food and cook it
+        Hand[] hands = { Hand.MAIN_HAND, Hand.OFF_HAND };
+        for (Hand hand : hands) {
+            ItemStack stack = player.getStackInHand(hand);
+            if (stack.isEmpty()) continue;
+
+            Item cooked = getCookedVariant(stack.getItem());
+            if (cooked != null) {
+                stack.decrement(1);
+                player.getInventory().offerOrDrop(new ItemStack(cooked));
+                player.getServerWorld().playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.PLAYERS, 0.4f, 2.0f);
+                break; // only do one
+            }
+        }
+    }
+
+    private Item getCookedVariant(Item raw) { // cookable items
+        if (raw == Items.BEEF) return Items.COOKED_BEEF;
+        if (raw == Items.PORKCHOP) return Items.COOKED_PORKCHOP;
+        if (raw == Items.CHICKEN) return Items.COOKED_CHICKEN;
+        if (raw == Items.MUTTON) return Items.COOKED_MUTTON;
+        if (raw == Items.RABBIT) return Items.COOKED_RABBIT;
+        if (raw == Items.COD) return Items.COOKED_COD;
+        if (raw == Items.SALMON) return Items.COOKED_SALMON;
+        if (raw == Items.POTATO) return Items.BAKED_POTATO;
+        if (raw == Items.KELP) return Items.DRIED_KELP;
+        return null;
     }
 
     private void launchExplosion(ServerPlayerEntity player) {
@@ -362,7 +416,7 @@ public class FirePower implements Power {
         player.getCommandTags().add("fire_ultimate_charge");
         player.getCommandTags().add("fire_ultimate_charge_ticks_" + ULTIMATE_CHARGE_TICKS);
 
-        CameraShake.shakeNearby(player, ULT_START_SHAKE_DURATION, ULT_START_SHAKE_AMPLITUDE, ULT_START_SHAKE_INTENSITY);
+        CameraShake.shakeNearby(player, ULT_START_SHAKE_RADIUS, ULT_START_SHAKE_TIME, ULT_START_SHAKE_INTENSITY);
 
         player.getServerWorld().playSound(
                 null,

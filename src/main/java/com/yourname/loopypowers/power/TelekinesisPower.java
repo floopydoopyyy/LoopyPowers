@@ -6,11 +6,9 @@ import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Box;
@@ -25,6 +23,7 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.FallingBlockEntity;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.server.world.ServerWorld;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.HashSet;
@@ -48,11 +47,11 @@ public class TelekinesisPower implements Power {
 
     // Maps a thrown/yanked entity's UUID to the UUID of the player who caused it.
     // Populated in markForImpactTracking, consumed in handleImpactDamage.
-    private final Map<UUID, UUID> impactOwner = new HashMap<>();
+    private static final Map<UUID, UUID> impactOwner = new HashMap<>();
 
     // Maps a suspended/choked entity's UUID to the UUID of the player who applied it.
     // Populated in activateSecondary, consumed in handleSuspendAndChoke.
-    private final Map<UUID, UUID> suspendOwner = new HashMap<>();
+    private static final Map<UUID, UUID> suspendOwner = new HashMap<>();
 
     // ── Passive — Forceful Strikes ──────────────────────────────
     private static final double PASSIVE_KB_MULT     = 1.8;
@@ -119,11 +118,18 @@ public class TelekinesisPower implements Power {
     private static final int    DEBRIS_REGEN_INTERVAL    = 20;  // ticks per block regen
     private static final int    DEBRIS_REGEN_AMOUNT      = 5;   // blocks per regen tick
 
-    private final Map<UUID, Double> orbitAngles = new HashMap<>();
-    private int debrisFieldTicksRemaining = 0;
-    private final Map<UUID, UUID> scheduledExplosions = new HashMap<>();
-    private final Map<UUID, Vec3d> lastKnownBlockPos = new HashMap<>();
-    private final Map<UUID, Long> lastSwingTime = new HashMap<>();
+    // Global trackers for thrown blocks and logic
+    private static final Map<UUID, UUID> scheduledExplosions = new HashMap<>();
+    private static final Map<UUID, Vec3d> lastKnownBlockPos = new HashMap<>();
+    private static final Map<UUID, Long> lastSwingTime = new HashMap<>();
+
+    // MULTIPLAYER FIX: Store debris fields by the player UUID
+    private static final Map<UUID, DebrisField> DEBRIS_FIELDS = new HashMap<>();
+
+    private static class DebrisField {
+        final Map<UUID, Double> orbitAngles = new HashMap<>();
+        int ticksRemaining = 0;
+    }
 
     // EGG
     private static final int    WOOLLIAM_CHANCE            = 40;   // 1 in whatever chance for woolliam to make a cameo
@@ -131,7 +137,6 @@ public class TelekinesisPower implements Power {
     /* ============================================================
        PARTICLE STUFF
        ============================================================ */
-    // now up here cus idk felt like it
 
     private static final DustParticleEffect TK_PINK =
             new DustParticleEffect(new Vector3f(1.0f, 0.2f, 0.7f), 1.2f);
@@ -259,7 +264,59 @@ public class TelekinesisPower implements Power {
        ============================================================ */
 
     @Override
-    public void onAssign(ServerPlayerEntity player) {}
+    public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("tk_"));
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("tk_"));
+
+        UUID pid = player.getUuid();
+        lastSwingTime.remove(pid);
+
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                // Clear debris field instantly
+                clearDebrisField(w, pid);
+
+                // Clear pending thrown blocks
+                List<UUID> blocksToRemove = new ArrayList<>();
+                for (Map.Entry<UUID, UUID> entry : scheduledExplosions.entrySet()) {
+                    if (entry.getValue().equals(pid)) {
+                        Entity e = w.getEntity(entry.getKey());
+                        if (e != null) e.discard();
+                        blocksToRemove.add(entry.getKey());
+                    }
+                }
+                blocksToRemove.forEach(u -> {
+                    scheduledExplosions.remove(u);
+                    lastKnownBlockPos.remove(u);
+                });
+
+                // Clear targets suspended, choked, or knocked airborne by this player
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
+                    if (pid.equals(suspendOwner.get(e.getUuid()))) {
+                        removeTagPrefix(e, TK_SUSPEND_TAG);
+                        removeTagPrefix(e, TK_CHOKE_TAG);
+                        e.removeStatusEffect(net.minecraft.entity.effect.StatusEffects.SLOWNESS);
+                        suspendOwner.remove(e.getUuid());
+                    }
+
+                    if (pid.equals(impactOwner.get(e.getUuid()))) {
+                        removeTagPrefix(e, TK_AIRBORNE_TAG);
+                        prevVelocity.remove(e.getUuid());
+                        impactOwner.remove(e.getUuid());
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
@@ -463,7 +520,7 @@ public class TelekinesisPower implements Power {
         if (stillSuspended) {
             e.setVelocity(e.getVelocity().x * 0.3, SUSPEND_FLOAT_VEL, e.getVelocity().z * 0.3);
             e.velocityModified = true;
-            e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 5, 4, true, false, false));
+            e.addStatusEffect(new StatusEffectInstance(net.minecraft.entity.effect.StatusEffects.SLOWNESS, 5, 4, true, false, false));
             spawnSuspendAura(world, e, time);
             return;
         }
@@ -555,14 +612,13 @@ public class TelekinesisPower implements Power {
     public void activateUltimate(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
-        clearDebrisField(world);
+        clearDebrisField(world, player.getUuid());
 
-        // Attempt to harvest blocks, but we no longer care if the count is 0
-        int harvested = tryHarvestBlocks(player, world, DEBRIS_MAX_BLOCKS);
+        DebrisField field = new DebrisField();
+        field.ticksRemaining = DEBRIS_ORBIT_TICKS;
+        DEBRIS_FIELDS.put(player.getUuid(), field);
 
-        // removed: the "if (harvested == 0) return;" check that caused whiffs
-
-        debrisFieldTicksRemaining = DEBRIS_ORBIT_TICKS;
+        int harvested = tryHarvestBlocks(player, world, DEBRIS_MAX_BLOCKS, field);
 
         // Visual rings always spawn to show the energy field is active
         for (int ring = 0; ring < 3; ring++) {
@@ -602,7 +658,7 @@ public class TelekinesisPower implements Power {
                 SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 0.6f, 0.5f);
     }
 
-    private int tryHarvestBlocks(ServerPlayerEntity player, ServerWorld world, int maxCount) {
+    private int tryHarvestBlocks(ServerPlayerEntity player, ServerWorld world, int maxCount, DebrisField field) {
         Vec3d center = player.getPos();
         int radius = (int) Math.ceil(DEBRIS_HARVEST_RADIUS);
         List<BlockPos> candidates = new ArrayList<>();
@@ -655,7 +711,7 @@ public class TelekinesisPower implements Power {
                 falling.timeFalling = -32768;
             }
 
-            orbitAngles.put(orbitEntity.getUuid(), (Math.PI * 2.0 * harvested) / maxCount);
+            field.orbitAngles.put(orbitEntity.getUuid(), (Math.PI * 2.0 * harvested) / maxCount);
             harvested++;
         }
         return harvested;
@@ -679,8 +735,11 @@ public class TelekinesisPower implements Power {
                 || state.isIn(net.minecraft.registry.tag.BlockTags.PICKAXE_MINEABLE); // Stones
     }
 
-    private void clearDebrisField(ServerWorld world) {
-        for (UUID uuid : orbitAngles.keySet()) {
+    private void clearDebrisField(ServerWorld world, UUID playerId) {
+        DebrisField field = DEBRIS_FIELDS.remove(playerId);
+        if (field == null) return;
+
+        for (UUID uuid : field.orbitAngles.keySet()) {
             net.minecraft.entity.Entity e = null;
             // Find and discard all tracked falling blocks
             for (net.minecraft.entity.Entity candidate : world.iterateEntities()) {
@@ -691,8 +750,7 @@ public class TelekinesisPower implements Power {
             }
             if (e != null) e.discard();
         }
-        orbitAngles.clear();
-        debrisFieldTicksRemaining = 0;
+        field.orbitAngles.clear();
     }
 
     /**
@@ -701,20 +759,22 @@ public class TelekinesisPower implements Power {
      * ticks cooldowns, and cleans up dead blocks.
      */
     private void handleDebrisField(ServerPlayerEntity player) {
-        if (debrisFieldTicksRemaining <= 0) return;
-        handleDebrisRegen(player);
-        ServerWorld world = player.getServerWorld();
-        debrisFieldTicksRemaining--;
+        DebrisField field = DEBRIS_FIELDS.get(player.getUuid());
+        if (field == null || field.ticksRemaining <= 0) return;
 
-        if (debrisFieldTicksRemaining <= 0) { clearDebrisField(world); return; }
+        handleDebrisRegen(player, field);
+        ServerWorld world = player.getServerWorld();
+        field.ticksRemaining--;
+
+        if (field.ticksRemaining <= 0) { clearDebrisField(world, player.getUuid()); return; }
 
         Vec3d playerPos = player.getPos().add(0, 1.0, 0);
         tickTag(player, DEBRIS_THROW_CD_TAG);
         Set<UUID> toRemove = new HashSet<>();
-        int total = orbitAngles.size();
+        int total = field.orbitAngles.size();
 
         int index = 0;
-        for (Map.Entry<UUID, Double> entry : orbitAngles.entrySet()) {
+        for (Map.Entry<UUID, Double> entry : field.orbitAngles.entrySet()) {
             UUID uuid = entry.getKey();
             Entity ent = world.getEntity(uuid);
 
@@ -748,7 +808,7 @@ public class TelekinesisPower implements Power {
             world.spawnParticles(isInner ? TK_MAGENTA : TK_DARK_PINK, target.x, target.y, target.z, 1, 0.04, 0.04, 0.04, 0.01);
             index++;
         }
-        toRemove.forEach(orbitAngles::remove);
+        toRemove.forEach(field.orbitAngles::remove);
         // below should not use blocks at all
 
         // pull and damage
@@ -817,11 +877,12 @@ public class TelekinesisPower implements Power {
     }
 
     public void throwDebrisProjectile(ServerPlayerEntity player) {
-        if (debrisFieldTicksRemaining <= 0) return;
+        DebrisField field = DEBRIS_FIELDS.get(player.getUuid());
+        if (field == null) return;
         if (hasTag(player, DEBRIS_THROW_CD_TAG)) return;
 
         ServerWorld world = player.getServerWorld();
-        if (orbitAngles.size() < DEBRIS_THROW_COUNT) {
+        if (field.orbitAngles.size() < DEBRIS_THROW_COUNT) {
             world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_STONE_HIT, player.getSoundCategory(), 0.6f, 0.5f);
             return;
         }
@@ -831,7 +892,7 @@ public class TelekinesisPower implements Power {
         Vec3d up = look.crossProduct(right).normalize();
 
         int thrown = 0;
-        Iterator<Map.Entry<UUID, Double>> it = orbitAngles.entrySet().iterator();
+        Iterator<Map.Entry<UUID, Double>> it = field.orbitAngles.entrySet().iterator();
 
         while (it.hasNext() && thrown < DEBRIS_THROW_COUNT) {
             Map.Entry<UUID, Double> entry = it.next();
@@ -900,6 +961,10 @@ public class TelekinesisPower implements Power {
         // check for impacts/update positon
         for (Map.Entry<UUID, UUID> entry : scheduledExplosions.entrySet()) {
             UUID entityUuid = entry.getKey();
+
+            // Only process blocks thrown by THIS player to avoid double processing
+            if (!entry.getValue().equals(player.getUuid())) continue;
+
             Entity ent = world.getEntity(entityUuid);
 
             if (ent == null) continue;
@@ -966,9 +1031,7 @@ public class TelekinesisPower implements Power {
                 1.0f, 0.8f);
     }
 
-    private void handleDebrisRegen(ServerPlayerEntity player) {
-        if (debrisFieldTicksRemaining <= 0) return;
-
+    private void handleDebrisRegen(ServerPlayerEntity player, DebrisField field) {
         ServerWorld world = player.getServerWorld();
         long time = world.getTime();
 
@@ -982,17 +1045,17 @@ public class TelekinesisPower implements Power {
         if (time % DEBRIS_REGEN_INTERVAL != 0) return;
 
         // if full
-        if (orbitAngles.size() >= DEBRIS_MAX_BLOCKS) return;
+        if (field.orbitAngles.size() >= DEBRIS_MAX_BLOCKS) return;
 
         int toRegen = Math.min(DEBRIS_REGEN_AMOUNT,
-                DEBRIS_MAX_BLOCKS - orbitAngles.size());
+                DEBRIS_MAX_BLOCKS - field.orbitAngles.size());
 
         for (int i = 0; i < toRegen; i++) {
-            spawnOrbitBlock(player, world);
+            spawnOrbitBlock(player, world, field);
         }
     }
 
-    private void spawnOrbitBlock(ServerPlayerEntity player, ServerWorld world) {
+    private void spawnOrbitBlock(ServerPlayerEntity player, ServerWorld world, DebrisField field) {
         BlockPos pos = player.getBlockPos().down(); // simple source (can randomise later)
         BlockState state = Blocks.STONE.getDefaultState();
 
@@ -1002,7 +1065,7 @@ public class TelekinesisPower implements Power {
         block.timeFalling = -32768;
 
         // Add with random angle
-        orbitAngles.put(block.getUuid(), world.random.nextDouble() * Math.PI * 2);
+        field.orbitAngles.put(block.getUuid(), world.random.nextDouble() * Math.PI * 2);
 
         // fx
         world.spawnParticles(TK_MAGENTA,
@@ -1032,7 +1095,7 @@ public class TelekinesisPower implements Power {
     public String getOverviewDescription() {
         return "Telekinesis is a control power focused on moving entities around and keeping them away from you." +
                 " Where most abilities can vary on power dependent on the current environment, meaning this power may be weaker in some areas, such as wide open spaces, but stronger" +
-                " in others, like enclosed spaces.";
+                " in enclosed spaces, or cliff terrain as your knockback can prevent melee attacks or deal high fall/wall collision damage.";
     }
 
     @Override
@@ -1048,18 +1111,18 @@ public class TelekinesisPower implements Power {
     @Override
     public String getSecondaryDescription() {
         return "Suspend a group of entities in front of you, disabling their movement and floating them into the air. You then have two choices for actions to take:" +
-                " /nSwing your hand in any direction and launch the suspended entities in the direction you were looking, entities will take increased fall damage or bonus damage when colliding" +
+                " \nSwing your hand in any direction and launch the suspended entities in the direction you were looking, entities will take increased fall damage or bonus damage when colliding" +
                 " with a wall." +
-                " /nDo not swing your hand while they are suspended and will begin to choke them, losing the ability to throw them and dealing damage over time.";
+                " \nDo not swing your hand while they are suspended and will begin to choke them, losing the ability to throw them and dealing damage over time.";
     }
 
     @Override
     public String getUltimateDescription() {
         return "Surround yourself in telekinetic energy, pulling in nearby entities and damaging them if they are very close." +
-                "/nNearby natural blocks are pulled from the world and orbit you, swinging will launch some of these blocks in the direction you are looking, dealing AOE damage and" +
+                "\nNearby natural blocks are pulled from the world and orbit you, swinging will launch some of these blocks in the direction you are looking, dealing AOE damage and" +
                 " knockback." +
-                "/nYou must have a certain number of blocks to launch them and you replenish blocks slowly after not swinging for a few seconds." +
-                "/nThere are no changes to your movement during this, but your vision may be obscured. ";
+                "\nYou must have a certain number of blocks to launch them and you replenish blocks slowly after not swinging for a few seconds." +
+                "\nThere are no changes to your movement during this, but your vision may be obscured. ";
     }
 
     /* ============================================================

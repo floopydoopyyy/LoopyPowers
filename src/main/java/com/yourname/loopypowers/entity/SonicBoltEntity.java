@@ -50,6 +50,10 @@ public class SonicBoltEntity extends net.minecraft.entity.Entity {
     public void setOwner(ServerPlayerEntity owner) {
         this.owner = owner;
     }
+    // getter
+    public ServerPlayerEntity getOwner() {
+        return this.owner;
+    }
 
     @Override
     public void tick() {

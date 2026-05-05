@@ -146,10 +146,41 @@ public class SoundPower implements Power {
        ============================================================ */
 
     @Override
-    public void onAssign(ServerPlayerEntity player) {}
+    public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("sd_"));
+    }
 
     @Override
-    public void onRemove(ServerPlayerEntity player) {}
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("sd_"));
+
+        BD_STATES.remove(player.getUuid());
+        ULT_STATES.remove(player.getUuid());
+
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                // Remove mid-air Sonic Bolts owned by this player
+                w.getEntitiesByClass(SonicBoltEntity.class, player.getBoundingBox().expand(150), e -> player.equals(e.getOwner())).forEach(Entity::discard);
+
+                // Strip GLOWING and STUN from entities that the player resonated
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
+                    if (e.getCommandTags().stream().anyMatch(tag -> tag.startsWith("sd_"))) {
+                        e.getCommandTags().removeIf(tag -> tag.startsWith("sd_"));
+                        e.removeStatusEffect(StatusEffects.GLOWING);
+                        e.removeStatusEffect(ModEffects.STUN);
+                    }
+                    RES_SCORE.remove(e.getUuid());
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
@@ -184,9 +215,14 @@ public class SoundPower implements Power {
         target.setVelocity(0, Math.min(target.getVelocity().y, 0.0), 0);
         target.velocityModified = true;
 
-        // Apply STUN Effect
+        // Apply stun
         target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, 35, 0, false, false, true));
         setSingleTimerTag(target, DAMPENED, 45);
+
+        if (target instanceof ServerPlayerEntity targetPlayer) {
+            // shake
+            CameraShake.shakeNearby(targetPlayer, 3, 15, 0.08f);
+        }
 
         ServerWorld sw = (ServerWorld) target.getWorld();
         sw.spawnParticles(ParticleTypes.SONIC_BOOM, target.getX(), target.getY() + target.getHeight() * 0.6, target.getZ(), 1, 0, 0, 0, 0);
@@ -435,6 +471,9 @@ public class SoundPower implements Power {
             }
             applyBassBurstHit(caster, t, 0.0f, BD_FINAL_KB, BD_FINAL_UP, BD_REMOTE_STUN_TICKS);
         }
+        CameraShake.shakeNearby(caster, 5,15, 0.04f);
+
+
     }
 
     private static void doBassPullPulse(ServerWorld w, ServerPlayerEntity caster) {

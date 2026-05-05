@@ -617,5 +617,31 @@
 		"sounds": [
 			{ "name": "loopypowers:onepunch", "volume": 1.0, "pitch": 1.00 }
 		]
+	},
+
+	"hecanfly": {
+		"sounds": [
+			"loopypowers:hecanfly"
+		]
+	},
+	"pvzpop": {
+		"sounds": [
+			"loopypowers:pvzpop"
+		]
+	},
+	"medic": {
+		"sounds": [
+			"loopypowers:medic"
+		]
+	},
+	"stink": {
+		"sounds": [
+			"loopypowers:stink"
+		]
+	},
+	"why": {
+		"sounds": [
+			"loopypowers:why"
+		]
 	}
 }

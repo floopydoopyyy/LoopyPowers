@@ -5,6 +5,7 @@ import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.entity.DisplaceEntity;
 import com.yourname.loopypowers.entity.ModEntities;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.RenderPackets;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
@@ -16,11 +17,11 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.particle.DustParticleEffect;
 import org.joml.Vector3f;
-
-import java.util.Iterator;
+import java.util.*;
 
 public class DimensionalPower implements Power {
 
@@ -35,18 +36,21 @@ public class DimensionalPower implements Power {
     private static final int PASSIVE_COOLDOWN    = 50;
 
     // PASSIVE
-    private static final double BASE_PHASE_CHANCE = 0.001; // chance per tick
-    private static final double DAMAGE_CHANCE_GAIN = 0.02; // amount chance is increased per hit
-    private static final double MAX_PHASE_CHANCE = 0.30;   // cap
+    private static final double BASE_PHASE_CHANCE = 0.0005; // chance per tick
+    private static final double DAMAGE_CHANCE_GAIN = 0.002; // amount chance is increased per hit
+    private static final double MAX_PHASE_CHANCE = 0.25;   // cap
     private static final int FLICKER_CYCLE = 8;     // total loop length
     private static final int FLICKER_ON_TIME = 3;   // how long invisible per cycle
+
+    private static final float SITUATIONAL_DIMENSION_CHANCE = 0.25f; // chance to adapt to specific events when flickering
+    private static final float SILLY_EXIT_CHANCE = 0.03f; // chance to bring something stupid back
 
     private static final String PHASE_CHANCE_TAG = "int_phase_chance_";
     private static final String IMMUNE_TAG = "int_immune_";
     private static final String PASSIVE_CD_TAG = "int_passive_cd_";
 
     // PRIMARY
-    private static final int PHASE_SHIFT_DURATION = 45;
+    private static final int PHASE_SHIFT_DURATION = 55;
 
     private static final float ENTRY_SOUND_VOL = 0.7f;
     private static final float ENTRY_SOUND_PITCH = 1.3f;
@@ -71,7 +75,58 @@ public class DimensionalPower implements Power {
        ============================================================ */
 
     @Override
-    public void onAssign(ServerPlayerEntity player) {}
+    public void onAssign(ServerPlayerEntity player) {
+        removeTagPrefix(player, "int_");
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        // Restore gamemode if phasing
+        net.minecraft.world.GameMode prevMode = null;
+        for (String tag : player.getCommandTags()) {
+            if (tag.startsWith("int_prev_gm_")) {
+                try {
+                    int gmId = Integer.parseInt(tag.substring("int_prev_gm_".length()));
+                    prevMode = net.minecraft.world.GameMode.byId(gmId);
+                } catch (Exception ignored) {}
+                break;
+            }
+        }
+
+        // Return them to survival if they were trapped in spectator mode by the ability
+        if (prevMode != null && player.interactionManager.getGameMode() == net.minecraft.world.GameMode.SPECTATOR) {
+            player.changeGameMode(prevMode);
+        }
+
+        removeTagPrefix(player, "int_");
+
+        // Clear active ultimate fractures to prevent permanent slow zones
+        ACTIVE_FRACTURES.remove(player.getUuid());
+
+        // Sweep for entities that were displaced by the secondary
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
+                    if (hasTag(e, DISPLACED_TAG)) {
+                        removeTagPrefix(e, DISPLACED_TAG);
+                        e.removeStatusEffect(StatusEffects.INVISIBILITY);
+                        e.removeStatusEffect(StatusEffects.WEAKNESS);
+                        e.removeStatusEffect(StatusEffects.RESISTANCE);
+                        e.removeStatusEffect(StatusEffects.MINING_FATIGUE);
+                        if (e instanceof MobEntity mob) mob.setAiDisabled(false);
+                    }
+                    // Free entities stuck inside the ultimate
+                    e.removeStatusEffect(ModEffects.FRACTURED);
+                    e.removeStatusEffect(ModEffects.DISPLACED);
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
@@ -215,7 +270,100 @@ public class DimensionalPower implements Power {
             player.getCommandTags().add(IMMUNE_TAG + getTagTicks(player, PHASE_TAG));
         }
 
-        tickTag(player, PHASE_TAG);
+        boolean active = tickTag(player, PHASE_TAG);
+
+        // if the tag just expired and the player is fully returning
+        if (!active) {
+            triggerSituationalFlicker(player, world);
+        }
+    }
+
+    private void triggerSituationalFlicker(ServerPlayerEntity player, ServerWorld world) {
+        // rng check
+        if (world.random.nextFloat() > SITUATIONAL_DIMENSION_CHANCE) return;
+
+        // prioritize fall damage -> drowning -> freezing -> levitation -> blindness -> poison/wither -> starvation -> fire -> slowness
+        if (player.fallDistance > 5.0f) {
+            // zero-g void
+            player.fallDistance = 0;
+            player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOW_FALLING, 40, 0, false, false, false));
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP, player.getSoundCategory(), 1.0f, 0.5f);
+            world.spawnParticles(ParticleTypes.SQUID_INK, player.getX(), player.getBodyY(0.5), player.getZ(), 30, 0.4, 0.6, 0.4, 0.1);
+            world.spawnParticles(ParticleTypes.POOF, player.getX(), player.getBodyY(0.5), player.getZ(), 20, 0.4, 0.6, 0.4, 0.05);
+
+        } else if (player.getAir() <= 0) {
+            // air pocket
+            player.setAir(player.getMaxAir());
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_BREATH, player.getSoundCategory(), 1.0f, 1.0f);
+            world.spawnParticles(ParticleTypes.BUBBLE_POP, player.getX(), player.getEyeY(), player.getZ(), 40, 0.4, 0.4, 0.4, 0.1);
+            world.spawnParticles(ParticleTypes.CLOUD, player.getX(), player.getEyeY(), player.getZ(), 20, 0.4, 0.4, 0.4, 0.05);
+
+        } else if (player.getFrozenTicks() > 0) {
+            // fire world
+            player.setFrozenTicks(0);
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_FIRE_EXTINGUISH, player.getSoundCategory(), 0.8f, 1.0f);
+            world.spawnParticles(ParticleTypes.LAVA, player.getX(), player.getBodyY(0.5), player.getZ(), 15, 0.4, 0.6, 0.4, 0.1);
+            world.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, player.getX(), player.getBodyY(0.5), player.getZ(), 30, 0.4, 0.6, 0.4, 0.05);
+
+        } else if (player.hasStatusEffect(StatusEffects.LEVITATION)) {
+            // heavy gravity world
+            player.removeStatusEffect(StatusEffects.LEVITATION);
+            player.setVelocity(player.getVelocity().x, -1.5, player.getVelocity().z);
+            player.velocityModified = true;
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_ANVIL_LAND, player.getSoundCategory(), 0.8f, 0.8f);
+            world.spawnParticles(ParticleTypes.ASH, player.getX(), player.getBodyY(0.5), player.getZ(), 40, 0.4, 0.6, 0.4, 0.1);
+
+        } else if (player.hasStatusEffect(StatusEffects.BLINDNESS) || player.hasStatusEffect(StatusEffects.DARKNESS)) {
+            // light world
+            player.removeStatusEffect(StatusEffects.BLINDNESS);
+            player.removeStatusEffect(StatusEffects.DARKNESS);
+            player.addStatusEffect(new StatusEffectInstance(StatusEffects.NIGHT_VISION, 100, 0, false, false, false));
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_BEACON_ACTIVATE, player.getSoundCategory(), 1.0f, 1.5f);
+            world.spawnParticles(ParticleTypes.FLASH, player.getX(), player.getEyeY(), player.getZ(), 2, 0.1, 0.1, 0.1, 0.0);
+
+        } else if (player.hasStatusEffect(StatusEffects.POISON) || player.hasStatusEffect(StatusEffects.WITHER)) {
+            // idk cleanse
+            player.removeStatusEffect(StatusEffects.POISON);
+            player.removeStatusEffect(StatusEffects.WITHER);
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, player.getSoundCategory(), 1.2f, 1.0f);
+            world.spawnParticles(ParticleTypes.GLOW, player.getX(), player.getBodyY(0.5), player.getZ(), 40, 0.4, 0.6, 0.4, 0.1);
+            world.spawnParticles(ParticleTypes.SCRAPE, player.getX(), player.getBodyY(0.5), player.getZ(), 20, 0.4, 0.6, 0.4, 0.1);
+
+        } else if (player.getHungerManager().getFoodLevel() <= 6) {
+            // food world
+            player.getHungerManager().setFoodLevel(8);
+            player.getHungerManager().setSaturationLevel(4.0f);
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_BURP, player.getSoundCategory(), 1.0f, 0.9f);
+            world.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, player.getX(), player.getEyeY(), player.getZ(), 15, 0.2, 0.2, 0.2, 0.05);
+
+        } else if (player.isOnFire()) {
+            // water dimension
+            player.extinguish();
+
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_SPLASH, player.getSoundCategory(), 1.0f, 1.2f);
+            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_FIRE_EXTINGUISH, player.getSoundCategory(), 0.6f, 1.0f);
+
+            world.spawnParticles(ParticleTypes.SPLASH, player.getX(), player.getBodyY(0.5), player.getZ(), 50, 0.4, 0.6, 0.4, 0.1);
+            world.spawnParticles(ParticleTypes.FALLING_WATER, player.getX(), player.getBodyY(0.5), player.getZ(), 30, 0.4, 0.6, 0.4, 0.1);
+
+        } else if (player.hasStatusEffect(StatusEffects.SLOWNESS)) {
+            // speed world
+            StatusEffectInstance slowness = player.getStatusEffect(StatusEffects.SLOWNESS);
+            if (slowness != null && slowness.getAmplifier() >= 1) { // only trigger on slowness II or worse
+                player.removeStatusEffect(StatusEffects.SLOWNESS);
+                player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 20, 1, false, false, false));
+
+                world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_MINECART_RIDING, player.getSoundCategory(), 0.5f, 1.5f);
+                world.spawnParticles(ParticleTypes.SOUL, player.getX(), player.getBodyY(0.2), player.getZ(), 25, 0.3, 0.1, 0.3, 0.1);
+            }
+        }
     }
 
     private double getPhaseChance(ServerPlayerEntity player) {
@@ -254,6 +402,10 @@ public class DimensionalPower implements Power {
 
         removeTagPrefix(player, PHASE_SHIFT_TAG);
         player.getCommandTags().add(PHASE_SHIFT_TAG + PHASE_SHIFT_DURATION);
+
+        // store their current gamemode before overriding it
+        removeTagPrefix(player, "int_prev_gm_");
+        player.getCommandTags().add("int_prev_gm_" + player.interactionManager.getGameMode().getId());
 
         // switch to spectator
         player.changeGameMode(net.minecraft.world.GameMode.SPECTATOR);
@@ -299,8 +451,23 @@ public class DimensionalPower implements Power {
 
     private void exitPhaseShift(ServerPlayerEntity player, ServerWorld world) {
 
-        // back to survival
-        player.changeGameMode(net.minecraft.world.GameMode.SURVIVAL);
+        // figure out what gamemode they were in (defaulting to survival if something broke)
+        net.minecraft.world.GameMode prevMode = net.minecraft.world.GameMode.SURVIVAL;
+        Iterator<String> it = player.getCommandTags().iterator();
+        while (it.hasNext()) {
+            String tag = it.next();
+            if (tag.startsWith("int_prev_gm_")) {
+                try {
+                    int gmId = Integer.parseInt(tag.substring("int_prev_gm_".length()));
+                    prevMode = net.minecraft.world.GameMode.byId(gmId);
+                } catch (Exception ignored) {}
+                it.remove();
+                break;
+            }
+        }
+
+        // back to previous gamemode
+        player.changeGameMode(prevMode);
 
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
@@ -375,6 +542,120 @@ public class DimensionalPower implements Power {
                 EXIT_BURST_SPREAD * 0.6, EXIT_BURST_SPREAD * 0.6, EXIT_BURST_SPREAD * 0.6,
                 EXIT_BURST_SPEED * 0.6
         );
+
+        CameraShake.shakeNearby(player, 5, 10, 0.6f);
+
+        // -- easter egg --
+        // brought something stupid back
+        if (world.random.nextFloat() < SILLY_EXIT_CHANCE) {
+            int gag = world.random.nextInt(9);
+            switch (gag) {
+                case 0 -> {
+                    // bring a strider
+                    net.minecraft.entity.passive.StriderEntity strider = net.minecraft.entity.EntityType.STRIDER.create(world);
+                    if (strider != null) {
+                        strider.refreshPositionAndAngles(x, y, z, world.random.nextFloat() * 360f, 0);
+                        world.spawnEntity(strider);
+                        world.spawnParticles(ParticleTypes.LAVA, x, y + 0.5, z, 5, 0.2, 0.2, 0.2, 0.02);
+                    }
+                }
+                case 1 -> {
+                    // bring a cat
+                    net.minecraft.entity.passive.CatEntity cat = net.minecraft.entity.EntityType.CAT.create(world);
+                    if (cat != null) {
+                        cat.refreshPositionAndAngles(x, y, z, world.random.nextFloat() * 360f, 0);
+                        world.spawnEntity(cat);
+                        world.spawnParticles(ParticleTypes.POOF, x, y + 0.5, z, 5, 0.2, 0.2, 0.2, 0.02);
+                    }
+                }
+                case 2 -> {
+                    // bring hamuel
+                    net.minecraft.entity.passive.PigEntity pig = net.minecraft.entity.EntityType.PIG.create(world);
+                    if (pig != null) {
+                        pig.refreshPositionAndAngles(x, y, z, world.random.nextFloat() * 360f, 0);
+                        pig.setCustomName(net.minecraft.text.Text.literal("hamuel"));
+                        world.spawnEntity(pig);
+                        world.spawnParticles(ParticleTypes.POOF, x, y + 0.5, z, 5, 0.2, 0.2, 0.2, 0.02);
+                    }
+                }
+                case 3 -> {
+                    // bring woolliam
+                    net.minecraft.entity.passive.SheepEntity sheep = net.minecraft.entity.EntityType.SHEEP.create(world);
+                    if (sheep != null) {
+                        sheep.refreshPositionAndAngles(x, y, z, world.random.nextFloat() * 360f, 0);
+                        sheep.setCustomName(net.minecraft.text.Text.literal("woolliam"));
+                        world.spawnEntity(sheep);
+                        world.spawnParticles(ParticleTypes.POOF, x, y + 0.5, z, 5, 0.2, 0.2, 0.2, 0.02);
+                    }
+                }
+                case 4 -> {
+                    // bring 3 cod
+                    for (int c = 0; c < 3; c++) {
+                        net.minecraft.entity.passive.CodEntity cod = net.minecraft.entity.EntityType.COD.create(world);
+                        if (cod != null) {
+                            cod.refreshPositionAndAngles(x, y, z, world.random.nextFloat() * 360f, 0);
+                            world.spawnEntity(cod);
+                        }
+                    }
+                    world.spawnParticles(ParticleTypes.SPLASH, x, y + 0.5, z, 15, 0.3, 0.3, 0.3, 0.05);
+                }
+                case 5 -> {
+                    // any leather armour being put on an empty slot
+                    net.minecraft.entity.EquipmentSlot[] slots = {
+                            net.minecraft.entity.EquipmentSlot.HEAD,
+                            net.minecraft.entity.EquipmentSlot.CHEST,
+                            net.minecraft.entity.EquipmentSlot.LEGS,
+                            net.minecraft.entity.EquipmentSlot.FEET
+                    };
+                    net.minecraft.item.Item[] leathers = {
+                            net.minecraft.item.Items.LEATHER_HELMET,
+                            net.minecraft.item.Items.LEATHER_CHESTPLATE,
+                            net.minecraft.item.Items.LEATHER_LEGGINGS,
+                            net.minecraft.item.Items.LEATHER_BOOTS
+                    };
+
+                    int startIdx = world.random.nextInt(4);
+                    for (int i = 0; i < 4; i++) {
+                        int idx = (startIdx + i) % 4;
+                        if (player.getEquippedStack(slots[idx]).isEmpty()) {
+                            player.equipStack(slots[idx], new net.minecraft.item.ItemStack(leathers[idx]));
+                            world.playSound(null, player.getBlockPos(), SoundEvents.ITEM_ARMOR_EQUIP_LEATHER, player.getSoundCategory(), 1.0f, 1.0f);
+                            break;
+                        }
+                    }
+                }
+                case 6 -> {
+                    // a steve head appearing on head slot
+                    if (player.getEquippedStack(net.minecraft.entity.EquipmentSlot.HEAD).isEmpty()) {
+                        player.equipStack(net.minecraft.entity.EquipmentSlot.HEAD, new net.minecraft.item.ItemStack(net.minecraft.item.Items.PLAYER_HEAD));
+                        world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP, player.getSoundCategory(), 1.0f, 1.0f);
+                    }
+                }
+                case 7 -> {
+                    // a few snowballs being shot out
+                    int balls = 3 + world.random.nextInt(3);
+                    for (int i = 0; i < balls; i++) {
+                        net.minecraft.entity.projectile.thrown.SnowballEntity snowball = new net.minecraft.entity.projectile.thrown.SnowballEntity(world, player);
+                        snowball.setPosition(x, y + 1.0, z);
+                        snowball.setVelocity((world.random.nextDouble() - 0.5) * 1.5, world.random.nextDouble(), (world.random.nextDouble() - 0.5) * 1.5);
+                        world.spawnEntity(snowball);
+                    }
+                    world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_SNOWBALL_THROW, player.getSoundCategory(), 1.0f, 1.0f);
+                }
+                case 8 -> {
+                    // a few falling sand blocks
+                    int sands = 2 + world.random.nextInt(3);
+                    for (int i = 0; i < sands; i++) {
+                        net.minecraft.entity.FallingBlockEntity sand = net.minecraft.entity.FallingBlockEntity.spawnFromBlock(
+                                world,
+                                player.getBlockPos().up(2).add(world.random.nextInt(2) - 1, 0, world.random.nextInt(2) - 1),
+                                net.minecraft.block.Blocks.SAND.getDefaultState()
+                        );
+                        sand.setVelocity((world.random.nextDouble() - 0.5) * 0.4, 0.2, (world.random.nextDouble() - 0.5) * 0.4);
+                    }
+                }
+            }
+        }
     }
 
     private void spawnPhaseParticles(ServerWorld world, ServerPlayerEntity player) {
@@ -434,6 +715,8 @@ public class DimensionalPower implements Power {
 
         world.spawnEntity(bolt);
 
+        player.swingHand(Hand.MAIN_HAND, true);
+
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                 player.getSoundCategory(), 0.6f, 1.4f);
@@ -449,8 +732,6 @@ public class DimensionalPower implements Power {
             }
             return;
         }
-
-        if (!active) return;
 
         // set velocity to 0
         entity.setVelocity(Vec3d.ZERO);
@@ -540,29 +821,26 @@ public class DimensionalPower implements Power {
     private static final int SEARCH_DOWN = 6;         // how far down to search
     private static final int SEARCH_UP = 2;           // how upward it can correct
 
-    // Stores crack line points — built on cast, read every tick
-    // Each crack is a list of Vec3d points; stored as instance field since this is per-player
-    // this is stupid
-    private final java.util.List<java.util.List<Vec3d>> activeCracks = new java.util.ArrayList<>();
-    private int crackTicksRemaining = 0;
-    private Vec3d riftOrigin = null;
-    private final java.util.List<java.util.List<Vec3d>> activeRings = new java.util.ArrayList<>();
+    // -- MULTIPLAYER FIX: Store fractures in a map bound to the player's UUID!
+    private static final Map<UUID, FractureState> ACTIVE_FRACTURES = new HashMap<>();
+
+    private static class FractureState {
+        java.util.List<java.util.List<Vec3d>> cracks = new java.util.ArrayList<>();
+        java.util.List<java.util.List<Vec3d>> rings = new java.util.ArrayList<>();
+        Vec3d origin;
+        int ticksRemaining;
+    }
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
-        // Reset everything
-        activeCracks.clear();
-        activeRings.clear();
-        crackTicksRemaining = 0;
-        riftOrigin = null;
-
         Vec3d look   = player.getRotationVec(1.0f);
         Vec3d origin = player.getPos().add(look.x * 3.0, 0, look.z * 3.0);
 
-        riftOrigin = origin;
-        crackTicksRemaining = ULT_DURATION;
+        FractureState state = new FractureState();
+        state.origin = origin;
+        state.ticksRemaining = ULT_DURATION;
 
         java.util.Random rng = new java.util.Random();
         double angleStep = (Math.PI * 2.0) / ULT_CRACK_COUNT;
@@ -570,7 +848,7 @@ public class DimensionalPower implements Power {
         // ── Build radial cracks ─────────────────────────────
         for (int i = 0; i < ULT_CRACK_COUNT; i++) {
             double baseAngle = angleStep * i + (rng.nextDouble() - 0.5) * angleStep * 0.6;
-            activeCracks.add(buildCrackLine(origin, baseAngle, rng, world));
+            state.cracks.add(buildCrackLine(origin, baseAngle, rng, world));
         }
 
         // visuals
@@ -578,8 +856,10 @@ public class DimensionalPower implements Power {
 
         for (int i = 1; i <= ULT_RING_COUNT; i++) {
             double radius = i * ULT_RING_SPACING;
-            activeRings.add(buildRing(origin, radius, world)); // pass world
+            state.rings.add(buildRing(origin, radius, world)); // pass world
         }
+
+        ACTIVE_FRACTURES.put(player.getUuid(), state);
 
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
@@ -652,15 +932,15 @@ public class DimensionalPower implements Power {
     }
 
     private void handleFracture(ServerPlayerEntity player) {
-        if (crackTicksRemaining <= 0) return;
+        FractureState state = ACTIVE_FRACTURES.get(player.getUuid());
+        if (state == null) return;
 
-        crackTicksRemaining--;
-        if (crackTicksRemaining <= 0) {
-            activeCracks.clear();
-            activeRings.clear();
-            riftOrigin = null;
+        if (state.ticksRemaining <= 0) {
+            ACTIVE_FRACTURES.remove(player.getUuid());
             return;
         }
+
+        state.ticksRemaining--;
 
         ServerWorld world = player.getServerWorld();
         long time = world.getTime();
@@ -668,16 +948,16 @@ public class DimensionalPower implements Power {
         // WALLS
         if (time % ULT_PARTICLE_INTERVAL == 0) {
 
-            for (java.util.List<Vec3d> crack : activeCracks) {
-                spawnCrackWallParticles(world, crack, time);
+            for (java.util.List<Vec3d> crack : state.cracks) {
+                spawnCrackWallParticles(world, crack);
             }
 
-            for (java.util.List<Vec3d> ring : activeRings) {
-                spawnCrackWallParticles(world, ring, time);
+            for (java.util.List<Vec3d> ring : state.rings) {
+                spawnCrackWallParticles(world, ring);
             }
 
-            if (riftOrigin != null) {
-                spawnRiftAuraParticles(world, riftOrigin, time);
+            if (state.origin != null) {
+                spawnRiftAuraParticles(world, state.origin, time);
             }
         }
 
@@ -687,7 +967,7 @@ public class DimensionalPower implements Power {
                 player.getBoundingBox().expand(ULT_RIFT_RADIUS + 2),
                 en -> en.isAlive() && en != player)) {
 
-            if (isNearAnyCrack(e.getPos()) || isNearAnyRing(e.getPos())) {
+            if (isNearAnyCrack(e.getPos(), state) || isNearAnyRing(e.getPos(), state)) {
                 e.addStatusEffect(new StatusEffectInstance(
                         ModEffects.FRACTURED,
                         40,
@@ -698,8 +978,8 @@ public class DimensionalPower implements Power {
         }
     }
 
-    private boolean isNearAnyCrack(Vec3d pos) {
-        for (java.util.List<Vec3d> crack : activeCracks) {
+    private boolean isNearAnyCrack(Vec3d pos, FractureState state) {
+        for (java.util.List<Vec3d> crack : state.cracks) {
             for (int i = 0; i < crack.size() - 1; i++) {
                 if (distanceToSegment(pos, crack.get(i), crack.get(i + 1)) < ULT_CRACK_WIDTH) {
                     return true;
@@ -732,12 +1012,10 @@ public class DimensionalPower implements Power {
             new DustParticleEffect(new Vector3f(0.25f, 0.55f, 1.0f), 1.4f);   // sky blue
     private static final DustParticleEffect CRACK_BRIGHT =
             new DustParticleEffect(new Vector3f(0.75f, 0.92f, 1.0f), 1.1f);   // icy white-blue
-    private static final DustParticleEffect RIFT_PURPLE =
-            new DustParticleEffect(new Vector3f(0.3f, 0.6f, 1.0f), 2.0f);     // bright blue replacing purple
     private static final DustParticleEffect RIFT_WHITE =
             new DustParticleEffect(new Vector3f(0.9f, 0.97f, 1.0f), 1.2f);    // pure white-blue
 
-    private void spawnCrackWallParticles(ServerWorld world, java.util.List<Vec3d> crack, long time) {
+    private void spawnCrackWallParticles(ServerWorld world, java.util.List<Vec3d> crack) {
         for (int i = 0; i < crack.size() - 1; i++) {
             Vec3d a = crack.get(i);
             Vec3d b = crack.get(i + 1);
@@ -767,7 +1045,6 @@ public class DimensionalPower implements Power {
 
                     float heightFraction = (float) h / (ULT_WALL_PARTICLE_DENSITY + 2);
                     DustParticleEffect color = heightFraction < 0.35f ? CRACK_DARK
-                            : heightFraction < 0.65f ? CRACK_MID
                             : CRACK_BRIGHT;
 
                     double driftX = (world.random.nextDouble() - 0.5) * 0.015 * h;
@@ -885,8 +1162,8 @@ public class DimensionalPower implements Power {
         }
     }
 
-    private boolean isNearAnyRing(Vec3d pos) {
-        for (java.util.List<Vec3d> ring : activeRings) {
+    private boolean isNearAnyRing(Vec3d pos, FractureState state) {
+        for (java.util.List<Vec3d> ring : state.rings) {
             for (int i = 0; i < ring.size(); i++) {
                 Vec3d a = ring.get(i);
                 Vec3d b = ring.get((i + 1) % ring.size());
@@ -979,14 +1256,26 @@ public class DimensionalPower implements Power {
 
     @Override
     public String getPassiveDescription() {
-        return "You have a constant chance to start 'flickering', when flickering you cannot receive any damage from any source. This chance increases when taking damage" +
+        return "You have a constant chance to start 'flickering', when flickering you cannot receive any damage from any source and have a chance to adapt to certain events. The chance to flicker increases when taking damage" +
                 " and goes on cooldown briefly after flickering.";
+                /*
+                "Falling - Briefly slow down and gain slow falling\n" +
+                "Drowning - Gain an air bubble to replenish your air.\n" +
+                "Freezing - Reset your freeze.\n" +
+                "Levitating - Get anchored, pulling you down.\n" +
+                "Blindness/darkness - Get a bright light that removes the effect.\n" +
+                "Poison/wither - Gain a cleanse that removes the effect\n" +
+                "Starving - Enter a world of food to replenish your hunger\n" +
+                "Fire - Gain a splash of water to put it out\n" +
+                "Slowness - Gain a brief burst of speed and remove the effect\n" +
+                "These are not all guaranteed to happen.";
+                */
     }
 
     @Override
     public String getPrimaryDescription() {
         return "Enter spectator mode briefly, being able to pass through blocks, fly and travel faster, leaving a visible trail of particles. When exiting spectator mode," +
-                " do a burst of damage to nearby entities.";
+                " do a burst of damage to nearby entities. You can end up inside blocks during this.";
     }
 
     @Override

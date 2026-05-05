@@ -90,7 +90,11 @@
   "subtitles.loopypowers.partypopper": "Party horn!",
   "subtitles.loopypowers.funnyfnaf": "Hallway ambience",
   "subtitles.loopypowers.onepunch": "ONE PUNCH!!!",
-
+  "subtitles.loopypowers.hecanfly": "Guess Grian can fly...",
+  "subtitles.loopypowers.medic": "MEDIC!",
+  "subtitles.loopypowers.pvzpop": "Pop",
+  "subtitles.loopypowers.stink": "Someone stinks",
+  "subtitles.loopypowers.why": "You don't want this captioned.",
 
   "death.attack.loopypowers_bleed": "%1$s bled out.",
   "death.attack.loopypowers_bleed.player": "%1$s bled out from a wound inflicted by %2$s.",
@@ -149,7 +153,7 @@
   "death.attack.loopypowers_phase_burst": "%1$s was lost to an unseen force.",
   "death.attack.loopypowers_phase_burst.player": "%1$s couldn't handle %2$s's entry.",
   "death.attack.loopypowers_fracture": "%1$s was torn across dimensions.",
-  "death.attack.loopypowers_fracture.player": "%1$s was spread across multiple worlds by %2$s.",
+  "death.attack.loopypowers_fracture.player": "%1$s was spread across multiple dimensions by %2$s.",
   "death.attack.loopypowers_bet": "%1$s lost their own bet.",
   "death.attack.loopypowers_bet.player": "%1$s lost a bet against %2$s.",
   "death.attack.loopypowers_duel": "%1$s lost the duel.",
@@ -172,7 +176,8 @@
   "death.attack.loopypowers_ritual.player": "%1$s was sacrificed by %2$s.",
   "death.attack.loopypowers_onepunch": "%1$s got serious punched.",
   "death.attack.loopypowers_onepunch.player": "%1$s couldn't take %2$s's serious punch.",
-
+  "death.attack.loopypowers_absorbpulse": "%1$s couldn't read the room.",
+  "death.attack.loopypowers_absorbpulse.player": "%1$s got too close to %2$s.",
 
   "effect.loopypowers.fate": "Fate",
   "effect.loopypowers.bloodbound": "Bloodbound",
@@ -185,6 +190,7 @@
   "effect.loopypowers.possessed": "Possessed",
   "effect.loopypowers.grounded": "Grounded",
   "effect.loopypowers.braced": "Braced",
+  "effect.loopypowers.displaced": "Displaced",
 
   "key.loopypowers.primary": "Primary Ability",
   "key.loopypowers.secondary": "Secondary Ability",

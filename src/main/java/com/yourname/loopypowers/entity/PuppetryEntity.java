@@ -84,6 +84,11 @@ public class PuppetryEntity extends Entity {
         this.owner = owner;
     }
 
+    // getter
+    public ServerPlayerEntity getOwner() {
+        return this.owner;
+    }
+
     /* ============================================================
        Tick
        ============================================================ */
