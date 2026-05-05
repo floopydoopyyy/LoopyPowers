@@ -72,7 +72,7 @@ public class Loopypowers implements ModInitializer {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayerEntity player = handler.player;
             PlayerDataStore.save(player);
-            // OPTIMIZATION: Prevent memory leaks on disconnect
+            // Prevent memory leaks on disconnect
             PowerManager.clearPlayerState(player);
         });
 
