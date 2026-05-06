@@ -44,7 +44,7 @@ public class BloodPower implements Power {
     // -- PRIMARY --
     public static final double WHIP_RANGE = 17.0;           // travel distance
     public static final float WHIP_SELF_DAMAGE = 2.0f;      // self damage on cast
-    public static final float WHIP_BLEED_DAMAGE = 5.0f;     // total bleed on hit
+    public static final float WHIP_BLEED_DAMAGE = 12.0f;     // total bleed on hit
     public static final int WHIP_BLEED_DURATION = 60;       // total duration
     public static final int WHIP_BLEED_INTERVAL = 15;       // bleed tick speed
     public static final double WHIP_YANK_XZ = 1.3;          // horizontal pull strength
@@ -58,14 +58,14 @@ public class BloodPower implements Power {
     public static final float CLOT_SELF_DAMAGE = 4.0f;      // self damage on cast
     public static final int CLOT_SLOW_TICKS = 80;           //
     public static final int CLOT_WEAK_TICKS = 80;           //
-    public static final float CLOT_HIT_DAMAGE = 5.0f;       // direct projectile damage
+    public static final float CLOT_HIT_DAMAGE = 10.0f;       // direct projectile damage
 
-    public static final float CLOT_BLEED_DAMAGE = 5.0f;       // bleed total if unpopped
+    public static final float CLOT_BLEED_DAMAGE = 10.0f;       // bleed total if unpopped
     public static final int CLOT_BLEED_DURATION = 60;
     public static final int CLOT_BLEED_INTERVAL = 15;
 
-    public static final float POP_DAMAGE_MULT = 5.0f;       // multiplies remaining bleed for burst
-    public static final int POP_DURATION = 15;              // 2 seconds
+    public static final float POP_DAMAGE_MULT = 6.0f;       // multiplies remaining bleed for burst
+    public static final int POP_DURATION = 10;              // 2 seconds
     public static final int POP_INTERVAL = 5;              // interval of multiplied damage
     public static final float POP_HEAL_MULT = 0.75f;        // heals n% of pop damage immediately
 

@@ -160,7 +160,7 @@ public class IcePower implements Power {
     private static final int FRZ_DECAY_POINTS_STEP = 5;   // how many points decay
     // Shatter
     private static final int   FRZ_IMMUNE_TICKS = 100;     // time of ice immunity after shatter
-    private static final float SHATTER_BONUS_DAMAGE = 9.0f; // damage on shatter
+    private static final float SHATTER_BONUS_DAMAGE = 14.5f; // damage on shatter
 
     // How many points abilities add
     private static final int FRZ_POINTS_MELEE = 7;  // melee hits
@@ -371,7 +371,6 @@ public class IcePower implements Power {
 
         Vec3d p = e.getPos().add(0, e.getHeight() * 0.55, 0);
 
-        // keep it cheap: stage 1/2 spawn less often
         if (stage <= 2 && (w.getTime() & 1) == 1) return;
 
         int snow = switch (stage) {
@@ -394,7 +393,6 @@ public class IcePower implements Power {
             w.spawnParticles(FRZ_BLUE_DUST, p.x, p.y, p.z, 1, 0.10, 0.10, 0.10, 0.00);
         }
         if (stage >= 5) {
-            // IMPORTANT: very clear “ready to shatter” indicator
             spawnShatterReadyParticles(w, e);
         }
     }
@@ -444,7 +442,7 @@ public class IcePower implements Power {
 
     private static final long PRIMARY_COOLDOWN_MS = 13_000;
 
-    private static final double SPIKES_RANGE = 12.0;
+    private static final double SPIKES_RANGE = 15.0;
 
     private static final int SPIKES_COUNT = 9;
     private static final int SPIKES_SPREAD_RADIUS = 1;
@@ -455,7 +453,7 @@ public class IcePower implements Power {
     private static final int SPIKES_RISE_INTERVAL = 2;
 
     private static final double SPIKES_MAX_Y_VEL = 1.65;
-    private static final float SPIKES_DAMAGE = 8.5f;
+    private static final float SPIKES_DAMAGE = 13.5f;
     private static final double SPIKES_KNOCKUP_Y = 0.75;
     private static final int SPIKES_FREEZE_STACKS = 15;
 
@@ -1265,7 +1263,7 @@ public class IcePower implements Power {
 
     private static final long ULT_COOLDOWN_MS = 340_000;
 
-    private static final int ULT_DURATION_TICKS = 180;
+    private static final int ULT_DURATION_TICKS = 200;
 
     private static final double ULT_BLIZZARD_RADIUS = 11.0;
     private static final int ULT_SNOW_PER_TICK = 50;
@@ -1290,7 +1288,7 @@ public class IcePower implements Power {
     private static final double ULT_WAVE_HEIGHT_OFFSET = 0.10;
     private static final double ULT_WAVE_JUMP_CLEARANCE = 0.55;
 
-    private static final float ULT_WAVE_DAMAGE = 5.5f;
+    private static final float ULT_WAVE_DAMAGE = 8.5f;
     private static final double ULT_WAVE_KB = 0.25;
     private static final double ULT_WAVE_UP = 0.07;
     private static final int ULT_WAVE_FREEZE_STACKS = 35;

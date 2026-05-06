@@ -177,7 +177,9 @@
   "death.attack.loopypowers_onepunch": "%1$s got serious punched.",
   "death.attack.loopypowers_onepunch.player": "%1$s couldn't take %2$s's serious punch.",
   "death.attack.loopypowers_absorbpulse": "%1$s couldn't read the room.",
-  "death.attack.loopypowers_absorbpulse.player": "%1$s got too close to %2$s.",
+  "death.attack.loopypowers_absorbpulse.player": "%1$s charged up %2$s.",
+  "death.attack.loopypowers_bloodself": "%1$s bit off more than they could chew.",
+  "death.attack.loopypowers_bloodself.player": "%2$s somehow killed %1$s with their own sacrifice.",
 
   "effect.loopypowers.fate": "Fate",
   "effect.loopypowers.bloodbound": "Bloodbound",

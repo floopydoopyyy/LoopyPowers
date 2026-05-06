@@ -198,7 +198,7 @@ public class NaturePower implements Power {
 
     // Poison
     private static final int GAS_POISON_TICKS = 90;         // time
-    private static final int GAS_POISON_AMP   = 2;          // amp
+    private static final int GAS_POISON_AMP   = 3;          // amp
     private static final int GAS_APPLY_INTERVAL_TICKS = 10;  // checks
     private static final int GAS_REAPPLY_THRESHOLD = 35;    // only refresh when low
 
@@ -485,7 +485,7 @@ public class NaturePower implements Power {
        ULTIMATE
        ============================================================ */
     // tuning
-    private static final int VINE_DURATION_TICKS = 200; // time stuck
+    private static final int VINE_DURATION_TICKS = 220; // time stuck
     private static final double VINE_RANGE = 22.0;
     private static final int VINE_MAX_TARGETS = 8;
     private static final double VINE_CONE_DOT = 0.80; // cone degrees

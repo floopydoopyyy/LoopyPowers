@@ -645,10 +645,10 @@ public class FortunePower implements Power {
     private static final int HOUSE_RULE_INTERVAL_TICKS = 80; // every 4s
     private static final int HOUSE_RULE_MIN_PLAYERS_TO_ANNOUNCE = 1;
 
-    private static final float RULE_WOOLIAM_CHANCE = 0.01f; // EGG!!!
+    private static final float RULE_WOOLIAM_CHANCE = 0.004f; // EGG!!!
 
     // Roulette
-    private static final float RULE_ROULETTE_DAMAGE = 7.0f;
+    private static final float RULE_ROULETTE_DAMAGE = 14.0f;
 
     // Lightning Round
     private static final int RULE_LIGHTNING_EVERY_TICKS = 10;
@@ -656,7 +656,7 @@ public class FortunePower implements Power {
 
     // Hot Seat
     private static final int RULE_HOTSEAT_FUSE_TICKS = 60;
-    private static final float RULE_HOTSEAT_DAMAGE = 8.0f;
+    private static final float RULE_HOTSEAT_DAMAGE = 28.0f;
     private static final int RULE_HOTSEAT_PARTICLES_EVERY_TICKS = 2;
 
     // Double or Nothing
@@ -686,7 +686,7 @@ public class FortunePower implements Power {
 
     // Wildcards
     private static final int RULE_WILDCARDS_MIN = 2;
-    private static final int RULE_WILDCARDS_MAX = 4;
+    private static final int RULE_WILDCARDS_MAX = 8;
 
     private static int ruleEffectDurationTicks() {
         int base = HOUSE_RULE_INTERVAL_TICKS + 10;

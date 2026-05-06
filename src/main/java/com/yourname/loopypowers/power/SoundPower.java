@@ -84,6 +84,7 @@ public class SoundPower implements Power {
     private static final int    RES_THRESHOLD      = 15;
     private static final int    RES_DECAY_PER_SCAN = 1;
     private static final int    MAX_TRAIL_TARGETS  = 14;
+    private static final float    BURST_BONUS_DAMAGE  = 9.5f;
 
     private static final int PTS_SLOW_MOVE = 1;
     private static final int PTS_FAST_MOVE = 2;
@@ -103,11 +104,11 @@ public class SoundPower implements Power {
     private static final int    BD_FINAL_DELAY_TICKS = 2;
     private static final double BD_PULL_RADIUS       = 10.0;
     private static final double BD_FINAL_RADIUS      = 7.0;
-    private static final float  BD_PULL_STRENGTH     = 0.22f;
+    private static final float  BD_PULL_STRENGTH     = 0.24f;
     private static final float  BD_PULL_UP           = 0.02f;
     private static final float  BD_FINAL_KB          = 1.00f;
     private static final float  BD_FINAL_UP          = 0.30f;
-    private static final float  BD_FINAL_DAMAGE      = 11.5f;
+    private static final float  BD_FINAL_DAMAGE      = 15.5f;
     private static final int    BD_FINAL_STUN_TICKS  = 40;
     private static final int    BD_REMOTE_STUN_TICKS = 30;
 
@@ -120,7 +121,7 @@ public class SoundPower implements Power {
     private static final int    ULT_WINDUP_TICKS      = 22;
     private static final double ULT_RANGE             = 50.0;
     private static final double ULT_BEAM_RADIUS       = 1.35;
-    private static final float  ULT_DAMAGE            = 17.0f;
+    private static final float  ULT_DAMAGE            = 20.5f;
     private static final float  ULT_KB                = 2.5f;
     private static final float  ULT_UP                = 1.2f;
     private static final int    ULT_TEAR_STEPS        = 36;
@@ -211,8 +212,7 @@ public class SoundPower implements Power {
         vState.resonatedTicks = 0;
         target.removeStatusEffect(StatusEffects.GLOWING);
 
-        float burstDamageBonus = 6.0f;
-        target.damage(ModDamageTypes.sound(target.getWorld(), caster), burstDamageBonus);
+        target.damage(ModDamageTypes.sound(target.getWorld(), caster), BURST_BONUS_DAMAGE);
 
         // resets velocity before stunning so they stop moving
         target.setVelocity(0, Math.min(target.getVelocity().y, 0.0), 0);

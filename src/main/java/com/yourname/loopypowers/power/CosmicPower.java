@@ -60,14 +60,14 @@ public class CosmicPower implements Power {
     // ── Primary tuning ────────────────────────────────────────────────────────
 
     private static final double RAY_RANGE         = 30.0;
-    private static final float  RAY_DIRECT_DAMAGE = 2.0f;
-    private static final float  RAY_FATE_STORE    = 7.0f;
+    private static final float  RAY_DIRECT_DAMAGE = 3.5f;
+    private static final float  RAY_FATE_STORE    = 9.0f;
     private static final int    RAY_TIMER_ADD     = 50;
 
     // ── Secondary tuning ─────────────────────────────────────────────────────
 
     private static final double STAR_SLAM_RADIUS     = 4.0;
-    private static final float  STAR_FATE_STORE      = 9.0f;
+    private static final float  STAR_FATE_STORE      = 14.0f;
     private static final float  STAR_TIMER_REDUCTION = 0.60f;
     private static final int    STAR_ARC_TICKS       = 40;
 

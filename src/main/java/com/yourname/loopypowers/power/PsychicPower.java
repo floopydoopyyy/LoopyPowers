@@ -120,9 +120,9 @@ public class PsychicPower implements Power {
        ============================================================ */
 
     // Passive
-    private static final float LEECH_HEAL       = 2.0f;
+    private static final float LEECH_HEAL       = 3.5f;
     private static final long  LEECH_CDR_MS     = 500;
-    private static final int   LEECH_INTERNAL_CD = 10;
+    private static final int   LEECH_INTERNAL_CD = 35;
 
     // Compel (primary)
     private static final int    COMPEL_DURATION         = 80;

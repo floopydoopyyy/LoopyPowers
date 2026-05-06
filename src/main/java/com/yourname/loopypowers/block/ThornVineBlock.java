@@ -38,8 +38,8 @@ public class ThornVineBlock extends Block {
     private static final VoxelShape SHAPE = Block.createCuboidShape(2, 0, 2, 14, 16, 14);
 
     // tuning
-    private static final int DAMAGE_INTERVAL_TICKS = 6; // tick delay per damage
-    private static final float DAMAGE_AMOUNT = 1.0f;     // damage
+    private static final int DAMAGE_INTERVAL_TICKS = 8; // tick delay per damage
+    private static final float DAMAGE_AMOUNT = 2.5f;     // damage
     private static final int SLOWNESS_AMP = 2;           // Slowness amp
     private static final int SLOWNESS_TICKS = 20;        // refresh rate
 

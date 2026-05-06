@@ -58,7 +58,7 @@ public class TeleportPower implements Power {
     private static final float PASSIVE_DODGE_CHANCE = 0.18f; // percentage chance to dodge
     private static final int PASSIVE_HIDE_TICKS = 12;        // how long dodge invisibility effect is
     private static final int PASSIVE_IFRAME_TICKS = 18;      // window of invincibility
-    private static final int PASSIVE_COOLDOWN_TICKS = 220;   // dodge cooldown in ticks
+    private static final int PASSIVE_COOLDOWN_TICKS = 160;   // dodge cooldown in ticks
 
     /* ============================================================
        CONSTANTS - PRIMARY
@@ -83,7 +83,7 @@ public class TeleportPower implements Power {
     private static final int ULTIMATE_DURATION_TICKS = 120;       // 6 seconds
     private static final int ULTIMATE_ATTACK_STEP_INITIAL = 4;    // startup delay before first swing
     private static final int ULTIMATE_ATTACK_STEP_ONGOING = 6;    // ticks between each swing
-    private static final double ULTIMATE_SEARCH_RADIUS = 6.0;     // how far to look for targets
+    private static final double ULTIMATE_SEARCH_RADIUS = 7.0;     // how far to look for targets
     private static final double ULTIMATE_TELEPORT_OFFSET = -1.5;  // how far behind victim to teleport
     private static final double ULTIMATE_AURA_RADIUS = 11.0;      // visual ring radius
 

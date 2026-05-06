@@ -74,7 +74,7 @@ public class LightningPower implements Power {
     private static final double CLAP_ANGLE_DEG = 65.0;  // horizontal spread
     private static final double CLAP_VERT_FLAT = 0.45;  // vertical squash on cone check (< 1 = flatter)
 
-    private static final float  CLAP_MAX_DAMAGE    = 13.0f;   // close
+    private static final float  CLAP_MAX_DAMAGE    = 17.0f;   // close
     private static final float  CLAP_MIN_DAMAGE    = 4.5f;   // far
     // EGG Tuning
     private static final int PARTY_CHANCE = 650; // 1 in n chance
@@ -160,7 +160,7 @@ public class LightningPower implements Power {
 
     // PASSIVE - hahah static like lightning
     private static final int MAX_CHARGE_TICKS = 20 * 10;     // seconds to max charge (must meet 20 10 times)
-    private static final float MAX_BONUS_DAMAGE = 4.0f;      // bonus damage for full charge
+    private static final float MAX_BONUS_DAMAGE = 5.0f;      // bonus damage for full charge
     private static final int MIN_PROC_TICKS = 20 * 2;        // must wait 2s without damaging to proc
 
     // ring burst when fully charged — much more noticeable than before
@@ -534,7 +534,7 @@ public class LightningPower implements Power {
         }
     }
 
-
+    private static final int SECONDARY_DURATION = 160;
 
     // SECONDARY
     @Override
@@ -545,10 +545,10 @@ public class LightningPower implements Power {
         spawnCosmeticLightning(world, player.getPos());
 
         // buffs
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,        150, 1, true, true));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH,      150, 0, true, true));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION,  150, 0, true, true));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE,         150, 0, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,        SECONDARY_DURATION, 1, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH,      SECONDARY_DURATION, 0, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION,  SECONDARY_DURATION, 0, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE,         SECONDARY_DURATION, 0, true, true));
 
         // start the per-tick aura — 150 ticks matches the buff duration
         LightningState state = getState(player);
@@ -663,7 +663,7 @@ public class LightningPower implements Power {
     private static final int    STORM_DURATION_TICKS = 300;  // 15 seconds
     private static final int    STORM_PULSE_TICKS    = 17;   // every 30 ticks
 
-    private static final float STORM_DAMAGE     = 4.0f;
+    private static final float STORM_DAMAGE     = 4.5f;
 
 
     @Override

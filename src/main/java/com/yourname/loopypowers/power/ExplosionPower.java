@@ -73,7 +73,7 @@ public class ExplosionPower implements Power {
 
     // Secondary: blast
     private static final int BLAST_MAX_CHARGES = 2;
-    private static final int BLAST_RECHARGE_TICKS = 240; // cooldown per charge
+    private static final int BLAST_RECHARGE_TICKS = 220; // cooldown per charge
     private static final int BLAST_LOCK_TICKS = 4;
     private static final float BLAST_POWER = 2.6f;       // explosion strength
     private static final boolean BLAST_BREAK_BLOCKS = true;
@@ -104,16 +104,16 @@ public class ExplosionPower implements Power {
     private static final int ULT_CHARGE_REFRESH_TICKS = 10;
 
     // DAMAGE AND RADII
-    private static final float IGNITE_DAMAGE = 19.5f;
-    private static final double IGNITE_DMG_RADIUS = 3.5;
+    private static final float IGNITE_DAMAGE = 23.5f;
+    private static final double IGNITE_DMG_RADIUS = 5.5;
 
-    private static final float BLAST_DAMAGE = 17.0f;
+    private static final float BLAST_DAMAGE = 21.0f;
     private static final double BLAST_DMG_RADIUS = 3.0;
 
-    private static final float ULT_POP_DAMAGE = 15.5f;
-    private static final double ULT_POP_DMG_RADIUS = 4.0;
-    private static final float ULT_FINAL_DAMAGE = 22.0f;
-    private static final double ULT_FINAL_DMG_RADIUS = 5.5;
+    private static final float ULT_POP_DAMAGE = 22.5f;
+    private static final double ULT_POP_DMG_RADIUS = 4.5;
+    private static final float ULT_FINAL_DAMAGE = 25.0f;
+    private static final double ULT_FINAL_DMG_RADIUS = 6.5;
 
     private static final int ULT_LAUNCH_DELAY_TICKS = 2;
     private static final double ULT_LAUNCH_KICK_Y = 0.12;

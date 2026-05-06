@@ -332,7 +332,7 @@ public class DarknessPower implements Power {
     private static final int BLACKOUT_INNER_PARTICLES = 100; // density
     private static final double BLACKOUT_INNER_SPREAD = BLACKOUT_RADIUS * 0.9;
     // multiplier
-    private static final float EXPOSED_DAMAGE_MULT = 1.50f; // damage boost
+    private static final float EXPOSED_DAMAGE_MULT = 1.60f; // damage boost
     // EGG
     private static final float FUNNY_SOUND_CHANCE = 0.0005f; // chance per tick
 

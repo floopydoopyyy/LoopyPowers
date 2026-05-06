@@ -307,8 +307,8 @@ public class HealingPower implements Power {
     private static final int ABSORB_DURATION = 40;
 
     // Damage
-    private static final float BURST_BASE_DAMAGE = 6.0f;
-    private static final float BURST_DAMAGE_PER_STORED = 1.6f;
+    private static final float BURST_BASE_DAMAGE = 9.5f;
+    private static final float BURST_DAMAGE_PER_STORED = 4.6f;
     private static final float BURST_MAX_SCALING = 50.0f; // cap
 
     private static final float ABSORB_DAMAGE_TAKEN_MULT = 0.30f; // player takes this percentage of damage

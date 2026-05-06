@@ -54,19 +54,19 @@ public class FirePower implements Power {
        CONSTANTS - PRIMARY
        ============================================================ */
     private static final float PRIMARY_SPEED = 2.6f;
-    private static final float PRIMARY_DIRECT_DAMAGE = 4.5f;
+    private static final float PRIMARY_DIRECT_DAMAGE = 11.5f;
     private static final int PRIMARY_EXPLOSION_POWER = 2;
-    private static final float PRIMARY_EXPLOSION_DAMAGE = 4.5f;
+    private static final float PRIMARY_EXPLOSION_DAMAGE = 8.8f;
     private static final double PRIMARY_SPAWN_OFFSET = 0.6;
 
     /* ============================================================
        CONSTANTS - SECONDARY
        ============================================================ */
     private static final float SECONDARY_EXPLOSION_POWER = 2.5f;
-    private static final float SECONDARY_EXPLOSION_DAMAGE = 12.5f;
+    private static final float SECONDARY_EXPLOSION_DAMAGE = 13.5f;
     private static final double SECONDARY_LAUNCH_STRENGTH = 1.7;
-    private static final double SECONDARY_KB_HORIZONTAL = 1.8;
-    private static final double SECONDARY_KB_VERTICAL = 0.6;
+    private static final double SECONDARY_KB_HORIZONTAL = 1.7;
+    private static final double SECONDARY_KB_VERTICAL = 0.5;
     private static final int SECONDARY_FIRE_DURATION = 4; // seconds
     private static final int SECONDARY_HOVER_TICKS = 140;
     private static final int SECONDARY_NO_FALL_TICKS = 200;
@@ -93,10 +93,10 @@ public class FirePower implements Power {
        CONSTANTS - ULTIMATE
        ============================================================ */
     private static final int ULTIMATE_CHARGE_TICKS = 100;
-    private static final float ULTIMATE_EXPLOSION_POWER = 30.0f;
-    private static final float ULTIMATE_DAMAGE_RADIUS = 10.0f;
-    private static final float ULTIMATE_MAX_DAMAGE = 55.0f;
-    private static final int ULTIMATE_FIRE_DURATION = 6; // seconds
+    private static final float  ULTIMATE_EXPLOSION_POWER = 10.0f;
+    private static final float  ULTIMATE_DAMAGE_RADIUS = 12.0f;
+    private static final float  ULTIMATE_MAX_DAMAGE = 40.0f;
+    private static final int    ULTIMATE_FIRE_DURATION = 6;
 
     // Pull
     private static final double ULTIMATE_PULL_BASE_RADIUS = 6.0;
@@ -577,6 +577,7 @@ public class FirePower implements Power {
     private void detonateUltimate(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
+        // Ensure the source attributes the player so death messages work
         DamageSource source = ModDamageTypes.fireExplosion(world, player);
 
         world.createExplosion(
@@ -591,51 +592,27 @@ public class FirePower implements Power {
                 World.ExplosionSourceType.MOB
         );
 
+        // This now handles the bulk of the "controlled" damage
         applyLOSExplosionDamage(player, ULTIMATE_DAMAGE_RADIUS, ULTIMATE_MAX_DAMAGE);
 
         CameraShake.shakeNearby(player, ULT_DETONATE_SHAKE_DURATION, ULT_DETONATE_SHAKE_AMPLITUDE, ULT_DETONATE_SHAKE_INTENSITY);
 
-        world.playSound(
-                null,
-                player.getBlockPos(),
-                net.minecraft.sound.SoundEvents.ENTITY_DRAGON_FIREBALL_EXPLODE,
-                player.getSoundCategory(),
-                3.5f,
-                0.6f
-        );
-
-        world.playSound(
-                null,
-                player.getBlockPos(),
-                net.minecraft.sound.SoundEvents.ENTITY_GENERIC_EXPLODE,
-                player.getSoundCategory(),
-                4.0f,
-                0.5f
-        );
+        world.playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.ENTITY_DRAGON_FIREBALL_EXPLODE, player.getSoundCategory(), 3.5f, 0.6f);
+        world.playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 4.0f, 0.5f);
     }
 
-    private void applyLOSExplosionDamage(
-            ServerPlayerEntity sourcePlayer,
-            float radius,
-            float maxDamage
-    ) {
-
+    private void applyLOSExplosionDamage(ServerPlayerEntity sourcePlayer, float radius, float maxDamage) {
         ServerWorld world = sourcePlayer.getServerWorld();
-
         Vec3d origin = sourcePlayer.getPos();
-
         Box area = new Box(origin, origin).expand(radius);
 
+        // get attacker
         DamageSource source = ModDamageTypes.fireExplosion(world, sourcePlayer);
 
-        for (LivingEntity entity : world.getEntitiesByClass(
-                LivingEntity.class,
-                area,
-                e -> e != sourcePlayer
-        )) {
-
+        for (LivingEntity entity : world.getEntitiesByClass(LivingEntity.class, area, e -> e != sourcePlayer)) {
             Vec3d target = entity.getPos().add(0, entity.getHeight() * 0.5, 0);
 
+            // line of sight check
             var hit = world.raycast(new net.minecraft.world.RaycastContext(
                     origin,
                     target,
@@ -648,15 +625,16 @@ public class FirePower implements Power {
                 continue;
 
             double dist = origin.distanceTo(target);
-
             double falloff = 1.0 - (dist / radius);
 
             if (falloff <= 0) continue;
 
+            // calculate damage based on distance
             float damage = (float)(maxDamage * falloff);
 
             entity.setOnFireFor(ULTIMATE_FIRE_DURATION);
 
+            // damage the entity
             entity.damage(source, damage);
         }
     }

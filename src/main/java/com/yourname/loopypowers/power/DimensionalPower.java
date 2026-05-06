@@ -78,7 +78,7 @@ public class DimensionalPower implements Power {
     private static final double EXIT_BURST_SPEED = 0.08;
 
     private static final double EXIT_DAMAGE_RADIUS = 3.5;
-    private static final float EXIT_DAMAGE = 9.0f;
+    private static final float EXIT_DAMAGE = 16.5f;
     private static final double EXIT_PULL_STRENGTH = 0.45;
     private static final double EXIT_KNOCKBACK_STRENGTH = 0.8;
     private static final double EXIT_VERTICAL_BOOST = 0.15;

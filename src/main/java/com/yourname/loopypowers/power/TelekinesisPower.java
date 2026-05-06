@@ -94,13 +94,13 @@ public class TelekinesisPower implements Power {
     // ── Choke phase ──────────────────────
     private static final int    CHOKE_TICKS           = 60;   // duration of choke
     private static final int    CHOKE_DAMAGE_INTERVAL = 10;   // ticks between damage pulses
-    private static final float  CHOKE_DAMAGE_PER_TICK = 1.5f; // damage per pulse
+    private static final float  CHOKE_DAMAGE_PER_TICK = 2.0f; // damage per pulse
     private static final double CHOKE_SQUEEZE_VEL     = -0.01; // upward squeeze velocity
-    private static final double CHOKE_ORBIT_RADIUS_START = 0.7; // particle orbit start radius
+    private static final double CHOKE_ORBIT_RADIUS_START = 0.5; // particle orbit start radius
     private static final double CHOKE_ORBIT_RADIUS_END   = 0.2; // tightens to this by end
 
     // EGG
-    private static final int    QUOTE_CHANCE           = 250;
+    private static final int    QUOTE_CHANCE           = 450;
 
     // ── Impact system ──
     private static final int    TK_AIRBORNE_TICKS   = 40;
@@ -108,10 +108,10 @@ public class TelekinesisPower implements Power {
     private static final double IMPACT_MIN_SPEED_H  = 0.6;
     private static final double IMPACT_MIN_SPEED_V  = 0.7;
 
-    private static final float  IMPACT_WALL_DAMAGE  = 9.0f;
+    private static final float  IMPACT_WALL_DAMAGE  = 16.0f;
     private static final float  IMPACT_WALL_SCALE   = 2.5f;
 
-    private static final float  IMPACT_FLOOR_DAMAGE = 4.5f;
+    private static final float  IMPACT_FLOOR_DAMAGE = 9.5f;
     private static final float  IMPACT_FLOOR_SCALE  = 1.8f;
 
     // ── Ultimate ──────────────────────────────────
@@ -127,9 +127,9 @@ public class TelekinesisPower implements Power {
     private static final float  DEBRIS_PULL_DAMAGE           = 0.1f;
     private static final int    DEBRIS_THROW_COOLDOWN        = 8;    // ticks between throws
     private static final int    DEBRIS_THROW_COUNT           = 5;    // blocks per throw
-    private static final float  DEBRIS_THROW_DAMAGE          = 7.0f;
+    private static final float  DEBRIS_THROW_DAMAGE          = 13.0f;
     private static final double DEBRIS_THROW_SPEED           = 2.4;
-    private static final double DEBRIS_THROW_SPREAD          = 0.6; // shotgun spread per extra block
+    private static final double DEBRIS_THROW_SPREAD          = 0.3; // shotgun spread per extra block
     private static final double DEBRIS_THROW_EXPLOSION_RADIUS = 4.0;
 
     // block regen
@@ -138,7 +138,7 @@ public class TelekinesisPower implements Power {
     private static final int    DEBRIS_REGEN_AMOUNT      = 5;   // blocks per regen tick
 
     // EGG
-    private static final int    WOOLLIAM_CHANCE            = 40;   // 1 in whatever chance for woolliam to make a cameo
+    private static final int    WOOLLIAM_CHANCE            = 70;   // 1 in whatever chance for woolliam to make a cameo
 
     /* ============================================================
        PARTICLE STUFF

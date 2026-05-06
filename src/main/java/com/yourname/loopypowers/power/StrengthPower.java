@@ -61,7 +61,7 @@ public class StrengthPower implements Power {
        EGG
        ============================================================ */
     public static boolean onePunchDebugEnabled = false;
-    private static final float ONE_PUNCH_CHANCE = 0.05f;
+    private static final float ONE_PUNCH_CHANCE = 0.02f;
 
     /* ============================================================
        TUNING
@@ -73,7 +73,7 @@ public class StrengthPower implements Power {
     private static final double RUSH_HIT_RADIUS = 1.3;
     private static final int RUSH_STEER_TICKS = 7;
     private static final int RUSH_CANCEL_COOLDOWN_TICKS = 4;
-    private static final float RUSH_HIT_DAMAGE = 4.0f;
+    private static final float RUSH_HIT_DAMAGE = 11.5f;
     private static final float RUSH_HIT_KNOCKUP = 0.95f;
     private static final double RUSH_WALL_CHECK_DIST = 0.75;
     private static final int RUSH_WALL_MAX_BLOCKS = 18;
@@ -94,7 +94,7 @@ public class StrengthPower implements Power {
     private static final int SLAM_MAX_BLOCKS_BROKEN = 22;
     private static final float SLAM_MAX_HARDNESS = 2.2f;
     private static final float SLAM_BLOCK_BREAK_CHANCE = 0.55f;
-    private static final float SLAM_ENTITY_DAMAGE = 4.0f;
+    private static final float SLAM_ENTITY_DAMAGE = 12.0f;
     private static final float SLAM_OUT = 0.35f;
     private static final float SLAM_FRONT_DOT = 0.35f;
     private static final double SLAM_FRONT_OFFSET = 1.4;
