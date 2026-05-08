@@ -150,9 +150,9 @@ public class IcePower implements Power {
     // Stage thresholds (0 = no freeze)
     private static final int FRZ_STAGE_1 = 10;    // light particles
     private static final int FRZ_STAGE_2 = 40;   // Slowness 1
-    private static final int FRZ_STAGE_3 = 65;   // Slowness 2
-    private static final int FRZ_STAGE_4 = 75;   // Slowness 2 + Mining Fatigue 1
-    private static final int FRZ_STAGE_5 = 85;   // Fully frozen
+    private static final int FRZ_STAGE_3 = 60;   // Slowness 2
+    private static final int FRZ_STAGE_4 = 80;   // Slowness 2 + Mining Fatigue 1
+    private static final int FRZ_STAGE_5 = 95;   // Fully frozen
 
     // “Quickly thaw out if not being damaged”
     private static final int FRZ_DECAY_DELAY_TICKS = 20;  // how long after last hit before freeze decays
@@ -160,7 +160,7 @@ public class IcePower implements Power {
     private static final int FRZ_DECAY_POINTS_STEP = 5;   // how many points decay
     // Shatter
     private static final int   FRZ_IMMUNE_TICKS = 100;     // time of ice immunity after shatter
-    private static final float SHATTER_BONUS_DAMAGE = 14.5f; // damage on shatter
+    private static final float SHATTER_BONUS_DAMAGE = 9.0f; // damage on shatter
 
     // How many points abilities add
     private static final int FRZ_POINTS_MELEE = 7;  // melee hits
@@ -189,11 +189,11 @@ public class IcePower implements Power {
             return;
         }
 
-        // calculate ticks until thaw based on the decay intervals
+        // Calculate exact ticks until thaw based on the decay intervals
         int steps = (int) Math.ceil((double) state.freezePoints / FRZ_DECAY_POINTS_STEP);
         int ticksRemaining = state.freezeDecayTicks + Math.max(0, (steps - 1) * FRZ_DECAY_STEP_TICKS);
 
-        // remove and reapply to force the UI to update the countdown safely
+        // Remove and reapply to force the UI to update the countdown safely
         e.removeStatusEffect(ModEffects.DEEPFREEZE);
         e.addStatusEffect(new StatusEffectInstance(ModEffects.DEEPFREEZE, ticksRemaining, 0, false, false, true));
     }
@@ -207,7 +207,7 @@ public class IcePower implements Power {
         state.freezePoints = MathHelper.clamp(state.freezePoints + addPoints, 0, FRZ_MAX_POINTS);
         state.freezeDecayTicks = FRZ_DECAY_DELAY_TICKS;
 
-        // force a UI update
+        // Force a UI update immediately when hit
         syncFreezeTimer(target, state);
 
         ServerWorld w = caster.getServerWorld();
@@ -306,7 +306,7 @@ public class IcePower implements Power {
                 continue;
             }
 
-            // Sync the effect periodically in case they re-logged / client desyncs
+            // Sync the effect periodically in case they re-logged or the client desyncs
             if (now % 10 == 0 || !le.hasStatusEffect(ModEffects.DEEPFREEZE)) {
                 syncFreezeTimer(le, state);
             }
@@ -338,12 +338,6 @@ public class IcePower implements Power {
         // particles scale with stage
         spawnFreezeStageParticles(w, e, stage);
 
-        // stage effects:
-        // 1: particles only
-        // 2: Slowness 1
-        // 3: Slowness 2
-        // 4: Slowness 2 + Mining Fatigue 1
-        // 5: Fully frozen: heavy slow + mining fatigue, barely move
         if (stage >= 2) {
             int slowAmp = (stage >= 3) ? 1 : 0; // stage2->0, stage3+->1
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, T, slowAmp, true, false));
@@ -352,16 +346,17 @@ public class IcePower implements Power {
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.MINING_FATIGUE, T, 0, true, false)); // MF1
         }
         if (stage >= 5) {
+            // “can barely move” + mining fatigue stronger
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, T, 4, true, false));        // very slow
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.MINING_FATIGUE, T, 2, true, false));  // heavy mining fatigue
 
-            // extra movement clamp
+            // extra movement clamp (feels frozen even if they have speed boosts etc.)
             Vec3d v = e.getVelocity();
             e.setVelocity(v.x * 0.25, MathHelper.clamp(v.y, -0.5, 0.5), v.z * 0.25);
             e.velocityModified = true;
             e.fallDistance = 0.0f;
 
-            // strong frozen overlay
+            // strong frozen overlay (visual)
             e.setFrozenTicks(Math.max(e.getFrozenTicks(), 140));
         }
     }
@@ -371,6 +366,7 @@ public class IcePower implements Power {
 
         Vec3d p = e.getPos().add(0, e.getHeight() * 0.55, 0);
 
+        // keep it cheap: stage 1/2 spawn less often
         if (stage <= 2 && (w.getTime() & 1) == 1) return;
 
         int snow = switch (stage) {
@@ -393,6 +389,7 @@ public class IcePower implements Power {
             w.spawnParticles(FRZ_BLUE_DUST, p.x, p.y, p.z, 1, 0.10, 0.10, 0.10, 0.00);
         }
         if (stage >= 5) {
+            // IMPORTANT: very clear “ready to shatter” indicator
             spawnShatterReadyParticles(w, e);
         }
     }
@@ -442,7 +439,7 @@ public class IcePower implements Power {
 
     private static final long PRIMARY_COOLDOWN_MS = 13_000;
 
-    private static final double SPIKES_RANGE = 15.0;
+    private static final double SPIKES_RANGE = 12.0;
 
     private static final int SPIKES_COUNT = 9;
     private static final int SPIKES_SPREAD_RADIUS = 1;
@@ -453,7 +450,7 @@ public class IcePower implements Power {
     private static final int SPIKES_RISE_INTERVAL = 2;
 
     private static final double SPIKES_MAX_Y_VEL = 1.65;
-    private static final float SPIKES_DAMAGE = 13.5f;
+    private static final float SPIKES_DAMAGE = 8.5f;
     private static final double SPIKES_KNOCKUP_Y = 0.75;
     private static final int SPIKES_FREEZE_STACKS = 15;
 
@@ -735,65 +732,76 @@ public class IcePower implements Power {
         return findSurfaceAirAboveSolid(w, x, z, yHint, false);
     }
 
+    /**
+     * Highly optimized ground-finder that prevents tunneling through the earth
+     * when checking over blocks like slabs or snow layers.
+     */
     private static BlockPos findSurfaceAirAboveSolid(ServerWorld w, int x, int z, int yHint, boolean freezeWaterSurface) {
         int startY = MathHelper.clamp(yHint + 3, w.getBottomY() + 2, w.getTopY() - 2);
         BlockPos.Mutable m = new BlockPos.Mutable(x, startY, z);
 
+        boolean startedInSolid = false;
+        BlockState initial = w.getBlockState(m);
+        if (!initial.getFluidState().isEmpty() || (!initial.isAir() && !initial.getCollisionShape(w, m).isEmpty())) {
+            startedInSolid = true;
+        }
+
+        boolean foundAir = !startedInSolid;
+
         for (int i = 0; i < 80 && m.getY() > w.getBottomY() + 2; i++) {
-            BlockPos below = m.down();
-
             BlockState hereState = w.getBlockState(m);
+            BlockPos below = m.down();
             BlockState belowState = w.getBlockState(below);
 
-            boolean hereOk = hereState.getFluidState().isEmpty()
-                    && (hereState.isAir() || hereState.getCollisionShape(w, m).isEmpty());
+            boolean hereIsFluid = !hereState.getFluidState().isEmpty();
+            boolean hereHasCollision = !hereState.isAir() && !hereState.getCollisionShape(w, m).isEmpty();
+            boolean hereOk = !hereIsFluid && !hereHasCollision;
 
-            boolean belowSolidOk = belowState.getFluidState().isEmpty()
-                    && belowState.isSideSolidFullSquare(w, below, Direction.UP);
-
-            boolean belowWaterOk = freezeWaterSurface && isStillWater(belowState);
-
-            if (hereOk && (belowSolidOk || belowWaterOk)) {
-                if (belowWaterOk) {
-                    freezeStillWaterToFrostedIce(w, below);
+            if (!foundAir) {
+                // If we started inside a block (e.g. cave ceiling), wait until we pop out into the air
+                if (hereOk) {
+                    foundAir = true;
                 }
-                return m.toImmutable();
+            }
+
+            if (foundAir) {
+                if (!hereOk) {
+                    // We hit a solid/fluid block after falling through the air. Stop immediately so we don't tunnel!
+                    boolean groundWaterOk = freezeWaterSurface && isStillWater(hereState);
+                    if (groundWaterOk) {
+                        freezeStillWaterToFrostedIce(w, m);
+                    }
+                    return m.up().toImmutable();
+                }
+
+                // We are in air. Check if block below is a solid floor.
+                boolean belowSolidOk = belowState.isSideSolidFullSquare(w, below, Direction.UP);
+                boolean belowWaterOk = freezeWaterSurface && isStillWater(belowState);
+
+                if (belowSolidOk || belowWaterOk) {
+                    if (belowWaterOk) {
+                        freezeStillWaterToFrostedIce(w, below);
+                    }
+                    return m.toImmutable();
+                }
             }
 
             m.move(Direction.DOWN);
         }
 
-        // Fallback: conservative heightmap, but clamp down near startY
-        int top = w.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
-        int capped = Math.min(top, startY);
-
-        // Try a short downward search from capped to find a valid surface.
-        m.set(x, capped, z);
-        for (int i = 0; i < 40 && m.getY() > w.getBottomY() + 2; i++) {
-            BlockPos below = m.down();
-
-            BlockState hereState = w.getBlockState(m);
-            BlockState belowState = w.getBlockState(below);
-
-            boolean hereOk = hereState.getFluidState().isEmpty()
-                    && (hereState.isAir() || hereState.getCollisionShape(w, m).isEmpty());
-
-            boolean belowSolidOk = belowState.getFluidState().isEmpty()
-                    && belowState.isSideSolidFullSquare(w, below, Direction.UP);
-
-            boolean belowWaterOk = freezeWaterSurface && isStillWater(belowState);
-
-            if (hereOk && (belowSolidOk || belowWaterOk)) {
-                if (belowWaterOk) {
-                    freezeStillWaterToFrostedIce(w, below);
-                }
-                return m.toImmutable();
+        // Fallback if no valid air->ground transition was found in 80 blocks
+        if (foundAir) {
+            int top = w.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+            int y = Math.min(top, startY);
+            BlockPos fallback = new BlockPos(x, y, z);
+            if (freezeWaterSurface && isStillWater(w.getBlockState(fallback.down()))) {
+                freezeStillWaterToFrostedIce(w, fallback.down());
             }
-
-            m.move(Direction.DOWN);
+            return fallback;
+        } else {
+            // Trapped completely in solid rock
+            return new BlockPos(x, yHint, z);
         }
-
-        return new BlockPos(x, capped, z);
     }
 
     private static boolean isStillWater(BlockState s) {
@@ -1263,7 +1271,7 @@ public class IcePower implements Power {
 
     private static final long ULT_COOLDOWN_MS = 340_000;
 
-    private static final int ULT_DURATION_TICKS = 200;
+    private static final int ULT_DURATION_TICKS = 180;
 
     private static final double ULT_BLIZZARD_RADIUS = 11.0;
     private static final int ULT_SNOW_PER_TICK = 50;
@@ -1288,7 +1296,7 @@ public class IcePower implements Power {
     private static final double ULT_WAVE_HEIGHT_OFFSET = 0.10;
     private static final double ULT_WAVE_JUMP_CLEARANCE = 0.55;
 
-    private static final float ULT_WAVE_DAMAGE = 8.5f;
+    private static final float ULT_WAVE_DAMAGE = 5.5f;
     private static final double ULT_WAVE_KB = 0.25;
     private static final double ULT_WAVE_UP = 0.07;
     private static final int ULT_WAVE_FREEZE_STACKS = 35;
@@ -1362,7 +1370,7 @@ public class IcePower implements Power {
         // 1. Blizzard Global Effects
         spawnBlizzard(w, player);
 
-        // 2. Entity-Specific "Blowing Wind" (Performance optimized)
+        // 2. Entity effects
         spawnSnowAroundEntities(w, player);
 
         // 3. Ground snow accumulation

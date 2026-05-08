@@ -248,7 +248,7 @@ public class BloodPower implements Power {
     public void activatePrimary(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
-        player.damage(player.getDamageSources().magic(), WHIP_SELF_DAMAGE);
+        player.damage(ModDamageTypes.bloodself(world, player), WHIP_SELF_DAMAGE);
 
         Vec3d start = player.getEyePos();
         Vec3d dir = player.getRotationVec(1.0f).normalize();
@@ -399,7 +399,7 @@ public class BloodPower implements Power {
         world.spawnEntity(clot);
 
         player.swingHand(Hand.MAIN_HAND, true);
-        player.damage(player.getDamageSources().magic(), CLOT_SELF_DAMAGE);
+        player.damage(ModDamageTypes.bloodself(world, player), CLOT_SELF_DAMAGE);
 
         world.spawnParticles(BLOOD_DUST,
                 player.getX(), player.getY() + 1.0, player.getZ(),

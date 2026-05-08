@@ -1028,7 +1028,7 @@ public class TelekinesisPower implements Power {
 
     @Override public String getName()          { return "Telekinesis"; }
     @Override public String getPassiveName()   { return "Kinetic Thrust"; }
-    @Override public String getPrimaryName()   { return "Snatch"; }
+    @Override public String getPrimaryName()   { return "Yank"; }
     @Override public String getSecondaryName() { return "Stasis"; }
     @Override public String getUltimateName()  { return "Debris Vortex"; }
 

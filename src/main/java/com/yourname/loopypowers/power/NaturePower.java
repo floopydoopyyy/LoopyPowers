@@ -54,7 +54,7 @@ public class NaturePower implements Power {
     }
 
     /* ============================================================
-       EASTER EGGS (MIGRATED FROM LOOPYPOWERS)
+       EASTER EGGS
        ============================================================ */
 
     private static final float FLOWER_CORPSE_CHANCE = 0.15f;
@@ -198,7 +198,7 @@ public class NaturePower implements Power {
 
     // Poison
     private static final int GAS_POISON_TICKS = 90;         // time
-    private static final int GAS_POISON_AMP   = 3;          // amp
+    private static final int GAS_POISON_AMP   = 2;          // amp
     private static final int GAS_APPLY_INTERVAL_TICKS = 10;  // checks
     private static final int GAS_REAPPLY_THRESHOLD = 35;    // only refresh when low
 

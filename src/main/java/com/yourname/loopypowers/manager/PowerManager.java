@@ -71,9 +71,8 @@ public class PowerManager {
     /**
      * Sets a player's power, calling onRemove on the old one and onAssign on
      * the new one, then persisting immediately so the change survives a crash.
-     *
-     * @param silent If true, suppresses the "You gained the power" chat messages.
-     *               Used during logins and respawns to avoid spam.
+     * * @param silent If true, suppresses the "You gained the power" chat messages.
+     * Used during logins and respawns to avoid spam.
      */
     public static void setPower(ServerPlayerEntity player, Power power, boolean silent) {
         Power old = getPower(player);
@@ -232,10 +231,14 @@ public class PowerManager {
 
     public static void usePrimary(ServerPlayerEntity player) {
         Power power = PLAYER_POWERS.get(player.getUuid());
-        if (power == null) return;
+        
+        // No power check
+        if (power == null) {
+            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
+            return;
+        }
 
-        // Displaced lock
-        // EXCEPTIONS
+        // Displaced lock EXCEPTIONS
         if (player.hasStatusEffect(ModEffects.DISPLACED) && !(power instanceof HealingPower)) {
             CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
             return;
@@ -251,6 +254,14 @@ public class PowerManager {
     }
 
     public static void useSecondary(ServerPlayerEntity player) {
+        Power power = PLAYER_POWERS.get(player.getUuid());
+
+        // No power check
+        if (power == null) {
+            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
+            return;
+        }
+
         if (player.hasStatusEffect(ModEffects.DISPLACED)) {
             CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
             return;
@@ -260,9 +271,6 @@ public class PowerManager {
             CooldownUI.pushActionbarOverride(player, "§cYou must be level 2 to use your secondary.", 30);
             return;
         }
-
-        Power power = PLAYER_POWERS.get(player.getUuid());
-        if (power == null) return;
 
         String key = abilityKey(power, AbilityTypes.SECONDARY);
         if (!isCooldownReady(player, key)) return;
@@ -274,6 +282,14 @@ public class PowerManager {
     }
 
     public static void useUltimate(ServerPlayerEntity player) {
+        Power power = PLAYER_POWERS.get(player.getUuid());
+
+        // No power check
+        if (power == null) {
+            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
+            return;
+        }
+
         if (player.hasStatusEffect(ModEffects.DISPLACED)) {
             CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
             return;
@@ -283,9 +299,6 @@ public class PowerManager {
             CooldownUI.pushActionbarOverride(player, "§cYou must be level 3 to use your ultimate.", 30);
             return;
         }
-
-        Power power = PLAYER_POWERS.get(player.getUuid());
-        if (power == null) return;
 
         String key = abilityKey(power, AbilityTypes.ULTIMATE);
         if (!isCooldownReady(player, key)) return;
