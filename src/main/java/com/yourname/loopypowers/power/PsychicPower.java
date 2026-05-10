@@ -77,17 +77,16 @@ public class PsychicPower implements Power {
     private static final double COMPEL_CHAT_CHANCE = 0.05; // percentage chance
     private static final java.util.List<String> STUPID_MESSAGES = java.util.List.of(
             "I think I'll use my credit card.",
-            "I came to goon!",
+            "erm is this thing on?",
             "do u guys like Radiohead?",
             "I LISTEN TO ALEXG I LISTEN TO ALEXG I LISTEN TO ALEXG I LISTEN TO ALEXG.",
-            "you know what 6 7 backwards spells? efok. because i dont give e fok until ive had my coffee",
+            "roflcopter!!!",
             "i really need a wee",
             "hop on MARVEL RIVALS?",
             "my tummy hurt :(",
             "hello everyone my name is welcome",
-            "no one is illegal on stolen land BTW", // this ones not stupid this one is BASED
             "morp",
-            "hello everybody my name is welcome",
+            "haha six seven",
             "throw me into the wolves, and i'll come back pregnant",
             "JOIN THE REBELLION"
     );
