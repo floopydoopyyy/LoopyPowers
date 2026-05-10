@@ -3,6 +3,7 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -20,11 +21,35 @@ import net.minecraft.entity.LightningEntity;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import org.joml.Vector3f;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.List;
+import java.util.UUID;
 
 public class LightningPower implements Power {
     private static final Random RNG = new Random();
+
+    /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, LightningState> ACTIVE_STATES = new HashMap<>();
+
+    private static class LightningState {
+        int chargeTicks = 0;
+        int chargeLockTicks = 0;
+        boolean chargeReady = false;
+
+        int superchargeTicks = 0;
+
+        int stormTicks = 0;
+        int stormStepTicks = 0;
+    }
+
+    private static LightningState getState(Entity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new LightningState());
+    }
 
     /* ============================================================
        PARTICLES
@@ -41,12 +66,7 @@ public class LightningPower implements Power {
     private static final DustParticleEffect STORM_GREY =
             new DustParticleEffect(new Vector3f(0.20f, 0.20f, 0.22f), 1.5f);
 
-    // TAGS N TIMERS CONSTANTS
-    private static final String CHARGE_TICKS = "lt_charge_ticks_"; // PASSIVE
-    private static final String CHARGE_LOCK  = "lt_charge_lock_";  //
-
     // secondary active tag + tick interval for the aura
-    private static final String SUPERCHARGE_TICKS  = "lt_supercharge_ticks_";
     private static final int    SUPERCHARGE_AURA_INTERVAL = 4; // aura pulse every 4 ticks (~0.2s)
 
     // PRIMARY
@@ -54,36 +74,52 @@ public class LightningPower implements Power {
     private static final double CLAP_ANGLE_DEG = 65.0;  // horizontal spread
     private static final double CLAP_VERT_FLAT = 0.45;  // vertical squash on cone check (< 1 = flatter)
 
-    private static final float  CLAP_MAX_DAMAGE    = 8.0f;   // close
-    private static final float  CLAP_MIN_DAMAGE    = 2.5f;   // far
-    private static final double CLAP_KB_MAX        = 1.5;
-    private static final double CLAP_KB_MIN        = 0.6;
-    private static final double CLAP_STUN_DISTANCE = 2.2;    // how close they have to be for slowness
+    private static final float  CLAP_MAX_DAMAGE    = 17.0f;   // close
+    private static final float  CLAP_MIN_DAMAGE    = 4.5f;   // far
     // EGG Tuning
     private static final int PARTY_CHANCE = 650; // 1 in n chance
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("lt_")); // Cleanup legacy tags
+        ACTIVE_STATES.put(player.getUuid(), new LightningState());
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("lt_"));
+        ACTIVE_STATES.remove(player.getUuid());
+
+        // Remove supercharge buffs
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.STRENGTH);
+        player.removeStatusEffect(StatusEffects.REGENERATION);
+        player.removeStatusEffect(StatusEffects.HASTE);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        // builds charge when not doing damage
-        int ticks = getTimerTicks(player, CHARGE_TICKS);
-        if (ticks < 0) ticks = 0;
+        LightningState state = getState(player);
 
-        // lock between charging up again
-        tickSingleTimer(player, CHARGE_LOCK);
+        // builds charge when not doing damage
+        if (state.chargeLockTicks > 0) {
+            state.chargeLockTicks--;
+        }
 
         // max charge until no more increases
-        if (ticks < MAX_CHARGE_TICKS) {
-            setSingleTimerTag(player, CHARGE_TICKS, ticks + 1);
+        if (state.chargeTicks < MAX_CHARGE_TICKS) {
+            state.chargeTicks++;
         }
-        int tier = getChargeTier(ticks);
+        int tier = getChargeTier(state.chargeTicks);
 
         // if player just reached tier 4
-        if (tier >= 4 && !player.getCommandTags().contains(CHARGE_READY)) {
-            player.getCommandTags().add(CHARGE_READY);
+        if (tier >= 4 && !state.chargeReady) {
+            state.chargeReady = true;
 
             ServerWorld w = player.getServerWorld();
 
@@ -100,27 +136,32 @@ public class LightningPower implements Power {
         }
 
         // If charge leaves tier 4
-        if (tier < 4 && player.getCommandTags().contains(CHARGE_READY)) {
-            player.getCommandTags().remove(CHARGE_READY);
+        if (tier < 4 && state.chargeReady) {
+            state.chargeReady = false;
         }
 
         // supercharge aura tick — emits particles while active
-        if (hasTagPrefix(player, SUPERCHARGE_TICKS)) {
-            tickSingleTimer(player, SUPERCHARGE_TICKS);
-            tickSuperchargeAura(player);
+        if (state.superchargeTicks > 0) {
+            state.superchargeTicks--;
+            tickSuperchargeAura(player, state);
         }
 
         // Ult things --------------------
-        if (hasTagPrefix(player, STORM_TICKS)) {
-            tickMaelstrom(player);
+        if (state.stormTicks > 0) {
+            tickMaelstrom(player, state);
         }
+    }
+
+    @Override
+    public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        // Immunity to lightning damage
+        return !source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_LIGHTNING);
     }
 
     // PASSIVE - hahah static like lightning
     private static final int MAX_CHARGE_TICKS = 20 * 10;     // seconds to max charge (must meet 20 10 times)
-    private static final float MAX_BONUS_DAMAGE = 4.0f;      // bonus damage for full charge
+    private static final float MAX_BONUS_DAMAGE = 5.0f;      // bonus damage for full charge
     private static final int MIN_PROC_TICKS = 20 * 2;        // must wait 2s without damaging to proc
-    private static final String CHARGE_READY = "lt_charge_ready"; // marker, checks if charged
 
     // ring burst when fully charged — much more noticeable than before
     private static void spawnChargeReadyBurst(ServerWorld world, ServerPlayerEntity player) {
@@ -164,21 +205,20 @@ public class LightningPower implements Power {
                 SoundEvents.BLOCK_REDSTONE_TORCH_BURNOUT, // sound
                 attacker.getSoundCategory(), 0.25f, 1.6f);
 
-        // tries to stop multi proc
-        if (hasTagPrefix(attacker, CHARGE_LOCK)) return;
+        LightningState state = getState(attacker);
 
-        int chargeTicks = getTimerTicks(attacker, CHARGE_TICKS);
-        if (chargeTicks < 0) chargeTicks = 0;
+        // tries to stop multi proc
+        if (state.chargeLockTicks > 0) return;
 
         // This is the key: charge = time since last hit.
-        if (chargeTicks < MIN_PROC_TICKS) {
-            setSingleTimerTag(attacker, CHARGE_TICKS, 0);
+        if (state.chargeTicks < MIN_PROC_TICKS) {
+            state.chargeTicks = 0;
             return;
         }
 
         // returns charge in tiers
-        int tier = getChargeTier(chargeTicks);         // 1-4
-        float bonus = computeBonusDamage(chargeTicks); // gets bonus damage
+        int tier = getChargeTier(state.chargeTicks);         // 1-4
+        float bonus = computeBonusDamage(state.chargeTicks); // gets bonus damage
 
         // Bonus damage
         DamageSource src = ModDamageTypes.smite(attacker.getWorld(), attacker);
@@ -262,17 +302,11 @@ public class LightningPower implements Power {
             }
         }
 
-        // DEBUG
-        /*
-        attacker.sendMessage(net.minecraft.text.Text.literal(
-                "ChargeTicks=" + chargeTicks + " tier=" + tier + " bonus=" + String.format("%.2f", bonus)
-        ), true); */
-
         // resets charge
-        setSingleTimerTag(attacker, CHARGE_TICKS, 0);
+        state.chargeTicks = 0;
 
         // Small lock
-        setSingleTimerTag(attacker, CHARGE_LOCK, 2);
+        state.chargeLockTicks = 2;
     }
 
     // yellow ring that expands outward from the target on a charged hit
@@ -500,7 +534,7 @@ public class LightningPower implements Power {
         }
     }
 
-
+    private static final int SECONDARY_DURATION = 160;
 
     // SECONDARY
     @Override
@@ -511,24 +545,22 @@ public class LightningPower implements Power {
         spawnCosmeticLightning(world, player.getPos());
 
         // buffs
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,        150, 1, true, true));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH,      150, 0, true, true));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION,  150, 0, true, true));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE,         150, 0, true, true));
-
-        //used to be code to strike nearby entities with lightning but this was silly
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,        SECONDARY_DURATION, 1, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH,      SECONDARY_DURATION, 0, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION,  SECONDARY_DURATION, 0, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE,         SECONDARY_DURATION, 0, true, true));
 
         // start the per-tick aura — 150 ticks matches the buff duration
-        setSingleTimerTag(player, SUPERCHARGE_TICKS, 150);
+        LightningState state = getState(player);
+        state.superchargeTicks = 150;
 
         spawnSuperchargeBurst(world, player);
     }
 
-    private void tickSuperchargeAura(ServerPlayerEntity player) {
+    private void tickSuperchargeAura(ServerPlayerEntity player, LightningState state) {
         ServerWorld world = player.getServerWorld();
 
-        int remaining = getTimerTicks(player, SUPERCHARGE_TICKS);
-        if (remaining < 0 || remaining % SUPERCHARGE_AURA_INTERVAL != 0) return;
+        if (state.superchargeTicks % SUPERCHARGE_AURA_INTERVAL != 0) return;
 
         Vec3d pos = player.getPos();
 
@@ -548,7 +580,7 @@ public class LightningPower implements Power {
                     2, Math.cos(angle) * 0.10, 0.04, Math.sin(angle) * 0.10, 0.0);
         }
 
-        if (remaining % (SUPERCHARGE_AURA_INTERVAL * 5) == 0) {
+        if (state.superchargeTicks % (SUPERCHARGE_AURA_INTERVAL * 5) == 0) {
             double angle = RNG.nextDouble() * Math.PI * 2;
             world.spawnParticles(ParticleTypes.END_ROD,
                     pos.x + (RNG.nextDouble() - 0.5) * 0.4,
@@ -590,7 +622,7 @@ public class LightningPower implements Power {
             double angle = i * Math.PI * 2.0 / 8;
             world.spawnParticles(ParticleTypes.END_ROD,
                     center.x + Math.cos(angle) * 0.4,
-                    center.y + 0.8 + RNG.nextDouble() * 1.0,
+                    center.y + 0.8 + RNG.nextDouble(),
                     center.z + Math.sin(angle) * 0.4,
                     1, Math.cos(angle) * 0.22, 0.04, Math.sin(angle) * 0.22, 0.0);
         }
@@ -627,21 +659,18 @@ public class LightningPower implements Power {
     }
 
     // ULT
-    private static final String STORM_TICKS = "lt_storm_ticks_";
-    private static final String STORM_STEP  = "lt_storm_step_";
-
     private static final double STORM_RADIUS        = 15.0;
     private static final int    STORM_DURATION_TICKS = 300;  // 15 seconds
     private static final int    STORM_PULSE_TICKS    = 17;   // every 30 ticks
 
-    private static final float STORM_DAMAGE     = 4.0f;
-    private static final int   STORM_STUN_TICKS = 12;  // 0.6s
-    private static final int   STORM_STUN_AMP   = 0;
+    private static final float STORM_DAMAGE     = 4.5f;
+
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        setSingleTimerTag(player, STORM_TICKS, STORM_DURATION_TICKS);
-        setSingleTimerTag(player, STORM_STEP, STORM_PULSE_TICKS);
+        LightningState state = getState(player);
+        state.stormTicks = STORM_DURATION_TICKS;
+        state.stormStepTicks = STORM_PULSE_TICKS;
 
         ServerWorld w = player.getServerWorld();
         w.playSound(null, player.getBlockPos(),
@@ -681,7 +710,7 @@ public class LightningPower implements Power {
         world.spawnParticles(BOLT_WHITE,
                 center.x, center.y + 1.0, center.z, 20, 0.4, 0.8, 0.4, 0.07);
 
-        // cosmetic lightning storm on cast
+        // cosmetic lightning
         for (int i = 0; i < 5; i++) {
             Vec3d lPos = new Vec3d(
                     center.x + (RNG.nextDouble() - 0.5) * 8.0,
@@ -693,19 +722,18 @@ public class LightningPower implements Power {
         CameraShake.shakeNearby(player, 12, 15, 0.38f);
     }
 
-    private void tickMaelstrom(ServerPlayerEntity player) {
+    private void tickMaelstrom(ServerPlayerEntity player, LightningState state) {
         ServerWorld world = player.getServerWorld();
         Vec3d center = player.getPos(); // follows player
 
-        int left = tickSingleTimer(player, STORM_TICKS);
-        if (left <= 0) {
-            removeTagPrefix(player, STORM_TICKS);
-            removeTagPrefix(player, STORM_STEP);
+        state.stormTicks--;
+        if (state.stormTicks <= 0) {
+            state.stormStepTicks = 0;
             return;
         }
 
         // Clouds
-        if (left % 6 == 0) spawnStormClouds(world, center);
+        if (state.stormTicks % 6 == 0) spawnStormClouds(world, center);
 
         // Targets inside radius
         Box box = new Box(center, center).expand(STORM_RADIUS);
@@ -715,7 +743,7 @@ public class LightningPower implements Power {
         );
 
         // sparks on targets at risk of being hit
-        if (!targets.isEmpty() && left % 3 == 0) {
+        if (!targets.isEmpty() && state.stormTicks % 3 == 0) {
             for (LivingEntity e : targets) {
                 if (RNG.nextFloat() < 0.10f) {
                     world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
@@ -729,18 +757,12 @@ public class LightningPower implements Power {
         }
 
         // strike when timer done
-        int stepLeft = tickSingleTimer(player, STORM_STEP);
+        state.stormStepTicks--;
 
-        // me trying to stop spam
-        if (stepLeft < 0) {
-            setSingleTimerTag(player, STORM_STEP, STORM_PULSE_TICKS);
-            return;
-        }
-
-        if (stepLeft > 0) return;
+        if (state.stormStepTicks > 0) return;
 
         // reset timer
-        setSingleTimerTag(player, STORM_STEP, STORM_PULSE_TICKS);
+        state.stormStepTicks = STORM_PULSE_TICKS;
 
         if (targets.isEmpty()) return;
 
@@ -759,11 +781,10 @@ public class LightningPower implements Power {
 
     // black stormclouds with yellow
     private void spawnStormClouds(ServerWorld world, Vec3d center) {
-        double r = STORM_RADIUS;
 
         for (int i = 0; i < 80; i++) { // number of clouds
             double ang = RNG.nextDouble() * Math.PI * 2.0;
-            double rad = RNG.nextDouble() * r;
+            double rad = RNG.nextDouble() * STORM_RADIUS;
 
             double x = center.x + Math.cos(ang) * rad;
             double z = center.z + Math.sin(ang) * rad;
@@ -803,12 +824,6 @@ public class LightningPower implements Power {
 
         target.damage(ModDamageTypes.smite(caster.getWorld(), caster), STORM_DAMAGE);
 
-/*
-        target.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.SLOWNESS, STORM_STUN_TICKS, STORM_STUN_AMP, true, true));
-        target.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.WEAKNESS, STORM_STUN_TICKS, STORM_STUN_AMP, true, true));
-*/
         // fx
         spawnHitRing(world, target, 3);
 
@@ -853,64 +868,6 @@ public class LightningPower implements Power {
         return MAX_BONUS_DAMAGE * eased;
     }
 
-    private static boolean hasTagPrefix(ServerPlayerEntity p, String prefix) {
-        for (String tag : p.getCommandTags()) if (tag.startsWith(prefix)) return true;
-        return false;
-    }
-
-    private static void removeTagPrefix(ServerPlayerEntity p, String prefix) {
-        var it = p.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) {
-                it.remove();
-                return; // remove ONE
-            }
-        }
-    }
-
-    private static void setSingleTimerTag(ServerPlayerEntity p, String prefix, int ticks) {
-        removeTagPrefix(p, prefix);
-        p.getCommandTags().add(prefix + ticks);
-    }
-
-    // returns remaining ticks are decrement
-    private static int tickSingleTimer(ServerPlayerEntity p, String prefix) {
-        String foundTag = null;
-
-        // find tag
-        for (String tag : p.getCommandTags()) {
-            if (tag.startsWith(prefix)) { foundTag = tag; break; }
-        }
-
-        if (foundTag == null) return -1;
-
-        // remove  tag
-        p.getCommandTags().remove(foundTag);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(foundTag.substring(prefix.length())) - 1;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-
-        //
-        if (ticks > 0) { p.getCommandTags().add(prefix + ticks); }
-        return ticks;
-    }
-
-    // returns current ticks in tax prefix
-    private static int getTimerTicks(ServerPlayerEntity p, String prefix) {
-        for (String tag : p.getCommandTags()) {
-            if (tag.startsWith(prefix)) {
-                try { return Integer.parseInt(tag.substring(prefix.length())); }
-                catch (NumberFormatException e) { return -1; }
-            }
-        }
-        return -1;
-    }
-
     private static void spawnCosmeticLightning(ServerWorld world, Vec3d pos) {
         LightningEntity bolt = EntityType.LIGHTNING_BOLT.create(world);
         if (bolt == null) return;
@@ -926,12 +883,12 @@ public class LightningPower implements Power {
 
     @Override public String getName()          { return "Lightning"; }
     @Override public String getPrimaryName()   { return "Thunderclap"; }
-    @Override public String getSecondaryName() { return "Supercharge"; }
-    @Override public String getUltimateName()  { return "Maelstrom"; }
+    @Override public String getSecondaryName() { return "Overcharge"; }
+    @Override public String getUltimateName()  { return "Stormcaller"; }
 
-    @Override public long getSecondaryCooldownMs() { return 10_000; } // 35 seconds
-    @Override public long getUltimateCooldownMs()  { return 10_000; } // 100 seconds
-    @Override public long getPrimaryCooldownMs()   { return 3_500;  } // 6.5 seconds
+    @Override public long getSecondaryCooldownMs() { return 8_000; } //
+    @Override public long getUltimateCooldownMs()  { return 32_000; } //
+    @Override public long getPrimaryCooldownMs()   { return 365_000;  } //
 
     @Override
     public String getOverviewDescription() {

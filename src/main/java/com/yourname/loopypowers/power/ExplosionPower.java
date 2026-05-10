@@ -23,19 +23,43 @@ import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class ExplosionPower implements Power {
 
     /* ============================================================
-       TAGS / TIMERS
+       STATE STORAGE (OPTIMIZED)
        ============================================================ */
-    // Primary
-    private static final String IGNITING = "ex_igniting_";
-    // Secondary
-    private static final String BLAST_CHARGES = "ex_blastc_";
-    private static final String BLAST_RECHARGE = "ex_blastr_";
-    private static final String BLAST_LOCK = "ex_blast_lock_";
+
+    private static final Map<UUID, ExplosionState> ACTIVE_STATES = new HashMap<>();
+
+    private static class ExplosionState {
+        int ignitingTicks = 0;
+
+        int blastCharges = BLAST_MAX_CHARGES;
+        int blastRechargeTicks = 0;
+        int blastLockTicks = 0;
+
+        int noSelfExpTicks = 0;
+
+        int ultActiveTicks = 0;
+        int ultWarnTicks = -1;
+        int ultAirTicks = 0;
+        int ultStage = 0;
+        boolean ultWaitingLand = false;
+
+        int ultLaunchDelayTicks = 0;
+        double launchX = 0;
+        double launchY = 0;
+        double launchZ = 0;
+    }
+
+    private static ExplosionState getState(Entity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new ExplosionState());
+    }
 
     /* ============================================================
        TUNING
@@ -43,13 +67,13 @@ public class ExplosionPower implements Power {
 
     // Primary: ignition
     private static final int IGNITE_FUSE_TICKS = 20 * 5; // 5s charge
-    private static final float IGNITE_POWER = 4.5f;      //  explosion strength (blocks/FX)
+    private static final float IGNITE_POWER = 4.5f;      // explosion strength
     private static final int IGNITE_SPEED_AMP = 1;       // speed amp
     private static final boolean IGNITE_BREAK_BLOCKS = true;
 
     // Secondary: blast
     private static final int BLAST_MAX_CHARGES = 2;
-    private static final int BLAST_RECHARGE_TICKS = 20 * 8; // cooldown per charge
+    private static final int BLAST_RECHARGE_TICKS = 220; // cooldown per charge
     private static final int BLAST_LOCK_TICKS = 4;
     private static final float BLAST_POWER = 2.6f;       // explosion strength
     private static final boolean BLAST_BREAK_BLOCKS = true;
@@ -63,13 +87,6 @@ public class ExplosionPower implements Power {
     private static final double RECOIL_MAX_H = 1.85;      // cap horizontal
 
     // Ultimate: Chain Reaction
-    public static final String ULT_ACTIVE = "ex_ult_active_";
-    public static final String ULT_WARN = "ex_ult_warn_";
-    public static final String ULT_AIR  = "ex_ult_air_";
-    public static final String ULT_STAGE = "ex_ult_stage_";
-    public static final String ULT_WAITING_LAND = "ex_ult_land_";
-    private static final String NO_SELF_EXP_DMG = "ex_no_self_exp_";
-
     private static final int ULT_POPS_ACTUAL = 3;
     private static final int ULT_WARN_TICKS = 8;
     private static final int ULT_FIZZLE_AIR_TICKS = 500;
@@ -86,26 +103,24 @@ public class ExplosionPower implements Power {
     private static final int ULT_CHARGE_SLOWNESS_AMP = 4;
     private static final int ULT_CHARGE_REFRESH_TICKS = 10;
 
-    // DAMAGE AND RADI
-    private static final float IGNITE_DAMAGE = 12.0f;
-    private static final double IGNITE_DMG_RADIUS = 3.5;
+    // DAMAGE AND RADII
+    private static final float IGNITE_DAMAGE = 23.5f;
+    private static final double IGNITE_DMG_RADIUS = 5.5;
 
-    private static final float BLAST_DAMAGE = 8.0f;
+    private static final float BLAST_DAMAGE = 21.0f;
     private static final double BLAST_DMG_RADIUS = 3.0;
 
-    private static final float ULT_POP_DAMAGE = 11.0f;
-    private static final double ULT_POP_DMG_RADIUS = 4.0;
-    private static final float ULT_FINAL_DAMAGE = 16.0f;
-    private static final double ULT_FINAL_DMG_RADIUS = 5.5;
-
-    private static final String ULT_LAUNCH_T = "ex_ult_launch_";
-    private static final String ULT_LAUNCH_X = "ex_ult_lx_";
-    private static final String ULT_LAUNCH_Y = "ex_ult_ly_";
-    private static final String ULT_LAUNCH_Z = "ex_ult_lz_";
+    private static final float ULT_POP_DAMAGE = 22.5f;
+    private static final double ULT_POP_DMG_RADIUS = 4.5;
+    private static final float ULT_FINAL_DAMAGE = 25.0f;
+    private static final double ULT_FINAL_DMG_RADIUS = 6.5;
 
     private static final int ULT_LAUNCH_DELAY_TICKS = 2;
     private static final double ULT_LAUNCH_KICK_Y = 0.12;
-    private static final double ULT_LAUNCH_STORE_SCALE = 8000.0;
+
+    // funnies
+    private static final float GLASS_CONVERT_CHANCE = 0.07f; // silly glass
+    private static final float WHY_SOUND_CHANCE = 0.005f; // i regret this
 
     /* ============================================================
        BASIC
@@ -113,60 +128,67 @@ public class ExplosionPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        setIntTag(player, BLAST_CHARGES, BLAST_MAX_CHARGES);
-        removeTagPrefix(player, BLAST_RECHARGE);
-        removeTagPrefix(player, BLAST_LOCK);
-        removeTagPrefix(player, IGNITING);
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
-        removeTagPrefix(player, NO_SELF_EXP_DMG);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("ex_")); // clean legacy string tags
+        ACTIVE_STATES.put(player.getUuid(), new ExplosionState());
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, IGNITING);
-        removeTagPrefix(player, BLAST_CHARGES);
-        removeTagPrefix(player, BLAST_RECHARGE);
-        removeTagPrefix(player, BLAST_LOCK);
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
-        removeTagPrefix(player, NO_SELF_EXP_DMG);
-        removeTagPrefix(player, ULT_WARN);
-        removeTagPrefix(player, ULT_AIR);
-        removeTagPrefix(player, ULT_STAGE);
-        removeTagPrefix(player, ULT_LAUNCH_T);
-        removeTagPrefix(player, ULT_LAUNCH_X);
-        removeTagPrefix(player, ULT_LAUNCH_Y);
-        removeTagPrefix(player, ULT_LAUNCH_Z);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("ex_"));
+        ACTIVE_STATES.remove(player.getUuid());
+
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+        player.removeStatusEffect(ModEffects.BRACED);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        tickSingleTimer(player, BLAST_LOCK);
-        tickSingleTimer(player, NO_SELF_EXP_DMG);
+        ExplosionState state = getState(player);
 
-        tickBlastRecharge(player);
-        updateBlastCooldownUI(player);
-        tickIgnition(player);
+        if (state.blastLockTicks > 0) state.blastLockTicks--;
+        if (state.noSelfExpTicks > 0) state.noSelfExpTicks--;
 
-        if (getTimerLeft(player, ULT_ACTIVE) >= 0) {
-            tickUltimate(player);
+        tickBlastRecharge(player, state);
+        updateBlastCooldownUI(player, state);
+
+        if (state.ignitingTicks > 0) {
+            tickIgnition(player, state);
         }
-        tickPendingLaunch(player);
+
+        if (state.ultActiveTicks > 0) {
+            tickUltimate(player, state);
+        }
+
+        if (state.ultLaunchDelayTicks > 0) {
+            tickPendingLaunch(player, state);
+        }
     }
 
     @Override
-    public void onHit(ServerPlayerEntity attacker, LivingEntity target) { }
+    public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        ExplosionState state = getState(victim);
 
-    /* ============================================================
-       PASSIVE
-       ============================================================ */
-
-    public static boolean shouldIgnoreSelfExplosionDamage(ServerPlayerEntity p) {
-        for (String tag : p.getCommandTags()) {
-            if (tag.startsWith(NO_SELF_EXP_DMG)) return true;
+        // Force early ultimate detonation if hit hard while airborne in ult
+        if (!victim.isOnGround() && state.ultActiveTicks > 0) {
+            if (source.getAttacker() instanceof LivingEntity && amount >= 3.0f) {
+                if (victim.getWorld() instanceof ServerWorld sw) {
+                    forceEarlyDetonation(victim, state, sw);
+                }
+            }
         }
-        return false;
+
+        // Immunity to own explosion damage
+        if (state.noSelfExpTicks > 0 && source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_EXPLOSION)) {
+            return false;
+        }
+
+        return true;
     }
 
     /* ============================================================
@@ -175,7 +197,8 @@ public class ExplosionPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        setSingleTimerTag(player, IGNITING, IGNITE_FUSE_TICKS);
+        ExplosionState state = getState(player);
+        state.ignitingTicks = IGNITE_FUSE_TICKS;
 
         ServerWorld w = player.getServerWorld();
         w.playSound(null, player.getBlockPos(),
@@ -190,15 +213,13 @@ public class ExplosionPower implements Power {
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
-    private static void tickIgnition(ServerPlayerEntity player) {
-        int left = tickSingleTimer(player, IGNITING);
-        if (left < 0) return;
-
+    private static void tickIgnition(ServerPlayerEntity player, ExplosionState state) {
+        state.ignitingTicks--;
         ServerWorld w = player.getServerWorld();
 
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 10, IGNITE_SPEED_AMP, true, false));
 
-        float progress = 1.0f - (left / (float) IGNITE_FUSE_TICKS);
+        float progress = 1.0f - (state.ignitingTicks / (float) IGNITE_FUSE_TICKS);
         progress = MathHelper.clamp(progress, 0.0f, 1.0f);
 
         int interval = MathHelper.clamp((int) MathHelper.lerp(progress, 6.0f, 1.0f), 1, 6);
@@ -220,7 +241,7 @@ public class ExplosionPower implements Power {
                         0.005);
             }
 
-            if (left <= 30) {
+            if (state.ignitingTicks <= 30) {
                 w.spawnParticles(net.minecraft.particle.ParticleTypes.LARGE_SMOKE,
                         player.getX(), player.getY() + 1.0, player.getZ(),
                         2,
@@ -238,14 +259,14 @@ public class ExplosionPower implements Power {
                     pitch);
         }
 
-        if (left > 0) return;
+        if (state.ignitingTicks > 0) return;
 
-        setSingleTimerTag(player, NO_SELF_EXP_DMG, 6);
+        state.noSelfExpTicks = 6;
 
         Vec3d center = player.getPos().add(0, 0.1, 0);
 
         explodeAt(w, center, IGNITE_POWER, IGNITE_BREAK_BLOCKS);
-        applyExplosionDamage(player, w, center, IGNITE_DMG_RADIUS, IGNITE_DAMAGE, false);
+        applyExplosionDamage(player, w, center, IGNITE_DMG_RADIUS, IGNITE_DAMAGE, false, false);
 
         Vec3d v = player.getVelocity();
         player.setVelocity(v.x, Math.max(v.y, 0.65), v.z);
@@ -261,16 +282,15 @@ public class ExplosionPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        if (getTimerLeft(player, BLAST_LOCK) > 0) return;
+        ExplosionState state = getState(player);
+        if (state.blastLockTicks > 0) return;
+        if (state.blastCharges <= 0) return;
 
-        int charges = getIntTag(player, BLAST_CHARGES, BLAST_MAX_CHARGES);
-        if (charges <= 0) return;
+        state.blastCharges--;
+        state.blastLockTicks = BLAST_LOCK_TICKS;
 
-        setIntTag(player, BLAST_CHARGES, charges - 1);
-        setSingleTimerTag(player, BLAST_LOCK, BLAST_LOCK_TICKS);
-
-        if (getTimerLeft(player, BLAST_RECHARGE) < 0) {
-            setSingleTimerTag(player, BLAST_RECHARGE, BLAST_RECHARGE_TICKS);
+        if (state.blastRechargeTicks <= 0) {
+            state.blastRechargeTicks = BLAST_RECHARGE_TICKS;
         }
 
         ServerWorld w = player.getServerWorld();
@@ -280,10 +300,10 @@ public class ExplosionPower implements Power {
                 .add(look.multiply(BLAST_SPAWN_DIST))
                 .add(0.0, -BLAST_SPAWN_DOWN, 0.0);
 
-        setSingleTimerTag(player, NO_SELF_EXP_DMG, 6);
+        state.noSelfExpTicks = 6;
 
         explodeAt(w, origin, BLAST_POWER, BLAST_BREAK_BLOCKS);
-        applyExplosionDamage(player, w, origin, BLAST_DMG_RADIUS, BLAST_DAMAGE, false);
+        applyExplosionDamage(player, w, origin, BLAST_DMG_RADIUS, BLAST_DAMAGE, false, true);
 
         applyRecoil(player, origin);
 
@@ -297,29 +317,22 @@ public class ExplosionPower implements Power {
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
-    private static void tickBlastRecharge(ServerPlayerEntity player) {
-        int charges = getIntTag(player, BLAST_CHARGES, BLAST_MAX_CHARGES);
-
-        if (charges >= BLAST_MAX_CHARGES) {
-            removeTagPrefix(player, BLAST_RECHARGE);
+    private static void tickBlastRecharge(ServerPlayerEntity player, ExplosionState state) {
+        if (state.blastCharges >= BLAST_MAX_CHARGES) {
+            state.blastRechargeTicks = 0;
             return;
         }
 
-        if (getTimerLeft(player, BLAST_RECHARGE) < 0) {
-            setSingleTimerTag(player, BLAST_RECHARGE, BLAST_RECHARGE_TICKS);
+        if (state.blastRechargeTicks <= 0) {
+            state.blastRechargeTicks = BLAST_RECHARGE_TICKS;
         }
 
-        int leftAfterTick = tickSingleTimer(player, BLAST_RECHARGE);
-        if (leftAfterTick < 0) return;
+        state.blastRechargeTicks--;
 
-        if (leftAfterTick == 0) {
-            charges = Math.min(BLAST_MAX_CHARGES, charges + 1);
-            setIntTag(player, BLAST_CHARGES, charges);
-
-            if (charges < BLAST_MAX_CHARGES) {
-                setSingleTimerTag(player, BLAST_RECHARGE, BLAST_RECHARGE_TICKS);
-            } else {
-                removeTagPrefix(player, BLAST_RECHARGE);
+        if (state.blastRechargeTicks == 0) {
+            state.blastCharges++;
+            if (state.blastCharges < BLAST_MAX_CHARGES) {
+                state.blastRechargeTicks = BLAST_RECHARGE_TICKS;
             }
         }
     }
@@ -357,24 +370,17 @@ public class ExplosionPower implements Power {
         player.fallDistance = 0.0f;
     }
 
-    private static void updateBlastCooldownUI(ServerPlayerEntity player) {
+    private static void updateBlastCooldownUI(ServerPlayerEntity player, ExplosionState state) {
         String key = "ExplosionUI:SECONDARY";
 
-        int charges = getIntTag(player, BLAST_CHARGES, BLAST_MAX_CHARGES);
-
-        if (charges >= BLAST_MAX_CHARGES) {
+        if (state.blastCharges >= BLAST_MAX_CHARGES) {
             com.yourname.loopypowers.CooldownUI.clearCooldown(player, key);
             return;
         }
 
-        int leftTicks = getTimerLeft(player, BLAST_RECHARGE);
-
-        if (leftTicks < 0) leftTicks = BLAST_RECHARGE_TICKS;
-
-        long endMs = System.currentTimeMillis() + (leftTicks * 50L);
-
+        long endMs = System.currentTimeMillis() + (state.blastRechargeTicks * 50L);
         String suffix = com.yourname.loopypowers.CooldownUI.makeChargeSuffix(
-                charges, BLAST_MAX_CHARGES, leftTicks, BLAST_RECHARGE_TICKS
+                state.blastCharges, BLAST_MAX_CHARGES, state.blastRechargeTicks, BLAST_RECHARGE_TICKS
         );
 
         com.yourname.loopypowers.CooldownUI.setCooldownEnd(player, key, endMs, suffix);
@@ -386,23 +392,15 @@ public class ExplosionPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WARN);
-        removeTagPrefix(player, ULT_AIR);
-        removeTagPrefix(player, ULT_STAGE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
-        removeTagPrefix(player, ULT_LAUNCH_T);
-        removeTagPrefix(player, ULT_LAUNCH_X);
-        removeTagPrefix(player, ULT_LAUNCH_Y);
-        removeTagPrefix(player, ULT_LAUNCH_Z);
+        ExplosionState state = getState(player);
 
-        setSingleTimerTag(player, ULT_ACTIVE, ULT_TOTAL_TICKS);
-        setSingleTimerTag(player, ULT_AIR, ULT_FIZZLE_AIR_TICKS);
-
-        setIntTag(player, ULT_STAGE, 0);
+        state.ultActiveTicks = ULT_TOTAL_TICKS;
+        state.ultAirTicks = ULT_FIZZLE_AIR_TICKS;
+        state.ultStage = 0;
+        state.ultWarnTicks = -1;
 
         if (!player.isOnGround()) {
-            setSingleTimerTag(player, ULT_WAITING_LAND, 999999);
+            state.ultWaitingLand = true;
         }
 
         ServerWorld w = player.getServerWorld();
@@ -413,69 +411,60 @@ public class ExplosionPower implements Power {
         CameraShake.shakeNearby(player, 10.0, 12, 1.1f);
     }
 
-    private static void tickUltimate(ServerPlayerEntity player) {
+    private static void tickUltimate(ServerPlayerEntity player, ExplosionState state) {
         ServerWorld w = player.getServerWorld();
-
-        int ultLeft = tickSingleTimer(player, ULT_ACTIVE);
-        if (ultLeft < 0) return;
+        state.ultActiveTicks--;
 
         tickUltAmbientFx(player, w);
 
         // Render drop zone indicator while airborne
         if (!player.isOnGround()) {
-            tickUltDropZoneIndicator(player, w);
+            tickUltDropZoneIndicator(player, w, state.ultStage);
 
-            int airLeft = tickSingleTimer(player, ULT_AIR);
-            if (airLeft == 0) {
-                cancelUltimate(player, w);
+            if (state.ultAirTicks > 0) {
+                state.ultAirTicks--;
+                if (state.ultAirTicks == 0) {
+                    cancelUltimate(player, state, w);
+                }
             }
             return;
         }
 
-        setSingleTimerTag(player, ULT_AIR, ULT_FIZZLE_AIR_TICKS);
+        state.ultAirTicks = ULT_FIZZLE_AIR_TICKS;
+        state.ultWaitingLand = false;
 
-        if (hasTagPrefix(player, ULT_WAITING_LAND)) {
-            removeTagPrefix(player, ULT_WAITING_LAND);
-        }
+        if (state.ultWarnTicks >= 0) {
+            tickUltFinisherChargeFx(player, w, state.ultWarnTicks);
 
-        int warnNow = getTimerLeft(player, ULT_WARN);
-        if (warnNow >= 0) {
-            tickUltFinisherChargeFx(player, w, warnNow);
-
-            int warnLeft = tickSingleTimer(player, ULT_WARN);
-            if (warnLeft == 0) {
-                removeTagPrefix(player, ULT_WARN);
-                removeTagPrefix(player, ULT_AIR);
-                removeTagPrefix(player, ULT_STAGE);
-                removeTagPrefix(player, ULT_WAITING_LAND);
-                removeTagPrefix(player, ULT_ACTIVE);
-
-                doUltPop(player, true, 3);
+            if (state.ultWarnTicks == 0) {
+                state.ultWarnTicks = -1; // reset
+                state.ultActiveTicks = 0; // End ult
+                doUltPop(player, state, true, 3);
+            } else {
+                state.ultWarnTicks--;
             }
             return;
         }
 
-        int stage = getIntTag(player, ULT_STAGE, 0);
+        if (state.ultStage < ULT_POPS_ACTUAL) {
+            doUltPop(player, state, false, state.ultStage);
+            state.ultStage++;
 
-        if (stage < ULT_POPS_ACTUAL) {
-            doUltPop(player, false, stage);
-            setIntTag(player, ULT_STAGE, stage + 1);
-
-            if (stage + 1 >= ULT_POPS_ACTUAL) {
-                setSingleTimerTag(player, ULT_WARN, ULT_WARN_TICKS);
+            if (state.ultStage >= ULT_POPS_ACTUAL) {
+                state.ultWarnTicks = ULT_WARN_TICKS;
             }
             return;
         }
 
-        setSingleTimerTag(player, ULT_WARN, ULT_WARN_TICKS);
+        state.ultWarnTicks = ULT_WARN_TICKS;
     }
 
-    public static void cancelUltimate(ServerPlayerEntity player, ServerWorld w) {
-        removeTagPrefix(player, ULT_ACTIVE);
-        removeTagPrefix(player, ULT_WARN);
-        removeTagPrefix(player, ULT_AIR);
-        removeTagPrefix(player, ULT_STAGE);
-        removeTagPrefix(player, ULT_WAITING_LAND);
+    public static void cancelUltimate(ServerPlayerEntity player, ExplosionState state, ServerWorld w) {
+        state.ultActiveTicks = 0;
+        state.ultWarnTicks = -1;
+        state.ultStage = 0;
+        state.ultWaitingLand = false;
+        state.ultLaunchDelayTicks = 0;
 
         w.playSound(null, player.getBlockPos(),
                 SoundEvents.BLOCK_FIRE_EXTINGUISH,
@@ -492,46 +481,36 @@ public class ExplosionPower implements Power {
         ));
     }
 
-    public static void forceEarlyDetonation(ServerPlayerEntity player, ServerWorld w) {
-        // If we aren't currently waiting in the air for the next pop, do nothing
-        if (getTimerLeft(player, ULT_AIR) < 0) return;
+    public static void forceEarlyDetonation(ServerPlayerEntity player, ExplosionState state, ServerWorld w) {
+        if (state.ultAirTicks <= 0) return;
 
-        // Clear the air timer so we don't naturally fizzle
-        removeTagPrefix(player, ULT_AIR);
+        state.ultAirTicks = 0;
+        state.ultWaitingLand = false;
 
-        // Remove the wait tag so the next tick instantly triggers the explosion
-        removeTagPrefix(player, ULT_WAITING_LAND);
-
-        // Optional: Play a sound/particle effect to show they were "shot down"
         w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_IRON_GOLEM_DAMAGE, player.getSoundCategory(), 1.0f, 1.5f);
 
-        // Reduce their upward momentum significantly so the forced pop doesn't send them into orbit
         Vec3d v = player.getVelocity();
         player.setVelocity(v.x * 0.5, v.y * 0.2, v.z * 0.5);
         player.velocityModified = true;
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
     }
 
-    private static void tickUltDropZoneIndicator(ServerPlayerEntity player, ServerWorld w) {
-        // Raycast straight down to find where they will land
+    private static void tickUltDropZoneIndicator(ServerPlayerEntity player, ServerWorld w, int ultStage) {
         Vec3d start = player.getPos();
-        Vec3d end = start.subtract(0, 100, 0); // Cast 100 blocks down
+        Vec3d end = start.subtract(0, 100, 0);
 
         HitResult hit = w.raycast(new RaycastContext(
                 start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player
         ));
 
-        if (hit.getType() == HitResult.Type.MISS) return; // In void, no ground to draw on
+        if (hit.getType() == HitResult.Type.MISS) return;
 
         Vec3d groundPos = hit.getPos();
 
-        // Determine radius based on if this is a regular pop or the final boom
-        int stage = getIntTag(player, ULT_STAGE, 0);
-        double radius = (stage >= ULT_POPS_ACTUAL) ? ULT_FINAL_DMG_RADIUS : ULT_POP_DMG_RADIUS;
+        double radius = (ultStage >= ULT_POPS_ACTUAL) ? ULT_FINAL_DMG_RADIUS : ULT_POP_DMG_RADIUS;
 
-        // Draw spinning circle
         int points = 24;
-        double time = (w.getTime() % 20) / 20.0; // 0 to 1 over a second
+        double time = (w.getTime() % 20) / 20.0;
         double offsetAngle = time * Math.PI * 2;
 
         for (int i = 0; i < points; i++) {
@@ -544,32 +523,30 @@ public class ExplosionPower implements Power {
         }
     }
 
-    private static void doUltPop(ServerPlayerEntity player, boolean finisher, int popIndex) {
+    private static void doUltPop(ServerPlayerEntity player, ExplosionState state, boolean finisher, int popIndex) {
         ServerWorld w = player.getServerWorld();
 
         Vec3d pre = player.getVelocity();
 
-        setSingleTimerTag(player, NO_SELF_EXP_DMG, finisher ? 8 : 6);
+        state.noSelfExpTicks = finisher ? 8 : 6;
 
-        // Apply braced so they survive the fall back down
         player.addStatusEffect(new StatusEffectInstance(ModEffects.BRACED, 200, 0, false, false, true));
 
-        setSingleTimerTag(player, ULT_WAITING_LAND, 999999);
+        state.ultWaitingLand = true;
 
         Vec3d origin = player.getPos().add(0, finisher ? 0.1 : 0.2, 0);
 
         if (finisher) {
             explodeAt(w, origin, ULT_FINAL_POWER, ULT_FINAL_BREAK_BLOCKS);
-            applyExplosionDamage(player, w, origin, ULT_FINAL_DMG_RADIUS, ULT_FINAL_DAMAGE, true);
+            applyExplosionDamage(player, w, origin, ULT_FINAL_DMG_RADIUS, ULT_FINAL_DAMAGE, true, false);
         } else {
             explodeAt(w, origin, ULT_POP_POWER, ULT_POP_BREAK_BLOCKS);
-            applyExplosionDamage(player, w, origin, ULT_POP_DMG_RADIUS, ULT_POP_DAMAGE, true);
+            applyExplosionDamage(player, w, origin, ULT_POP_DMG_RADIUS, ULT_POP_DAMAGE, true, false);
         }
 
         Vec3d look = player.getRotationVec(1.0f);
         double launchY = finisher ? ULT_FINAL_LAUNCH_Y : ULT_POP_LAUNCH_Y;
 
-        // half it if they were forced to explode early
         if (!player.isOnGround()) {
             launchY *= 0.5;
         }
@@ -585,7 +562,7 @@ public class ExplosionPower implements Power {
         player.fallDistance = 0.0f;
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
-        scheduleLaunch(player, targetX, targetY, targetZ);
+        scheduleLaunch(state, targetX, targetY, targetZ);
 
         float plingPitch = 1.25f + (0.12f * popIndex);
         w.playSound(null, player.getBlockPos(),
@@ -597,14 +574,14 @@ public class ExplosionPower implements Power {
             w.playSound(null, player.getBlockPos(),
                     ModSounds.EXPLODEBIG,
                     player.getSoundCategory(),
-                    0.95f, 0.85f);
+                    0.8f, 0.85f);
             CameraShake.shakeNearby(player, 14.0, 16, 1.55f);
         } else {
             float pitch = 1.05f + 0.12f * popIndex;
             w.playSound(null, player.getBlockPos(),
                     ModSounds.EXPLODEBIG,
                     player.getSoundCategory(),
-                    0.8f, pitch);
+                    0.75f, pitch);
             CameraShake.shakeNearby(player, 9.0, 8, 0.9f);
         }
     }
@@ -677,36 +654,27 @@ public class ExplosionPower implements Power {
         w.createExplosion(
                 null,
                 pos.x, pos.y, pos.z,
-                0.0f, // 0 power = no vanilla damage/knockback
+                0.0f,
                 false,
                 World.ExplosionSourceType.NONE
         );
 
-        // --- NEW CUSTOM VISUALS ---
-        // Spawn the giant explosion cloud emitter manually so it looks grand
         w.spawnParticles(net.minecraft.particle.ParticleTypes.EXPLOSION_EMITTER,
                 pos.x, pos.y, pos.z, 1, 0.0, 0.0, 0.0, 0.0);
 
-        // Add some flying fiery debris and thick smoke, scaling with the explosion power
         w.spawnParticles(net.minecraft.particle.ParticleTypes.CAMPFIRE_COSY_SMOKE,
                 pos.x, pos.y, pos.z, (int)(power * 15), power * 0.4, power * 0.4, power * 0.4, 0.05);
         w.spawnParticles(net.minecraft.particle.ParticleTypes.LAVA,
                 pos.x, pos.y, pos.z, (int)(power * 4), power * 0.2, power * 0.2, power * 0.2, 0.1);
 
-
-        // Recreate the vanilla raycasting algorithm for realistic cratering
         if (grief) {
             java.util.Set<BlockPos> blocksToBreak = new java.util.HashSet<>();
             int rays = 16;
-
-            // Restored breakPower to 0.9f so it can reliably punch through stone
-            // without being totally overpowered like it was originally.
             float breakPower = power * 0.9f;
 
             for (int x = 0; x < rays; ++x) {
                 for (int y = 0; y < rays; ++y) {
                     for (int z = 0; z < rays; ++z) {
-                        // Only shoot rays from the outer edges of the 16x16x16 grid
                         if (x == 0 || x == rays - 1 || y == 0 || y == rays - 1 || z == 0 || z == rays - 1) {
                             double dx = (double) x / (rays - 1) * 2.0 - 1.0;
                             double dy = (double) y / (rays - 1) * 2.0 - 1.0;
@@ -716,29 +684,23 @@ public class ExplosionPower implements Power {
                             dy /= dist;
                             dz /= dist;
 
-                            // Randomize the ray's power slightly for jagged crater edges
                             float currentPower = breakPower * (0.7F + w.random.nextFloat() * 0.6F);
                             double cx = pos.x;
                             double cy = pos.y;
                             double cz = pos.z;
 
-                            // Step along the ray
                             for (float step = 0.3F; currentPower > 0.0F; currentPower -= 0.225F) {
                                 BlockPos targetPos = BlockPos.ofFloored(cx, cy, cz);
                                 net.minecraft.block.BlockState state = w.getBlockState(targetPos);
 
-                                // If we hit a block or fluid, reduce the ray's power by its blast resistance
                                 if (!state.isAir()) {
                                     float resistance = state.getBlock().getBlastResistance();
-
-                                    // Water and lava absorb blasts heavily
                                     if (!state.getFluidState().isEmpty()) {
                                         resistance = Math.max(resistance, 100.0F);
                                     }
                                     currentPower -= (resistance + 0.3F) * 0.3F;
                                 }
 
-                                // If the ray still has power, mark the block for breaking
                                 if (currentPower > 0.0F && !state.isAir() && state.getBlock().getBlastResistance() < 1200.0F && state.getFluidState().isEmpty()) {
                                     blocksToBreak.add(targetPos);
                                 }
@@ -752,10 +714,15 @@ public class ExplosionPower implements Power {
                 }
             }
 
-            // Actually break the blocks we collected
             for (BlockPos targetPos : blocksToBreak) {
-                // To stop lag and mining abuse, we mimic vanilla "decay"
-                // The larger the explosion, the lower the chance a block drops as an item.
+                net.minecraft.block.BlockState state = w.getBlockState(targetPos);
+
+                if (state.isIn(net.minecraft.registry.tag.BlockTags.SAND) && w.random.nextFloat() < GLASS_CONVERT_CHANCE) {
+                    w.setBlockState(targetPos, net.minecraft.block.Blocks.GLASS.getDefaultState());
+                    w.playSound(null, targetPos, SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.BLOCKS, 0.5f, 2.6f);
+                    continue;
+                }
+
                 boolean shouldDrop = w.random.nextFloat() < (1.0F / Math.max(1.0F, breakPower * 1.5f));
                 w.breakBlock(targetPos, shouldDrop);
             }
@@ -763,7 +730,7 @@ public class ExplosionPower implements Power {
     }
 
     private static void applyExplosionDamage(ServerPlayerEntity caster, ServerWorld w,
-                                             Vec3d center, double radius, float maxDamage, boolean isUltimate) {
+                                             Vec3d center, double radius, float maxDamage, boolean isUltimate, boolean isSecondary) {
 
         Box box = new Box(center, center).expand(radius, radius, radius);
 
@@ -789,7 +756,14 @@ public class ExplosionPower implements Power {
                 knockMul = 0.25;
             }
 
+            boolean wasAlive = e.getHealth() > 0;
             e.damage(src, dmg);
+
+            if (isSecondary && wasAlive && e.getHealth() <= 0 && e instanceof ServerPlayerEntity) {
+                if (w.random.nextFloat() < WHY_SOUND_CHANCE) {
+                    w.playSound(null, e.getBlockPos(), ModSounds.WHY, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
+                }
+            }
 
             Vec3d push = e.getPos().subtract(center);
             Vec3d horiz = new Vec3d(push.x, 0.0, push.z);
@@ -801,32 +775,17 @@ public class ExplosionPower implements Power {
         }
     }
 
-    // ult launch stuff
-    private static void scheduleLaunch(ServerPlayerEntity player, double x, double y, double z) {
-        setIntTag(player, ULT_LAUNCH_X, (int) Math.round(x * ULT_LAUNCH_STORE_SCALE));
-        setIntTag(player, ULT_LAUNCH_Y, (int) Math.round(y * ULT_LAUNCH_STORE_SCALE));
-        setIntTag(player, ULT_LAUNCH_Z, (int) Math.round(z * ULT_LAUNCH_STORE_SCALE));
-
-        setSingleTimerTag(player, ULT_LAUNCH_T, ULT_LAUNCH_DELAY_TICKS);
+    private static void scheduleLaunch(ExplosionState state, double x, double y, double z) {
+        state.launchX = x;
+        state.launchY = y;
+        state.launchZ = z;
+        state.ultLaunchDelayTicks = ULT_LAUNCH_DELAY_TICKS;
     }
 
-    private static double readLaunch(ServerPlayerEntity player, String prefix) {
-        int packed = getIntTag(player, prefix, 0);
-        return packed / ULT_LAUNCH_STORE_SCALE;
-    }
+    private static void tickPendingLaunch(ServerPlayerEntity player, ExplosionState state) {
+        state.ultLaunchDelayTicks--;
 
-    private static void clearLaunch(ServerPlayerEntity player) {
-        removeTagPrefix(player, ULT_LAUNCH_T);
-        removeTagPrefix(player, ULT_LAUNCH_X);
-        removeTagPrefix(player, ULT_LAUNCH_Y);
-        removeTagPrefix(player, ULT_LAUNCH_Z);
-    }
-
-    private static void tickPendingLaunch(ServerPlayerEntity player) {
-        int left = tickSingleTimer(player, ULT_LAUNCH_T);
-        if (left < 0) return;
-
-        if (left == 1) {
+        if (state.ultLaunchDelayTicks == 1) {
             Vec3d v = player.getVelocity();
             player.setVelocity(v.x, Math.max(v.y, ULT_LAUNCH_KICK_Y), v.z);
             player.velocityModified = true;
@@ -835,17 +794,11 @@ public class ExplosionPower implements Power {
             return;
         }
 
-        if (left == 0) {
-            double x = readLaunch(player, ULT_LAUNCH_X);
-            double y = readLaunch(player, ULT_LAUNCH_Y);
-            double z = readLaunch(player, ULT_LAUNCH_Z);
-
-            player.setVelocity(x, y, z);
+        if (state.ultLaunchDelayTicks == 0) {
+            player.setVelocity(state.launchX, state.launchY, state.launchZ);
             player.velocityModified = true;
             player.fallDistance = 0.0f;
             player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
-
-            clearLaunch(player);
         }
     }
 
@@ -855,22 +808,22 @@ public class ExplosionPower implements Power {
 
     @Override public String getName() { return "Explosion"; }
     @Override public String getPrimaryName() { return "Ignition"; }
-    @Override public String getSecondaryName() { return "Blast"; }
+    @Override public String getSecondaryName() { return "Propulsion Blast"; }
     @Override public String getUltimateName() { return "Chain Reaction"; }
 
-    @Override public long getPrimaryCooldownMs() { return 9_000; }
+    @Override public long getPrimaryCooldownMs() { return 28_000; }
     @Override public long getSecondaryCooldownMs() { return 0; }
-    @Override public long getUltimateCooldownMs() { return 5_000; }
+    @Override public long getUltimateCooldownMs() { return 460_000; }
 
     @Override
     public String getOverviewDescription() {
-        return "To be honest, this power is a weird one to describe. I would say it is more movement focussed as all of your abilities allow you to deal high" +
-                "damage and have great movement. But you have to be smart about it since you're not immune to fall damage. (you are immune to your own explosions)";
+        return "Explosion is a high damage, combo-based and movement-oriented power, where abilities are intended to be used together to move quickly and deal high amounts of group damage." +
+                " While also offering some other utilities, like being able to resist all forms of explosion damage, including creepers, end crystals etc. And can also be very destructive.";
     }
 
     @Override
     public String getPassiveName() {
-        return "Exposure Therapy";
+        return "Shock Absorption";
     }
 
     @Override
@@ -894,80 +847,5 @@ public class ExplosionPower implements Power {
         return "Shoot yourself in the air with a big explosion at your feet (or shoot yourself when you land if airborne.) each time you land you will explode and be" +
                 "shot up again. On your final explosion, you will briefly pause and do a bigger explosion. These falls will not inflict fall damage and you are free to use" +
                 "other abilities while airborne. Being in water will also pause the fuse. (so you will explode when surfacing instead)";
-    }
-
-    /* ============================================================
-       TAG HELPERS
-       ============================================================ */
-
-    private static boolean hasTagPrefix(Entity e, String prefix) {
-        for (String tag : e.getCommandTags()) if (tag.startsWith(prefix)) return true;
-        return false;
-    }
-
-    private static void removeTagPrefix(Entity e, String prefix) {
-        var it = e.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) { it.remove(); return; }
-        }
-    }
-
-    private static void removeAllTagPrefix(Entity e, String prefix) {
-        e.getCommandTags().removeIf(tag -> tag.startsWith(prefix));
-    }
-
-    private static void setSingleTimerTag(Entity e, String prefix, int ticks) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + ticks);
-    }
-
-    private static int tickSingleTimer(Entity e, String prefix) {
-        String found = null;
-        for (String tag : e.getCommandTags()) {
-            if (tag.startsWith(prefix)) { found = tag; break; }
-        }
-        if (found == null) return -1;
-
-        e.getCommandTags().remove(found);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(found.substring(prefix.length())) - 1;
-        } catch (NumberFormatException ex) {
-            return -1;
-        }
-
-        if (ticks > 0) e.getCommandTags().add(prefix + ticks);
-        return ticks;
-    }
-
-    public static int getTimerLeft(Entity e, String prefix) {
-        for (String tag : e.getCommandTags()) {
-            if (!tag.startsWith(prefix)) continue;
-            try {
-                return Integer.parseInt(tag.substring(prefix.length()));
-            } catch (NumberFormatException ex) {
-                return -1;
-            }
-        }
-        return -1;
-    }
-
-    private static int getIntTag(Entity e, String prefix, int fallback) {
-        for (String tag : e.getCommandTags()) {
-            if (!tag.startsWith(prefix)) continue;
-            try {
-                return Integer.parseInt(tag.substring(prefix.length()));
-            } catch (NumberFormatException ex) {
-                return fallback;
-            }
-        }
-        return fallback;
-    }
-
-    private static void setIntTag(Entity e, String prefix, int value) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + value);
     }
 }

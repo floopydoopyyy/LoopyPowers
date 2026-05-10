@@ -5,8 +5,6 @@ import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.generation.ModOreGeneration;
 import com.yourname.loopypowers.item.ModItems;
-import com.yourname.loopypowers.manager.AbilityTypes;
-import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PlayerDataStore;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.AbilityPackets;
@@ -22,18 +20,13 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
-import net.minecraft.util.math.Vec3d;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static com.yourname.loopypowers.power.TelekinesisPower.hasTag;
 
 public class Loopypowers implements ModInitializer {
 
@@ -79,18 +72,31 @@ public class Loopypowers implements ModInitializer {
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayerEntity player = handler.player;
             PlayerDataStore.save(player);
+            // Prevent memory leaks on disconnect
+            PowerManager.clearPlayerState(player);
         });
 
         ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> {
             Power oldPower = PowerManager.getPower(oldPlayer);
             if (oldPower != null) {
-                PowerManager.setPower(newPlayer, oldPower);
+                // Silently assign so we don't spam them with text on respawn
+                PowerManager.setPower(newPlayer, oldPower, true);
             }
 
             int level = PowerManager.getLevel(oldPlayer);
             PowerManager.setLevel(newPlayer, level);
             PowerManager.copyCooldowns(oldPlayer, newPlayer);
             PlayerDataStore.save(newPlayer);
+        });
+
+        // death hook
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
+            if (entity instanceof ServerPlayerEntity sp) {
+                Power power = PowerManager.getPower(sp);
+                if (power != null) {
+                    power.onDeath(sp);
+                }
+            }
         });
     }
 
@@ -103,12 +109,6 @@ public class Loopypowers implements ModInitializer {
         registerDamageHook();
     }
 
-    // how often they get sent to the stratosphere normally
-    private static final float ONE_PUNCH_CHANCE = 0.05f;
-
-    // if the debug setting is toggled
-    public static boolean onePunchDebugEnabled = false;
-
     private void registerMeleeHitCallback() {
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (world.isClient()) return ActionResult.PASS;
@@ -116,62 +116,6 @@ public class Loopypowers implements ModInitializer {
             if (!(entity instanceof LivingEntity target)) return ActionResult.PASS;
 
             Power power = PowerManager.getPower(sp);
-
-            // EGG for opm
-            // this was a waste of my time
-            if (power instanceof StrengthPower && sp.getMainHandStack().isEmpty()) {
-
-                boolean isUnarmoredPlayer = (target instanceof ServerPlayerEntity) && (target.getArmor() == 0);
-
-                // check for armour, or debug being enabled
-                if (onePunchDebugEnabled || (isUnarmoredPlayer && world.random.nextFloat() < ONE_PUNCH_CHANCE)) {
-
-                    // wind up
-                    world.playSound(null, sp.getBlockPos(), ModSounds.ONEPUNCH, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
-
-                    // launch into orbit
-                    Vec3d dir = sp.getRotationVec(1.0f).normalize();
-                    target.setVelocity(dir.x * 25.0, 4.0, dir.z * 25.0);
-                    target.velocityModified = true;
-
-                    if (target instanceof ServerPlayerEntity spTarget) {
-                        spTarget.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(spTarget));
-                    }
-
-                    // air tunnel
-                    if (world instanceof ServerWorld sw) {
-                        Vec3d pos = target.getPos();
-
-                        //hit
-                        sw.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, pos.x, pos.y + 1.0, pos.z, 2, 0, 0, 0, 0);
-                        sw.spawnParticles(ParticleTypes.FLASH, pos.x, pos.y + 1.0, pos.z, 5, 1.0, 1.0, 1.0, 0);
-
-                        // more
-                        for (int i = 0; i < 150; i++) {
-                            double step = i * 0.8;
-                            double px = pos.x + dir.x * step;
-                            double py = pos.y + 1.0 + dir.y * step;
-                            double pz = pos.z + dir.z * step;
-
-                            // dense inner trail
-                            sw.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, px, py, pz, 15, 0.5, 0.5, 0.5, 0.1);
-                            // massive outter
-                            sw.spawnParticles(ParticleTypes.CLOUD, px, py, pz, 30, 3.0, 3.0, 3.0, 0.3);
-
-                            // periodic extra
-                            if (i % 8 == 0) {
-                                sw.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, px, py, pz, 1, 0, 0, 0, 0);
-                                sw.spawnParticles(ParticleTypes.EXPLOSION, px, py, pz, 5, 4.0, 4.0, 4.0, 0);
-                            }
-                        }
-                    }
-
-                    // splat
-                    target.damage(ModDamageTypes.onePunch(world, sp), 9999f);
-
-                    return ActionResult.SUCCESS; // skip normal logic
-                }
-            }
 
             if (power != null) power.onHit(sp, target);
 
@@ -181,20 +125,22 @@ public class Loopypowers implements ModInitializer {
 
     private void registerDamageHook() {
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((victim, source, amount) -> {
-            // ── GLOBAL EFFECT HANDLERS ────────────────────────────────────────
+            // -- GLOBAL EVENTS --
+            // keep displace immunity at top - to fast fail
+            if (victim.hasStatusEffect(ModEffects.DISPLACED)) return false;
+            if (source.getAttacker() instanceof LivingEntity attacker && attacker.hasStatusEffect(ModEffects.DISPLACED)) {
+                return false;
+            }
 
-            // fall damage immunity
+            // fall damage immunity (Braced)
             if (source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_FALL)) {
                 if (victim.hasStatusEffect(ModEffects.BRACED)) {
-                    // coomsume effect
                     victim.removeStatusEffect(ModEffects.BRACED);
-
-                    // Play feedback
                     if (victim.getWorld() instanceof ServerWorld w) {
                         w.playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_WOOL_FALL, net.minecraft.sound.SoundCategory.PLAYERS, 0.7f, 1.2f);
                         w.spawnParticles(net.minecraft.particle.ParticleTypes.CLOUD, victim.getX(), victim.getY(), victim.getZ(), 20, 0.4, 0.1, 0.4, 0.05);
                     }
-                    return false; // cancel it!
+                    return false;
                 }
             }
 
@@ -205,29 +151,11 @@ public class Loopypowers implements ModInitializer {
             if (source.getAttacker() instanceof ServerPlayerEntity attacker) {
                 Power attackerPower = PowerManager.getPower(attacker);
 
-                if (attackerPower instanceof BloodPower bp && amount > 0
-                        && source.getSource() == attacker) {
-                    bp.tryApplyBleed(attacker, victim, source, amount);
-                }
-
-                if (attackerPower instanceof DarknessPower dp) {
-                    if (dp.tryAdjustDarknessDamage(victim, source, amount)) return false;
-                }
-
-                if (attackerPower instanceof CosmicPower
-                        && source.getSource() == attacker
-                        && !CosmicPower.isApplyingReducedDamage()
-                        && PassiveManager.isEnabled(attacker)) {
-
-                    if (source.isOf(ModDamageTypes.FATE) || (source.isOf(ModDamageTypes.BLACK_HOLE))) return true;
-
-                    CosmicPower.applyMeleeFate(attacker, victim, amount);
-
-                    CosmicPower.applyingReducedDamage = true;
-                    victim.damage(source, amount * 0.4f);
-                    CosmicPower.applyingReducedDamage = false;
-
-                    return false;
+                // Check dynamic attacker hook
+                if (attackerPower != null) {
+                    if (!attackerPower.onAttack(attacker, victim, source, amount)) {
+                        return false;
+                    }
                 }
             }
 
@@ -236,93 +164,9 @@ public class Loopypowers implements ModInitializer {
             if (!(victim instanceof ServerPlayerEntity victimPlayer)) return true;
             Power victimPower = PowerManager.getPower(victimPlayer);
 
-            if (victimPower instanceof TeleportPower tp) {
-                if (tp.tryDodge(victimPlayer)) return false;
-            }
-
-            if (victimPower instanceof LightningPower) {
-                // stop lightning damage
-                if (source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_LIGHTNING)) {
-                    return false;
-                }
-            }
-
-            if (victimPower instanceof FlightPower fp) {
-                if (fp.isBoomInvulnerable(victimPlayer)) return false;
-                fp.onDamaged(victimPlayer);
-            }
-
-            if (victimPower instanceof BloodPower bp) {
-                if (bp.tryBindDamage(victimPlayer, source, amount)) return false;
-            }
-
-            if (victimPower instanceof ExplosionPower) {
-                // If they are airborne and their ultimate is active
-                if (!victimPlayer.isOnGround() &&
-                        ExplosionPower.getTimerLeft(victimPlayer, ExplosionPower.ULT_ACTIVE) > 0) {
-
-                    // force pop if they take a big chunk of damage and its from a target
-                    if (source.getAttacker() instanceof LivingEntity && amount >= 3.0f) {
-                        if (victimPlayer.getWorld() instanceof ServerWorld sw) {
-                            ExplosionPower.forceEarlyDetonation(victimPlayer, sw);
-                        }
-                    }
-                }
-
-                // self damage check
-                if (ExplosionPower.shouldIgnoreSelfExplosionDamage(victimPlayer)
-                        && source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_EXPLOSION)) return false;
-            }
-
-            if (victimPower instanceof DarknessPower) {
-                for (String tag : victimPlayer.getCommandTags()) {
-                    if (tag.startsWith("dk_mist_")) return false;
-                }
-            }
-
-            if (victimPower instanceof HealingPower hp) {
-
-                HealingPower.resetPassiveDelay(victimPlayer);
-
-                if (source.isOf(ModDamageTypes.ABSORB) ||
-                        source.isOf(ModDamageTypes.SMOOTHING)) {
-                    return true;
-                }
-
-                if (HealingPower.handleAbsorbDamage(victimPlayer, amount)) {
-                    return false;
-                }
-
-                float smoothing = hp.getSmoothing(victimPlayer);
-
-                if (smoothing > 0f) {
-                    float reduced = amount * (1.0f - smoothing);
-
-                    victimPlayer.damage(
-                            ModDamageTypes.smoothing(victimPlayer.getWorld()),
-                            reduced
-                    );
-
-                    return false;
-                }
-
-                return true;
-            }
-
-            if (victimPower instanceof DimensionalPower) {
-                if (DimensionalPower.hasTag(victimPlayer, "int_immune_")) return false;
-            }
-
-            if (victimPower instanceof DimensionalPower dp) {
-                dp.onDamaged(victimPlayer);
-            }
-
-            // ── GLOBAL: DISPLACEMENT IMMUNITY ────────────────────────────────
-
-            if (DimensionalPower.hasTag(victim, "int_displaced_")) return false;
-
-            if (source.getAttacker() instanceof LivingEntity attacker) {
-                if (DimensionalPower.hasTag(attacker, "int_displaced_")) return false;
+            // Check dynamic victim hook
+            if (victimPower != null) {
+                return victimPower.onDamaged(victimPlayer, source, amount);
             }
 
             return true;
@@ -338,6 +182,8 @@ public class Loopypowers implements ModInitializer {
     }
 
     private void onServerTick(MinecraftServer server) {
+        RitualManager.tick(server);
+
         for (ServerWorld world : server.getWorlds()) {
             FortunePower.tickHousesWorld(world);
         }
@@ -348,30 +194,11 @@ public class Loopypowers implements ModInitializer {
     }
 
     private void tickPlayer(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
-
         CooldownUI.tick(player);
-        RitualManager.tick(world);
 
         Power power = PowerManager.getPower(player);
-        if (power == null) return;
-
-        power.onTick(player);
-
-        if (power instanceof TelekinesisPower tk) {
-            boolean isSwinging  = player.handSwinging;
-            boolean wasSwinging = TelekinesisPower.hasTag(player, "tk_prev_swing");
-
-            if (isSwinging && !wasSwinging) {
-                if (!hasTag(player, "tk_throw_cd_")) {
-                    tk.performThrow(player);
-                    player.getCommandTags().add("tk_throw_cd_8");
-                }
-                tk.throwDebrisProjectile(player);
-            }
-
-            TelekinesisPower.removeTagPrefix(player, "tk_prev_swing");
-            if (isSwinging) player.getCommandTags().add("tk_prev_swing");
+        if (power != null) {
+            power.onTick(player);
         }
     }
 }

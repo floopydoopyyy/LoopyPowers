@@ -28,7 +28,25 @@ import java.util.*;
 
 public class FortunePower implements Power {
 
-    private static final String SEC_FX = "fo_sfx_";          // fo_sfx_<ticks>
+    /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, FortuneState> ACTIVE_STATES = new HashMap<>();
+    private static final Set<UUID> DAMAGE_GUARDS = new HashSet<>();
+
+    private static class FortuneState {
+        int luck = 0;
+        int luckDecayTicks = 0;
+    }
+
+    private static FortuneState getState(Entity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new FortuneState());
+    }
+
+    private static FortuneState getStateOpt(Entity player) {
+        return ACTIVE_STATES.get(player.getUuid());
+    }
 
     /* ============================================================
        BASIC
@@ -36,12 +54,8 @@ public class FortunePower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        removeTagPrefix(player, PRIM_FX);
-        removeTagPrefix(player, SEC_FX);
-        removeTagPrefix(player, ULT_ACTIVE);
-
-        removeTagPrefix(player, LUCK_POINTS);
-        removeTagPrefix(player, LUCK_DECAY);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fo_")); // Cleanup legacy tags
+        ACTIVE_STATES.put(player.getUuid(), new FortuneState());
 
         breakDuel(player.getUuid());
 
@@ -53,12 +67,8 @@ public class FortunePower implements Power {
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, PRIM_FX);
-        removeTagPrefix(player, SEC_FX);
-        removeTagPrefix(player, ULT_ACTIVE);
-
-        removeTagPrefix(player, LUCK_POINTS);
-        removeTagPrefix(player, LUCK_DECAY);
+        player.getCommandTags().removeIf(tag -> tag.startsWith("fo_"));
+        ACTIVE_STATES.remove(player.getUuid());
 
         breakDuel(player.getUuid());
 
@@ -69,31 +79,27 @@ public class FortunePower implements Power {
     }
 
     @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
+
+    @Override
     public void onTick(ServerPlayerEntity player) {
-        // passive
-        tickLuck(player);
-
-        // tick FX tags
-        tickSingleTimer(player, PRIM_FX);
-        tickSingleTimer(player, SEC_FX);
-
-        // duels
+        FortuneState state = getState(player);
+        tickLuck(player, state);
         tickDuelsWorld(player.getServerWorld());
     }
 
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
-        // apply passive
-        addLuck(attacker, LUCK_GAIN_ON_HIT);
-        tryProcOnHit(attacker, target);
+        FortuneState state = getState(attacker);
+        addLuck(attacker, state, LUCK_GAIN_ON_HIT);
+        tryProcOnHit(attacker, state, target);
     }
 
     /* ============================================================
        PASSIVE
        ============================================================ */
-
-    private static final String LUCK_POINTS = "fo_luck_";     // fo_luck_<0..100>
-    private static final String LUCK_DECAY  = "fo_luckd_";    // fo_luckd_<ticks>
 
     private static final int LUCK_MAX = 100;
     private static final int PROC_ACTIONBAR_TICKS = 35;
@@ -113,64 +119,43 @@ public class FortunePower implements Power {
     // spend luck on proc
     private static final int LUCK_SPEND_ON_PROC = 45;
 
-    private static int getLuck(ServerPlayerEntity p) {
-        return getIntTag(p, LUCK_POINTS, 0);
-    }
-
-    private static void setLuck(ServerPlayerEntity p, int v) {
-        setIntTag(p, LUCK_POINTS, MathHelper.clamp(v, 0, LUCK_MAX));
-    }
-
-    private static void addLuck(ServerPlayerEntity p, int add) {
+    private static void addLuck(ServerPlayerEntity p, FortuneState state, int add) {
         // dodge passive if passive off
         if (!PassiveManager.isEnabled(p)) return;
-
         if (add <= 0) return;
 
-        int cur = getLuck(p);
-        int next = MathHelper.clamp(cur + add, 0, LUCK_MAX);
-        setLuck(p, next);
-
-        // refresh decay delay
-        setSingleTimerTag(p, LUCK_DECAY, LUCK_DECAY_DELAY_TICKS);
+        state.luck = MathHelper.clamp(state.luck + add, 0, LUCK_MAX);
+        state.luckDecayTicks = LUCK_DECAY_DELAY_TICKS;
     }
 
-    private static void tickLuck(ServerPlayerEntity p) {
-        int luck = getLuck(p);
-        if (luck <= 0) return;
+    private static void tickLuck(ServerPlayerEntity p, FortuneState state) {
+        if (state.luck <= 0) return;
 
-        int left = tickSingleTimer(p, LUCK_DECAY);
-        if (left < 0) return;
+        state.luckDecayTicks--;
 
         // when delay hits 0, step down and schedule next step
-        if (left == 0) {
-            int next = Math.max(0, luck - LUCK_DECAY_STEP_POINTS);
-            setLuck(p, next);
-
-            if (next > 0) {
-                setSingleTimerTag(p, LUCK_DECAY, LUCK_DECAY_STEP_TICKS);
-            } else {
-                removeTagPrefix(p, LUCK_DECAY);
-                removeTagPrefix(p, LUCK_POINTS);
+        if (state.luckDecayTicks == 0) {
+            state.luck = Math.max(0, state.luck - LUCK_DECAY_STEP_POINTS);
+            if (state.luck > 0) {
+                state.luckDecayTicks = LUCK_DECAY_STEP_TICKS;
             }
         }
     }
 
-    private static void tryProcOnHit(ServerPlayerEntity attacker, LivingEntity target) {
+    private static void tryProcOnHit(ServerPlayerEntity attacker, FortuneState state, LivingEntity target) {
         // dodge passive if passive off
         if (!PassiveManager.isEnabled(attacker)) return;
 
         ServerWorld w = attacker.getServerWorld();
 
-        int luck = getLuck(attacker);
-        float t = luck / (float) LUCK_MAX;
-
+        float t = state.luck / (float) LUCK_MAX;
         float chance = PROC_BASE + (PROC_BONUS_AT_MAX * t);
+
         if (w.random.nextFloat() >= chance) return;
 
         // spend luck when we proc
-        setLuck(attacker, Math.max(0, luck - LUCK_SPEND_ON_PROC));
-        setSingleTimerTag(attacker, LUCK_DECAY, LUCK_DECAY_DELAY_TICKS);
+        state.luck = Math.max(0, state.luck - LUCK_SPEND_ON_PROC);
+        state.luckDecayTicks = LUCK_DECAY_DELAY_TICKS;
 
         int roll = w.random.nextInt(3);
 
@@ -258,8 +243,6 @@ public class FortunePower implements Power {
        PRIMARY
        ============================================================ */
 
-    private static final String PRIM_FX = "fo_pfx_";         // fo_pfx_<ticks>
-
     private static final float PRIM_SELF_DAMAGE = 6.0f; // 3 hearts
     private static final int PRIM_STR_AMP = 0;          // Strength 1
     private static final int PRIM_SPEED_AMP = 1;        // Speed 2
@@ -267,10 +250,11 @@ public class FortunePower implements Power {
     private static final float JACKPOT_BASE = 0.06f;        // no luck odds
     private static final float JACKPOT_BONUS_AT_MAX = 0.28f; // max luck bonus chance
     private static final float JACKPOT_MAX = 0.60f;         // hard cap
+
     // Jackpot rewards
     private static final int JACKPOT_REGEN_TICKS  = 40;     // regeneration time
     private static final int PRIM_BUFF_TICKS = 80; // time buffed
-    private static final int PRIM_FX_TICKS = 16; // fx
+
     // egg
     private static final int FUNNY_CHANCE = 300; // funny
 
@@ -279,12 +263,7 @@ public class FortunePower implements Power {
         ServerWorld w = player.getServerWorld();
 
         // self damage
-        float before = player.getHealth();
-
         player.damage(ModDamageTypes.bet(w), PRIM_SELF_DAMAGE); // bet damage
-
-        float after = player.getHealth();
-        float actuallyLost = Math.max(0.0f, before - after);
 
         // If they died stop
         if (!player.isAlive()) return;
@@ -292,9 +271,6 @@ public class FortunePower implements Power {
         // base buffs
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, PRIM_BUFF_TICKS, PRIM_STR_AMP, true, false));
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, PRIM_BUFF_TICKS, PRIM_SPEED_AMP, true, false));
-
-        // base fx
-        setSingleTimerTag(player, PRIM_FX, PRIM_FX_TICKS);
 
         // Base FX
         w.playSound(null, player.getBlockPos(),
@@ -336,8 +312,8 @@ public class FortunePower implements Power {
     }
 
     private static boolean tryAllInJackpot(ServerPlayerEntity player, ServerWorld w) { // attempts and applies jackpot
-        int luck = getLuck(player);
-        float t = luck / (float) LUCK_MAX;
+        FortuneState state = getState(player);
+        float t = state.luck / (float) LUCK_MAX;
 
         float chance = JACKPOT_BASE + (JACKPOT_BONUS_AT_MAX * t);
         chance = MathHelper.clamp(chance, 0.0f, JACKPOT_MAX);
@@ -380,8 +356,6 @@ public class FortunePower implements Power {
        SECONDARY
        ============================================================ */
 
-    private static final String DUEL_GUARD = "fo_duel_guard";
-
     private static final double DUEL_CAST_RANGE = 24.0;
     private static final double DUEL_MAX_RANGE  = 20.0;        // leash before it breaks
     private static final int    DUEL_DURATION_TICKS = 20 * 10; // 10s
@@ -409,12 +383,6 @@ public class FortunePower implements Power {
 
         boolean contains(UUID u) {
             return a.equals(u) || b.equals(u);
-        }
-
-        UUID other(UUID u) {
-            if (a.equals(u)) return b;
-            if (b.equals(u)) return a;
-            return null;
         }
     }
 
@@ -495,56 +463,6 @@ public class FortunePower implements Power {
 
         ACTIVE_DUELS.remove(d.a);
         ACTIVE_DUELS.remove(d.b);
-    }
-
-    /**
-     * Called from Loopypowers.ALLOW_DAMAGE.
-     * Returns true if we handled it (cancels original damage)
-     */
-    public static boolean tryAdjustDuelDamage(LivingEntity victim, DamageSource source, float amount) {
-        if (amount <= 0) return false;
-
-        Entity atkEnt = source.getAttacker();
-        if (!(atkEnt instanceof LivingEntity attacker)) return false; // ignore environment damage
-
-        // recursion guard (to stop damage being constantly applied)
-        if (victim.getCommandTags().contains(DUEL_GUARD)) return false;
-        if (attacker.getCommandTags().contains(DUEL_GUARD)) return false;
-
-        DuelInstance dv = ACTIVE_DUELS.get(victim.getUuid());
-        DuelInstance da = ACTIVE_DUELS.get(attacker.getUuid());
-
-        if (dv == null && da == null) return false;
-
-        float mult;
-        DamageSource finalSource = source;
-
-        if (dv != null) {
-            // victim is in a duel, attacker is either their partner or someone else
-            if (dv.contains(attacker.getUuid())) {
-                mult = DUEL_VS_PARTNER_MULT;
-                finalSource = ModDamageTypes.duel(victim.getWorld(), attacker); // uses duel damage type
-            } else {
-                mult = DUEL_VS_OTHERS_MULT;
-            }
-        } else {
-            // victim not in a duel, but attacker is, attacker should deal reduced damage to others
-            mult = DUEL_VS_OTHERS_MULT;
-        }
-
-        float newAmount = amount * mult;
-        if (Math.abs(newAmount - amount) < 1.0e-4f) return false;
-
-        victim.getCommandTags().add(DUEL_GUARD);
-        attacker.getCommandTags().add(DUEL_GUARD);
-        try {
-            victim.damage(finalSource, newAmount);
-        } finally {
-            victim.getCommandTags().remove(DUEL_GUARD);
-            attacker.getCommandTags().remove(DUEL_GUARD);
-        }
-
-        return true; // cancel original damage
     }
 
     private static void startDuel(ServerPlayerEntity caster, LivingEntity target) {
@@ -704,9 +622,6 @@ public class FortunePower implements Power {
    ULTIMATE
    ============================================================ */
 
-    private static final String ULT_ACTIVE = "fo_ult_";         // fo_ult_<ticks>
-    private static final String HOUSE_TAG  = "fo_house_caged";  // tag applied to any LivingEntity inside
-
     // Cage
     private static final int HOUSE_RADIUS = 8;
     private static final int HOUSE_WALL_LAYERS = 4;
@@ -730,8 +645,10 @@ public class FortunePower implements Power {
     private static final int HOUSE_RULE_INTERVAL_TICKS = 80; // every 4s
     private static final int HOUSE_RULE_MIN_PLAYERS_TO_ANNOUNCE = 1;
 
+    private static final float RULE_WOOLIAM_CHANCE = 0.004f; // EGG!!!
+
     // Roulette
-    private static final float RULE_ROULETTE_DAMAGE = 7.0f;
+    private static final float RULE_ROULETTE_DAMAGE = 14.0f;
 
     // Lightning Round
     private static final int RULE_LIGHTNING_EVERY_TICKS = 10;
@@ -739,7 +656,7 @@ public class FortunePower implements Power {
 
     // Hot Seat
     private static final int RULE_HOTSEAT_FUSE_TICKS = 60;
-    private static final float RULE_HOTSEAT_DAMAGE = 8.0f;
+    private static final float RULE_HOTSEAT_DAMAGE = 28.0f;
     private static final int RULE_HOTSEAT_PARTICLES_EVERY_TICKS = 2;
 
     // Double or Nothing
@@ -769,7 +686,7 @@ public class FortunePower implements Power {
 
     // Wildcards
     private static final int RULE_WILDCARDS_MIN = 2;
-    private static final int RULE_WILDCARDS_MAX = 4;
+    private static final int RULE_WILDCARDS_MAX = 8;
 
     private static int ruleEffectDurationTicks() {
         int base = HOUSE_RULE_INTERVAL_TICKS + 10;
@@ -792,7 +709,8 @@ public class FortunePower implements Power {
         SMOKE_MACHINE,
         SPOTLIGHT,
         JACKPOT,
-        CARD_COUNTER
+        CARD_COUNTER,
+        WOOLIAM_INVASION
     }
 
     private static final Map<UUID, HouseState> ACTIVE_HOUSES = new HashMap<>();
@@ -832,7 +750,7 @@ public class FortunePower implements Power {
 
             this.buildLayer = 0;
             this.buildWait = HOUSE_BUILD_INTERVAL_TICKS;
-            this.activeLeft = HOUSE_ACTIVE_TICKS;
+            this.activeLeft = HOUSE_ACTIVE_TICKS + (HOUSE_WALL_LAYERS * HOUSE_BUILD_INTERVAL_TICKS) + 20;
             this.built = false;
         }
     }
@@ -845,17 +763,13 @@ public class FortunePower implements Power {
 
         removeHouseNow(server, player.getUuid());
 
-        setSingleTimerTag(player, ULT_ACTIVE,
-                HOUSE_ACTIVE_TICKS + (HOUSE_WALL_LAYERS * HOUSE_BUILD_INTERVAL_TICKS) + 20
-        );
-
         BlockPos center = player.getBlockPos();
         HouseState st = new HouseState(player.getUuid(), w.getRegistryKey(), center);
         ACTIVE_HOUSES.put(player.getUuid(), st);
 
         placeHouseFloor(w, st);
         clearHouseInteriorAbove(w, st);
-        updateHouseInside(server, w, st);
+        updateHouseInside(w, st);
 
         // fx
         w.playSound(null, center, SoundEvents.BLOCK_END_PORTAL_FRAME_FILL,
@@ -891,7 +805,7 @@ public class FortunePower implements Power {
 
             if (!st.worldKey.equals(key)) continue;
 
-            updateHouseInside(server, w, st);
+            updateHouseInside(w, st);
 
             if ((now % HOUSE_ROOF_FX_EVERY_TICKS) == 0L) spawnHouseRoofFx(w, st);
             if ((now % HOUSE_BREAK_EVERY_TICKS) == 0L) enforceHouseBuildCeiling(w, st);
@@ -1038,19 +952,23 @@ public class FortunePower implements Power {
             case JACKPOT -> armJackpot(w, st);
 
             case CARD_COUNTER -> doCardCounter(w, st);
+
+            case WOOLIAM_INVASION -> spawnWooliamInvasion(w, st);
         }
     }
 
     private static HouseRule rollRule(ServerWorld w, HouseRule current) {
-        HouseRule[] all = HouseRule.values();
-        if (all.length == 1) return all[0];
+        if (w.random.nextFloat() < RULE_WOOLIAM_CHANCE) {
+            return HouseRule.WOOLIAM_INVASION;
+        }
 
+        HouseRule[] all = HouseRule.values();
         HouseRule pick;
         int guard = 0;
         do {
             pick = all[w.random.nextInt(all.length)];
             guard++;
-        } while (pick == current && guard < 10);
+        } while ((pick == current || pick == HouseRule.WOOLIAM_INVASION) && guard < 10);
 
         return pick;
     }
@@ -1073,6 +991,7 @@ public class FortunePower implements Power {
             case SPOTLIGHT -> "Spotlight";
             case JACKPOT -> "Jackpot";
             case CARD_COUNTER -> "Card Counter";
+            case WOOLIAM_INVASION -> "Wooliam";
         };
 
         String desc = switch (rule) { // rule descriptions
@@ -1092,6 +1011,7 @@ public class FortunePower implements Power {
             case SPOTLIGHT -> "Someone is glowing and takes extra damage.";
             case JACKPOT -> "The next hit is amplified.";
             case CARD_COUNTER -> "Owner's luck is set to the max.";
+            case WOOLIAM_INVASION -> "";
         };
 
         Text msg = Text.literal("§6§l[HOUSE RULE]§r §e" + name + " §7- " + desc); // outputs rule
@@ -1340,6 +1260,31 @@ public class FortunePower implements Power {
         }
     }
 
+    // EGG - SEND THE WOOLIAMS
+    private static void spawnWooliamInvasion(ServerWorld w, HouseState st) {
+        // 20 woolliam
+        for (int i = 0; i < 20; i++) {
+            net.minecraft.entity.passive.SheepEntity sheep = net.minecraft.entity.EntityType.SHEEP.create(w);
+            if (sheep != null) {
+                BlockPos p = randomInsidePos(w, st, 1);
+                sheep.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
+                sheep.setCustomName(Text.literal("wooliam"));
+                w.spawnEntity(sheep);
+                w.spawnParticles(ParticleTypes.POOF, sheep.getX(), sheep.getY() + 0.5, sheep.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
+            }
+        }
+        // 1 hamuel
+        net.minecraft.entity.passive.PigEntity pig = net.minecraft.entity.EntityType.PIG.create(w);
+        if (pig != null) {
+            BlockPos p = randomInsidePos(w, st, 1);
+            pig.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
+            pig.setCustomName(Text.literal("hamuel"));
+            w.spawnEntity(pig);
+            w.spawnParticles(ParticleTypes.POOF, pig.getX(), pig.getY() + 0.5, pig.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
+        }
+        w.playSound(null, st.center, SoundEvents.ENTITY_SHEEP_AMBIENT, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);
+    }
+
     // gets random spot in area, for mob spawning
     private static BlockPos randomInsidePos(ServerWorld w, HouseState st, int margin) {
         int cx = st.center.getX();
@@ -1416,8 +1361,9 @@ public class FortunePower implements Power {
     private static void doCardCounter(ServerWorld w, HouseState st) {
         Entity owner = w.getEntity(st.owner);
         if (owner instanceof ServerPlayerEntity sp && sp.isAlive()) {
-            setLuck(sp, LUCK_MAX);
-            setSingleTimerTag(sp, LUCK_DECAY, LUCK_DECAY_DELAY_TICKS);
+            FortuneState state = getState(sp);
+            state.luck = LUCK_MAX;
+            state.luckDecayTicks = LUCK_DECAY_DELAY_TICKS;
 
             w.spawnParticles(ParticleTypes.ENCHANT,
                     sp.getX(), sp.getY() + 1.0, sp.getZ(),
@@ -1426,18 +1372,15 @@ public class FortunePower implements Power {
     }
 
     // damage hook: decides what rule applies to the damage event
-
-    private static final String FORTUNE_DMG_GUARD = "fo_fortune_dmg_guard";
-
     public static boolean tryAdjustFortuneDamage(LivingEntity victim, DamageSource source, float amount) {
         if (amount <= 0) return false;
 
         Entity atkEnt = source.getAttacker();
         LivingEntity attacker = (atkEnt instanceof LivingEntity le) ? le : null;
 
-        // recursion guard
-        if (victim.getCommandTags().contains(FORTUNE_DMG_GUARD)) return false;
-        if (attacker != null && attacker.getCommandTags().contains(FORTUNE_DMG_GUARD)) return false;
+        // recursion guard via global hashset
+        if (victim.getUuid() != null && DAMAGE_GUARDS.contains(victim.getUuid())) return false;
+        if (attacker != null && DAMAGE_GUARDS.contains(attacker.getUuid())) return false;
 
         if (!(victim.getWorld() instanceof ServerWorld w)) return false;
 
@@ -1498,13 +1441,13 @@ public class FortunePower implements Power {
 
         float newAmount = amount * mult;
 
-        victim.getCommandTags().add(FORTUNE_DMG_GUARD);
-        if (attacker != null) attacker.getCommandTags().add(FORTUNE_DMG_GUARD);
+        if (victim.getUuid() != null) DAMAGE_GUARDS.add(victim.getUuid());
+        if (attacker != null) DAMAGE_GUARDS.add(attacker.getUuid());
         try {
             victim.damage(finalSource, newAmount);
         } finally {
-            victim.getCommandTags().remove(FORTUNE_DMG_GUARD);
-            if (attacker != null) attacker.getCommandTags().remove(FORTUNE_DMG_GUARD);
+            if (victim.getUuid() != null) DAMAGE_GUARDS.remove(victim.getUuid());
+            if (attacker != null) DAMAGE_GUARDS.remove(attacker.getUuid());
         }
         return true; // cancel original damage in hook
     }
@@ -1640,7 +1583,7 @@ public class FortunePower implements Power {
         }
     }
 
-    private static void updateHouseInside(net.minecraft.server.MinecraftServer server, ServerWorld w, HouseState st) { // maintain members
+    private static void updateHouseInside(ServerWorld w, HouseState st) { // maintain members
         int cx = st.center.getX();
         int cz = st.center.getZ();
 
@@ -1663,17 +1606,11 @@ public class FortunePower implements Power {
             if (Math.abs(dx) <= HOUSE_RADIUS && Math.abs(dz) <= HOUSE_RADIUS) {
                 newInside.add(ent.getUuid());
                 if (!st.inside.contains(ent.getUuid())) {
-                    ent.getCommandTags().add(HOUSE_TAG);
                     w.spawnParticles(ParticleTypes.ENCHANT,
                             ent.getX(), ent.getY() + ent.getHeight() * 0.6, ent.getZ(),
                             8, 0.25, 0.25, 0.25, 0.0);
                 }
             }
-        }
-
-        for (UUID prev : new HashSet<>(st.inside)) {
-            if (newInside.contains(prev)) continue;
-            removeHouseTagFromUuid(server, prev);
         }
 
         st.inside.clear();
@@ -1703,13 +1640,6 @@ public class FortunePower implements Power {
         }
     }
 
-    private static void removeHouseTagFromUuid(net.minecraft.server.MinecraftServer server, UUID u) { // if left the house, remove tag
-        for (ServerWorld sw : server.getWorlds()) {
-            Entity e = sw.getEntity(u);
-            if (e != null) e.getCommandTags().remove(HOUSE_TAG);
-        }
-    }
-
     private static void removeHouseNow(net.minecraft.server.MinecraftServer server, UUID owner) {
         HouseState st = ACTIVE_HOUSES.remove(owner);
         if (st == null) return;
@@ -1717,7 +1647,6 @@ public class FortunePower implements Power {
         ServerWorld w = server.getWorld(st.worldKey);
         if (w == null) return;
 
-        for (UUID u : st.inside) removeHouseTagFromUuid(server, u);
         st.inside.clear();
 
         for (BlockPos p : st.placed) {
@@ -1776,9 +1705,9 @@ public class FortunePower implements Power {
     @Override public String getSecondaryName() { return "Raise The Stakes"; }
     @Override public String getUltimateName() { return "House Rule"; }
 
-    @Override public long getPrimaryCooldownMs() { return 7_000; }
-    @Override public long getSecondaryCooldownMs() { return 10_000; }
-    @Override public long getUltimateCooldownMs() { return 15_000; }
+    @Override public long getPrimaryCooldownMs() { return 26_000; }
+    @Override public long getSecondaryCooldownMs() { return 48_000; }
+    @Override public long getUltimateCooldownMs() { return 540_000; }
 
     @Override
     public String getOverviewDescription() {
@@ -1836,59 +1765,5 @@ public class FortunePower implements Power {
                 + "• Spotlight: Someone is marked to glow and takes extra damage.\n"
                 + "• Jackpot: The next hit in the room is heavily amplified.\n"
                 + "• Card Counter: Owner's luck is instantly set to the maximum.";
-    }
-
-    /* ============================================================
-       TAG HELPERS
-       ============================================================ */
-
-    private static void removeTagPrefix(Entity e, String prefix) {
-        var it = e.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) { it.remove(); return; }
-        }
-    }
-
-    private static void setSingleTimerTag(Entity e, String prefix, int ticks) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + ticks);
-    }
-
-    private static int tickSingleTimer(Entity e, String prefix) {
-        String found = null;
-        for (String tag : e.getCommandTags()) {
-            if (tag.startsWith(prefix)) { found = tag; break; }
-        }
-        if (found == null) return -1;
-
-        e.getCommandTags().remove(found);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(found.substring(prefix.length())) - 1;
-        } catch (NumberFormatException ex) {
-            return -1;
-        }
-
-        if (ticks > 0) e.getCommandTags().add(prefix + ticks);
-        return ticks;
-    }
-
-    private static int getIntTag(Entity e, String prefix, int fallback) {
-        for (String tag : e.getCommandTags()) {
-            if (!tag.startsWith(prefix)) continue;
-            try {
-                return Integer.parseInt(tag.substring(prefix.length()));
-            } catch (NumberFormatException ex) {
-                return fallback;
-            }
-        }
-        return fallback;
-    }
-
-    private static void setIntTag(Entity e, String prefix, int value) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + value);
     }
 }

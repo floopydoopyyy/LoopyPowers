@@ -31,10 +31,10 @@ public class BlackHoleEntity extends Entity {
     public static final int   LIFESPAN         = 200;  // ticks
 
     // movement speed per tick
-    private static final double TRAVEL_SPEED   = 0.04;
+    private static final double TRAVEL_SPEED   = 0.03;
 
     // chance per tick to spawn a cow if bored
-    private static final float MOOVIN_CHANCE   = 0.003f;
+    private static final float MOOVIN_CHANCE   = 0.0003f;
 
     public static final double OUTER_RADIUS    = 25.0;
     public static final double MID_RADIUS      = 16.0;
@@ -52,13 +52,13 @@ public class BlackHoleEntity extends Entity {
     private static final double ORBIT_TANGENT_MIX = 0.55;
 
     // Damage applied per tick in inner ring
-    public static final float INNER_DAMAGE_PER_TICK = 0.5f;
+    public static final float INNER_DAMAGE_PER_TICK = 1.3f;
 
-    // Particles
-    private static final int   CORE_RINGS       = 8;    // more rings = bigger core
-    private static final int DISC_ARMS = 4; // spinny parts
-    private static final float DISC_ARM_RADIUS = 6.0f; // disk size
-    private static final int   OUTER_WISP_COUNT = 12;
+    // Particles (OPTIMIZED)
+    private static final int   CORE_RINGS       = 5;    // Reduced from 8
+    private static final int   DISC_ARMS        = 3;    // Reduced from 4
+    private static final float DISC_ARM_RADIUS  = 6.0f; // disk size
+    private static final int   OUTER_WISP_COUNT = 8;    // Reduced from 12
 
     // particles, last float is size, more central stuff should be bigger
     private static final DustParticleEffect BLACK =
@@ -140,7 +140,7 @@ public class BlackHoleEntity extends Entity {
         spawnAllParticles(world, center, lifeProgress);
 
         // Loop Ambient Sound
-        if (life % 15 == 0) {
+        if (life % 30 == 0) {
             playBlackHoleLoop(world, center);
         }
     }
@@ -151,21 +151,27 @@ public class BlackHoleEntity extends Entity {
 
     private boolean pullAndDamageEntities(ServerWorld world, Vec3d center) { // applied to closer entities
         boolean dealtDamage = false;
-        List<LivingEntity> nearby = world.getEntitiesByClass(
-                LivingEntity.class,
+
+        // Scan for all entities
+        List<Entity> nearby = world.getEntitiesByClass(
+                Entity.class,
                 new net.minecraft.util.math.Box(center, center).expand(OUTER_RADIUS),
-                e -> e.isAlive() && e != owner
+                e -> e.isAlive() && e != owner && e != this && !e.isSpectator()
         );
 
-        for (LivingEntity e : nearby) {
+        for (Entity e : nearby) {
             Vec3d toCenter = center.subtract(e.getPos());
             double dist = toCenter.length();
             if (dist < 0.01) continue;
 
             if (dist <= INNER_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, INNER_PULL);
-                applyInnerRingEffects(world, e);
-                dealtDamage = true;
+
+                // Only damage and apply effects if it's actually alive
+                if (e instanceof LivingEntity living) {
+                    applyInnerRingEffects(world, living);
+                    dealtDamage = true;
+                }
 
             } else if (dist <= MID_RADIUS) {
                 applyOrbitalPull(e, toCenter, dist, MID_PULL);
@@ -178,7 +184,7 @@ public class BlackHoleEntity extends Entity {
         return dealtDamage;
     }
 
-    private void applyOrbitalPull(LivingEntity entity, Vec3d toCenter, double dist, double strength) { // applied to further entities
+    private void applyOrbitalPull(Entity entity, Vec3d toCenter, double dist, double strength) { // applied to further entities
         Vec3d inward = toCenter.normalize();
 
         // tangent — perpendicular to inward on the horizontal plane
@@ -230,8 +236,8 @@ public class BlackHoleEntity extends Entity {
                         p.getBlockPos(),
                         ModSounds.DARKNESSLOOP,
                         net.minecraft.sound.SoundCategory.PLAYERS,
-                        0.8f,
-                        1.3f
+                        0.9f,
+                        0.7f
                 );
             }
         }
@@ -257,13 +263,14 @@ public class BlackHoleEntity extends Entity {
 
     private void spawnEventHorizon(ServerWorld world, Vec3d center, long time) {
         for (int ring = 0; ring < CORE_RINGS; ring++) {
-            double ringRadius = 0.5 + ring * 0.45; // was 0.3 + ring * 0.25 — wider rings
-            int pointsInRing = 8 + ring * 2;        // was 6 + ring * 2 — more points per ring
+            // Spaced out slightly more to cover the same volume with fewer rings
+            double ringRadius = 0.5 + ring * 0.6;
+            int pointsInRing = 6 + ring * 2;
             double rotOffset = time * (0.08 + ring * 0.015) * (ring % 2 == 0 ? 1 : -1);
 
             for (int j = 0; j < pointsInRing; j++) {
                 double angle = rotOffset + (j * Math.PI * 2.0 / pointsInRing);
-                double tiltY = Math.sin(angle * 0.5 + ring) * 0.25; // was 0.15 — more 3D tilt
+                double tiltY = Math.sin(angle * 0.5 + ring) * 0.25;
 
                 double x = center.x + Math.cos(angle) * ringRadius;
                 double y = center.y + 1.0 + tiltY;
@@ -281,8 +288,8 @@ public class BlackHoleEntity extends Entity {
         for (int arm = 0; arm < DISC_ARMS; arm++) {
             double armOffset = arm * (Math.PI * 2.0 / DISC_ARMS);
 
-            // Each arm has multiple particles spiralling
-            int trailLength = 14;
+            // Shorter trail length to save particles
+            int trailLength = 10;
             for (int t = 0; t < trailLength; t++) {
                 double trailFraction = (double) t / trailLength;
 
@@ -304,8 +311,8 @@ public class BlackHoleEntity extends Entity {
 
                 world.spawnParticles(diskColor, x, y, z, 1, 0, 0, 0, 0);
 
-                // these can't really be seen
-                if (t < 4 && world.random.nextFloat() < 0.35f) {
+                // Reduced spark density
+                if (t < 3 && world.random.nextFloat() < 0.15f) {
                     world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
                             x, y, z, 1,
                             (world.random.nextDouble() - 0.5) * 0.05,
@@ -318,7 +325,7 @@ public class BlackHoleEntity extends Entity {
     }
 
     private void spawnInnerVortex(ServerWorld world, Vec3d center, long time) {
-        int points = 12;
+        int points = 8; // Reduced from 12
         for (int i = 0; i < points; i++) {
             // Counter-rotates relative to the disk
             double angle = -(time * 0.14) + (i * Math.PI * 2.0 / points);
@@ -366,8 +373,8 @@ public class BlackHoleEntity extends Entity {
             }
         }
 
-        // more stuff that I can't really see.
-        int coronaCount = (int)(intensity * 6);
+        // Reduced corona ring
+        int coronaCount = (int)(intensity * 4);
         for (int i = 0; i < coronaCount; i++) {
             double angle = world.random.nextDouble() * Math.PI * 2;
             double r = 0.5 + world.random.nextDouble() * 0.8;

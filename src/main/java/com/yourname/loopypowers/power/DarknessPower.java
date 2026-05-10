@@ -3,6 +3,7 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.RenderPackets;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
@@ -31,31 +32,103 @@ import static com.yourname.loopypowers.entity.ModEntities.SHADOW_STEP;
 public class DarknessPower implements Power {
 
     /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, Integer> ACTIVE_MISTS = new HashMap<>();
+    private boolean applyingDarknessDamage = false;
+
+    /* ============================================================
        BASIC
        ============================================================ */
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        removeTagPrefix(player, ULT_ACTIVE);
+        removeTagPrefix(player, "dk_"); // Clean up old string tags
         removeBlackoutNow(player.getServer(), player.getUuid());
+        ACTIVE_MISTS.remove(player.getUuid());
+        player.setNoGravity(false);
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, ULT_ACTIVE);
+        removeTagPrefix(player, "dk_");
+
         removeBlackoutNow(player.getServer(), player.getUuid());
+        ACTIVE_MISTS.remove(player.getUuid());
+
+        player.setNoGravity(false);
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.JUMP_BOOST);
+        player.removeStatusEffect(StatusEffects.WEAKNESS);
+        player.removeStatusEffect(StatusEffects.INVISIBILITY);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
     }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        handleMistForm(player);   // secondary
-        tickBlackoutsWorld(player.getServerWorld()); // ult
+        handleMistForm(player);
+        tickBlackoutsWorld(player.getServerWorld());
+    }
+
+    /* ============================================================
+       DAMAGE HOOKS
+       ============================================================ */
+
+    @Override
+    public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        // Mist form grants total immunity
+        if (ACTIVE_MISTS.containsKey(victim.getUuid())) {
+            return false;
+        }
+        return true;
     }
 
     @Override
-    public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
-        // not needed for the current passive
-        // passive bonus is handled in tryAdjustDarknessDamage(...)
+    public boolean onAttack(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
+        if (amount <= 0) return true;
+        if (this.applyingDarknessDamage) return true; // Recursion guard
+
+        float mult = 1.0f;
+        boolean didBackstab = false;
+        boolean didExposed = false;
+        DamageSource finalSource = source;
+        ServerWorld w = attacker.getServerWorld();
+
+        // Backstab logic
+        if (isBehindTarget(attacker, target)) {
+            mult *= BACKSTAB_BONUS_MULT;
+            didBackstab = true;
+            finalSource = ModDamageTypes.darknessBackstab(w, attacker);
+        }
+
+        // Exposed effect logic
+        if (target.hasStatusEffect(ModEffects.EXPOSED)) {
+            mult *= EXPOSED_DAMAGE_MULT;
+            didExposed = true;
+            finalSource = ModDamageTypes.darkUlt(w, attacker);
+        }
+
+        // No change - let normal damage happen
+        if (Math.abs(mult - 1.0f) < 1.0e-4f && finalSource == source) return true;
+
+        float newAmount = amount * mult;
+
+        // Apply modified damage
+        this.applyingDarknessDamage = true;
+        target.damage(finalSource, newAmount);
+        this.applyingDarknessDamage = false;
+
+        // Visuals
+        if (didBackstab) triggerBackstabFx(w, target, attacker);
+        if (didExposed) triggerExposedFx(w, target, attacker);
+        if (didBackstab && didExposed) triggerComboFx(w, target, attacker);
+
+        return false; // Cancel original vanilla hit
     }
 
     /* ============================================================
@@ -64,12 +137,7 @@ public class DarknessPower implements Power {
 
     private static final float BACKSTAB_BONUS_MULT = 1.30f; // +30%
 
-    /**
-     * Returns true if attacker is behind victim.
-     * This checks whether the attacker is generally in the victim's rear arc.
-     */
     private static boolean isBehindTarget(LivingEntity attacker, LivingEntity victim) {
-        // they are never behind the enemy if passive is off
         if (attacker instanceof ServerPlayerEntity player) {
             if (!PassiveManager.isEnabled(player)) return false;
         }
@@ -77,7 +145,6 @@ public class DarknessPower implements Power {
         Vec3d victimForward = victim.getRotationVec(1.0f);
         Vec3d toAttacker = attacker.getPos().subtract(victim.getPos());
 
-        // flatten both vectors so vertical angle doesn't matter
         victimForward = new Vec3d(victimForward.x, 0.0, victimForward.z);
         toAttacker = new Vec3d(toAttacker.x, 0.0, toAttacker.z);
 
@@ -88,11 +155,43 @@ public class DarknessPower implements Power {
         victimForward = victimForward.normalize();
         toAttacker = toAttacker.normalize();
 
-        // If dot is strongly negative, attacker is behind victim.
-        // -1.0 = directly behind, 0 = side, +1.0 = directly in front.
         double dot = victimForward.dotProduct(toAttacker);
+        return dot < -0.35;
+    }
 
-        return dot < -0.35; // tweak if you want stricter / looser rear check
+    // Helper fx methods extracted for cleanliness
+    private void triggerBackstabFx(ServerWorld w, LivingEntity victim, LivingEntity attacker) {
+        w.playSound(null, victim.getBlockPos(), ModSounds.BACKSTAB, attacker.getSoundCategory(), 0.7f, 1.0f);
+        w.spawnParticles(ParticleTypes.SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 12, 0.3, 0.4, 0.3, 0.02);
+        w.spawnParticles(ParticleTypes.LARGE_SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 6, 0.2, 0.3, 0.2, 0.01);
+
+        Vec3d dir = attacker.getRotationVec(1.0f).normalize();
+        w.spawnParticles(ParticleTypes.SMOKE, victim.getX() + dir.x * 0.5, victim.getBodyY(0.5), victim.getZ() + dir.z * 0.5, 6, 0.1, 0.1, 0.1, 0.01);
+    }
+
+    private void triggerExposedFx(ServerWorld w, LivingEntity victim, LivingEntity attacker) {
+        w.playSound(null, victim.getBlockPos(), ModSounds.BIGSTAB, attacker.getSoundCategory(), 0.5f, 1.2f);
+        w.spawnParticles(ParticleTypes.SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 20, 0.4, 0.5, 0.4, 0.04);
+        w.spawnParticles(ParticleTypes.LARGE_SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 10, 0.3, 0.4, 0.3, 0.02);
+        w.spawnParticles(BLACK_DUST, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 12, 0.25, 0.3, 0.25, 0.0);
+
+        Vec3d dir = attacker.getRotationVec(1.0f).normalize();
+        for (int i = 0; i < 8; i++) {
+            double angle = w.random.nextDouble() * Math.PI * 2;
+            double radius = 0.6;
+            double px = victim.getX() + Math.cos(angle) * radius;
+            double pz = victim.getZ() + Math.sin(angle) * radius;
+            w.spawnParticles(BLACK_DUST, px, victim.getBodyY(0.5), pz, 0, dir.x, 0.05, dir.z, 1.0);
+        }
+    }
+
+    private void triggerComboFx(ServerWorld w, LivingEntity victim, LivingEntity attacker) {
+        w.playSound(null, victim.getBlockPos(), ModSounds.BIGSTAB, attacker.getSoundCategory(), 0.9f, 0.8f);
+        w.spawnParticles(ParticleTypes.CRIT, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 15, 0.3, 0.3, 0.3, 0.1);
+
+        if (victim instanceof ServerPlayerEntity targetPlayer) {
+            CameraShake.shakeNearby(targetPlayer, 3, 10, 0.06f);
+        }
     }
 
     /* ============================================================
@@ -130,120 +229,70 @@ public class DarknessPower implements Power {
        SECONDARY
        ============================================================ */
 
-    private static final String MIST_TAG = "dk_mist_"; // dk_mist_<ticks>
-    private static final int duration = 80;
+    private static final int MIST_DURATION = 80;
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
 
-        // make invisible
-        RenderPackets.hidePlayerFromOthers(player, duration);
+        RenderPackets.hidePlayerFromOthers(player, MIST_DURATION);
 
-        // effects
-        player.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.SPEED,
-                duration,
-                1, // Speed II
-                false, false, true
-        ));
-        player.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.JUMP_BOOST,
-                duration,
-                0,
-                false, false, true
-        ));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, MIST_DURATION, 1, false, false, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.JUMP_BOOST, MIST_DURATION, 0, false, false, true));
 
-        // initial particles
-        w.playSound(null, player.getBlockPos(),
-                ModSounds.MISTENTER,
-                player.getSoundCategory(),
-                1.0f, 1.0f);
+        w.playSound(null, player.getBlockPos(), ModSounds.MISTENTER, player.getSoundCategory(), 1.0f, 1.0f);
+        w.spawnParticles(DARK_DUST, player.getX(), player.getBodyY(0.5), player.getZ(), 35, 0.8, 1.0, 0.8, 0.02);
 
-        w.spawnParticles(
-                DARK_DUST,
-                player.getX(),
-                player.getBodyY(0.5),
-                player.getZ(),
-                35,
-                0.8, 1.0, 0.8,
-                0.02
-        );
-
-        // constant particles
-        player.getCommandTags().add("dk_mist_" + duration);
+        ACTIVE_MISTS.put(player.getUuid(), MIST_DURATION);
 
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
     private static void handleMistForm(ServerPlayerEntity player) {
-        var it = player.getCommandTags().iterator();
-        String newTag = null;
+        Integer ticks = ACTIVE_MISTS.get(player.getUuid());
+        if (ticks == null) return;
 
-        while (it.hasNext()) {
-            String tag = it.next();
+        ticks--;
 
-            if (tag.startsWith(MIST_TAG)) {
-                int ticks = Integer.parseInt(tag.substring(MIST_TAG.length())) - 1;
-
-                it.remove(); // safe removal
-
-                if (ticks <= 0) {
-                    player.setNoGravity(false);
-                    return;
-                }
-
-                newTag = MIST_TAG + ticks;
-
-                // particles
-                spawnMistTrail(player);
-
-                // mist loop sound
-                if (ticks % 18 == 0) {
-                    player.getServerWorld().playSound(
-                            null,
-                            player.getBlockPos(),
-                            com.yourname.loopypowers.sound.ModSounds.MISTLOOP,
-                            net.minecraft.sound.SoundCategory.PLAYERS,
-                            1.0f, 2.0f
-                    );
-                }
-
-                // remove slow effects
-                player.removeStatusEffect(StatusEffects.SLOWNESS);
-
-                // MOVEMENT
-                Vec3d look = player.getRotationVec(1.0f);
-                double speed = 0.6;
-
-                Vec3d newVel = look.multiply(speed);
-                player.setVelocity(newVel);
-                player.velocityModified = true;
-
-                // ignore ground friction
-                player.setOnGround(false);
-                player.fallDistance = 0;
-
-                // let them fly
-                player.setNoGravity(true);
-
-                // stop actions
-                if (!player.getMainHandStack().isEmpty()) { // set cooldowns on held item
-                    player.getItemCooldownManager().set(player.getMainHandStack().getItem(), 5);
-                }
-                player.stopUsingItem(); // force usables to not be used
-                // stop swings
-                player.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 20, 5, true, false));
-                player.addStatusEffect(new StatusEffectInstance(StatusEffects.INVISIBILITY, 20, 0, true, false));
-
-                break; // only handle on tag at a time
-            }
+        if (ticks <= 0) {
+            ACTIVE_MISTS.remove(player.getUuid());
+            player.setNoGravity(false);
+            return;
         }
 
-        // apply new tag AFTER iteration
-        if (newTag != null) {
-            player.getCommandTags().add(newTag);
+        ACTIVE_MISTS.put(player.getUuid(), ticks);
+
+        spawnMistTrail(player);
+
+        if (ticks % 18 == 0) {
+            player.getServerWorld().playSound(
+                    null,
+                    player.getBlockPos(),
+                    com.yourname.loopypowers.sound.ModSounds.MISTLOOP,
+                    net.minecraft.sound.SoundCategory.PLAYERS,
+                    1.0f, 2.0f
+            );
         }
+
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+
+        Vec3d look = player.getRotationVec(1.0f);
+        double speed = 0.6;
+
+        Vec3d newVel = look.multiply(speed);
+        player.setVelocity(newVel);
+        player.velocityModified = true;
+
+        player.setOnGround(false);
+        player.fallDistance = 0;
+        player.setNoGravity(true);
+
+        if (!player.getMainHandStack().isEmpty()) {
+            player.getItemCooldownManager().set(player.getMainHandStack().getItem(), 5);
+        }
+        player.stopUsingItem();
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 20, 5, true, false));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.INVISIBILITY, 20, 0, true, false));
     }
 
     private static final DustParticleEffect DARK_DUST =
@@ -267,8 +316,6 @@ public class DarknessPower implements Power {
        ULTIMATE
        ============================================================ */
 
-    private static final String ULT_ACTIVE = "dk_ult_"; // dk_ult_<ticks>
-
     // SIZE
     private static final int BLACKOUT_RADIUS = 16;     // size
     private static final double BLACKOUT_HEIGHT = 13.0; // height
@@ -285,7 +332,7 @@ public class DarknessPower implements Power {
     private static final int BLACKOUT_INNER_PARTICLES = 100; // density
     private static final double BLACKOUT_INNER_SPREAD = BLACKOUT_RADIUS * 0.9;
     // multiplier
-    private static final float EXPOSED_DAMAGE_MULT = 1.50f; // damage boost
+    private static final float EXPOSED_DAMAGE_MULT = 1.60f; // damage boost
     // EGG
     private static final float FUNNY_SOUND_CHANCE = 0.0005f; // chance per tick
 
@@ -314,8 +361,6 @@ public class DarknessPower implements Power {
         ServerWorld w = player.getServerWorld();
 
         removeBlackoutNow(player.getServer(), player.getUuid());
-
-        setSingleTimerTag(player, ULT_ACTIVE, BLACKOUT_DURATION_TICKS);
 
         BlackoutState st = new BlackoutState(
                 player.getUuid(),
@@ -413,7 +458,7 @@ public class DarknessPower implements Power {
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 40, 0, true, false));
-            e.addStatusEffect(new StatusEffectInstance(ModEffects.EXPOSED, 20, 0, true, false)); // visual one
+            e.addStatusEffect(new StatusEffectInstance(ModEffects.EXPOSED, 45, 0, true, false)); // visual one
         }
     }
 
@@ -562,111 +607,6 @@ public class DarknessPower implements Power {
         }
     }
 
-    /* ============================================================
-       DAMAGE HOOK
-       ============================================================ */
-
-    private static final String DARKNESS_DMG_GUARD = "dk_dmg_guard";
-
-    /**
-     called from global hook and picks if the boost is the backstab, ultimate or both.
-     */
-    // DarknessPower.java - Replace the relevant section in tryAdjustDarknessDamage
-    public static boolean tryAdjustDarknessDamage(LivingEntity victim, DamageSource source, float amount) {
-        if (amount <= 0) return false;
-
-        Entity atkEnt = source.getAttacker();
-        if (!(atkEnt instanceof LivingEntity attacker)) return false;
-        if (!(victim.getWorld() instanceof ServerWorld w)) return false;
-
-        // Recursion guard
-        if (victim.getCommandTags().contains(DARKNESS_DMG_GUARD) ||
-                attacker.getCommandTags().contains(DARKNESS_DMG_GUARD)) return false;
-
-        float mult = 1.0f;
-        boolean didBackstab = false;
-        boolean didExposed = false; // Marker for FX cleanup
-        DamageSource finalSource = source;
-
-        // Backstab logic
-        if (isBehindTarget(attacker, victim)) {
-            mult *= BACKSTAB_BONUS_MULT;
-            didBackstab = true;
-            finalSource = ModDamageTypes.darknessBackstab(w, attacker);
-        }
-
-        // Exposed effect logic
-        if (victim.hasStatusEffect(ModEffects.EXPOSED)) {
-            mult *= EXPOSED_DAMAGE_MULT;
-            didExposed = true;
-            // Use the darkUlt damage type for death message consistency
-            finalSource = ModDamageTypes.darkUlt(w, attacker);
-        }
-
-        // No change - let normal damage happen
-        if (Math.abs(mult - 1.0f) < 1.0e-4f && finalSource == source) return false;
-
-        float newAmount = amount * mult;
-
-        victim.getCommandTags().add(DARKNESS_DMG_GUARD);
-        attacker.getCommandTags().add(DARKNESS_DMG_GUARD);
-        try {
-            victim.damage(finalSource, newAmount);
-
-            // backstab fx
-            if (didBackstab) {
-                triggerBackstabFx(w, victim, attacker);
-            }
-
-            // exposed fx
-            if (didExposed) {
-                w.playSound(null, victim.getBlockPos(), ModSounds.BIGSTAB, attacker.getSoundCategory(), 0.5f, 1.2f);
-
-                // Dark burst particles
-                w.spawnParticles(ParticleTypes.SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 20, 0.4, 0.5, 0.4, 0.04);
-                w.spawnParticles(ParticleTypes.LARGE_SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 10, 0.3, 0.4, 0.3, 0.02);
-                w.spawnParticles(BLACK_DUST, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 12, 0.25, 0.3, 0.25, 0.0);
-
-                // inward collapse
-                Vec3d dir = attacker.getRotationVec(1.0f).normalize();
-                for (int i = 0; i < 8; i++) {
-                    double angle = w.random.nextDouble() * Math.PI * 2;
-                    double radius = 0.6;
-                    double px = victim.getX() + Math.cos(angle) * radius;
-                    double pz = victim.getZ() + Math.sin(angle) * radius;
-                    w.spawnParticles(BLACK_DUST, px, victim.getBodyY(0.5), pz, 0, dir.x, 0.05, dir.z, 1.0);
-                }
-            }
-
-            // --- COMBO FX ---
-            if (didBackstab && didExposed) {
-                w.playSound(null, victim.getBlockPos(), ModSounds.BIGSTAB, attacker.getSoundCategory(), 0.9f, 0.8f);
-                w.spawnParticles(ParticleTypes.CRIT, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 15, 0.3, 0.3, 0.3, 0.1);
-            }
-
-        } finally {
-            victim.getCommandTags().remove(DARKNESS_DMG_GUARD);
-            attacker.getCommandTags().remove(DARKNESS_DMG_GUARD);
-        }
-
-        return true;
-    }
-
-    // Helper method for code cleanup
-    private static void triggerBackstabFx(ServerWorld w, LivingEntity victim, LivingEntity attacker) {
-        w.playSound(null, victim.getBlockPos(), ModSounds.BACKSTAB, attacker.getSoundCategory(), 0.7f, 1.0f);
-        w.spawnParticles(ParticleTypes.SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 12, 0.3, 0.4, 0.3, 0.02);
-        w.spawnParticles(ParticleTypes.LARGE_SMOKE, victim.getX(), victim.getBodyY(0.5), victim.getZ(), 6, 0.2, 0.3, 0.2, 0.01);
-
-        Vec3d dir = attacker.getRotationVec(1.0f).normalize();
-        w.spawnParticles(ParticleTypes.SMOKE, victim.getX() + dir.x * 0.5, victim.getBodyY(0.5), victim.getZ() + dir.z * 0.5, 6, 0.1, 0.1, 0.1, 0.01);
-    }
-
-    private static boolean isInsideBlackout(BlackoutState st, LivingEntity e) {
-        double dx = e.getX() - st.center.x;
-        double dz = e.getZ() - st.center.z;
-        return (dx * dx + dz * dz) <= (BLACKOUT_RADIUS * BLACKOUT_RADIUS);
-    }
 
     /* ============================================================
        I FORGOT WHAT I KEPT CAPTIONING THESE
@@ -674,14 +614,14 @@ public class DarknessPower implements Power {
 
     @Override public String getName() { return "Darkness"; }
 
-    @Override public String getPassiveName() { return "Backstabbing"; }
+    @Override public String getPassiveName() { return "Blindspot"; }
     @Override public String getPrimaryName() { return "Shadow Step"; }
-    @Override public String getSecondaryName() { return "Mist Form"; }
-    @Override public String getUltimateName() { return "Blackout"; }
+    @Override public String getSecondaryName() { return "Umbral Veil"; }
+    @Override public String getUltimateName() { return "Dark Domain"; }
 
-    @Override public long getPrimaryCooldownMs() { return 8_000; }
-    @Override public long getSecondaryCooldownMs() { return 12_000; }
-    @Override public long getUltimateCooldownMs() { return 18_000; }
+    @Override public long getPrimaryCooldownMs() { return 14_000; }
+    @Override public long getSecondaryCooldownMs() { return 25_000; }
+    @Override public long getUltimateCooldownMs() { return 320_000; }
 
     @Override
     public String getOverviewDescription() {
@@ -725,10 +665,5 @@ public class DarknessPower implements Power {
                 return;
             }
         }
-    }
-
-    private static void setSingleTimerTag(Entity e, String prefix, int ticks) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + ticks);
     }
 }

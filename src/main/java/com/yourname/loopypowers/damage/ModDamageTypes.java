@@ -56,6 +56,8 @@ public final class ModDamageTypes {
     public static final RegistryKey<DamageType> FIRE_EXPLOSION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "fire_explosion"));
     public static final RegistryKey<DamageType> RITUAL = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "ritual"));
     public static final RegistryKey<DamageType> ONEPUNCH = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "onepunch"));
+    public static final RegistryKey<DamageType> ABSORBPULSE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "absorbpulse"));
+    public static final RegistryKey<DamageType> BLOODSELF = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "bloodself"));
 
     // ============================================================
     // DAMAGE SOURCE GENERATORS
@@ -67,6 +69,9 @@ public final class ModDamageTypes {
 
     public static DamageSource bind(World world, Entity attacker) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BIND), attacker, attacker); }
     public static DamageSource bind(World world) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BIND)); }
+
+    public static DamageSource bloodself(World world, Entity attacker) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BLOODSELF), attacker, attacker); }
+    public static DamageSource bloodself(World world) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(BLOODSELF)); }
 
     // SPEED / COMBAT
     public static DamageSource overdrive(World world, Entity attacker) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(OVERDRIVE), attacker, attacker); }
@@ -134,6 +139,9 @@ public final class ModDamageTypes {
 
     public static DamageSource smoothing(World world, Entity attacker) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(SMOOTHING), attacker, attacker); }
     public static DamageSource smoothing(World world) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(SMOOTHING)); }
+
+    public static DamageSource absorbpulse(World world, Entity attacker) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(ABSORBPULSE), attacker, attacker); }
+    public static DamageSource absorbpulse(World world) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(ABSORBPULSE)); }
 
     // COSMIC
     public static DamageSource fate(World world, Entity attacker) { return new DamageSource(world.getRegistryManager().get(RegistryKeys.DAMAGE_TYPE).entryOf(FATE), attacker, attacker); }

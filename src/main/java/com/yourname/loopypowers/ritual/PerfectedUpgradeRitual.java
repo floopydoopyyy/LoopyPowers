@@ -102,7 +102,13 @@ public class PerfectedUpgradeRitual implements Ritual {
 
     @Override
     public boolean tick(ServerWorld world) {
-        if (player.isRemoved() || !player.isAlive()) return true;
+        if (player.isRemoved() || !player.isAlive()) {
+            if (player instanceof ServerPlayerEntity sp) {
+                cancelRitual(sp);
+            }
+            return true;
+        }
+
         if (!(player instanceof ServerPlayerEntity sp)) return true;
 
         ticks++;
@@ -156,8 +162,12 @@ public class PerfectedUpgradeRitual implements Ritual {
         sp.setOnGround(true);
         sp.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 5, 10, true, false, false));
-        sp.addStatusEffect(new StatusEffectInstance(
-                StatusEffects.RESISTANCE, 5, 255, true, false, false));
+    }
+
+    private void cancelRitual(ServerPlayerEntity sp) {
+        sp.removeStatusEffect(StatusEffects.SLOWNESS);
+        sp.removeStatusEffect(StatusEffects.BLINDNESS);
+        sp.removeStatusEffect(StatusEffects.NAUSEA);
     }
 
     /* ============================================================
@@ -322,7 +332,7 @@ public class PerfectedUpgradeRitual implements Ritual {
 
         // shake
         if (t % SHAKE_STAGE_2_INTERVAL == 0) {
-            float intensity = SHAKE_STAGE_2_INTENSITY + (float) progress * 0.06f;
+            float intensity = SHAKE_STAGE_2_INTENSITY + (float) progress * (SHAKE_STAGE_3_INTENSITY - SHAKE_STAGE_2_INTENSITY);
             CameraShake.shakeNearby(sp, SHAKE_RADIUS, 8, intensity);
         }
 
@@ -722,7 +732,6 @@ public class PerfectedUpgradeRitual implements Ritual {
         sp.removeStatusEffect(StatusEffects.LEVITATION);
         sp.removeStatusEffect(StatusEffects.BLINDNESS);
         sp.removeStatusEffect(StatusEffects.NAUSEA);
-        sp.removeStatusEffect(StatusEffects.RESISTANCE);
         sp.removeStatusEffect(StatusEffects.SLOWNESS);
         sp.setVelocity(Vec3d.ZERO);
         sp.velocityModified = true;
@@ -791,7 +800,7 @@ public class PerfectedUpgradeRitual implements Ritual {
                 SoundCategory.PLAYERS, 0.6f, 2.0f);
 
         sp.sendMessage(
-                net.minecraft.text.Text.literal("§dYour connection has been perfected to Level 3."),
+                net.minecraft.text.Text.literal("§dYour bond has been perfected to Level 3."),
                 false
         );
     }

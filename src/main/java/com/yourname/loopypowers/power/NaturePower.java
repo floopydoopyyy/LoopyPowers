@@ -4,15 +4,19 @@ import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.mob.ZombieEntity;
+import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.HitResult;
@@ -33,39 +37,121 @@ import java.util.*;
  */
 public class NaturePower implements Power {
 
+    /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, NatureState> ACTIVE_STATES = new HashMap<>();
+
+    private static class NatureState {
+        final List<GasInstance> gases = new ArrayList<>();
+        CageState cage = null;
+        final Map<UUID, VineBind> vines = new HashMap<>();
+    }
+
+    private static NatureState getState(ServerPlayerEntity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new NatureState());
+    }
+
+    /* ============================================================
+       EASTER EGGS
+       ============================================================ */
+
+    private static final float FLOWER_CORPSE_CHANCE = 0.15f;
+    private static final float PVZ_KILL_CHANCE = 0.03f;
+    private static final Block[] FLOWERS = {Blocks.DANDELION, Blocks.POPPY, Blocks.BLUE_ORCHID, Blocks.ALLIUM, Blocks.AZURE_BLUET, Blocks.RED_TULIP, Blocks.ORANGE_TULIP, Blocks.WHITE_TULIP, Blocks.PINK_TULIP, Blocks.OXEYE_DAISY, Blocks.CORNFLOWER, Blocks.LILY_OF_THE_VALLEY};
+
+    /* ============================================================
+       BASIC
+       ============================================================ */
+
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        // nothing required yet
+        NatureState state = getState(player);
+        removeCageNow(player, state);
     }
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        // cleanup cage
-        removeCageNow(player);
-        // cleanup hunt marks
+        NatureState state = ACTIVE_STATES.remove(player.getUuid());
+
+        // Cleanup personal buffs
+        player.removeStatusEffect(StatusEffects.REGENERATION);
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.HASTE);
+
+        if (state == null) return;
+
+        // Cleanup cage
+        removeCageNow(player, state);
+
+        // Cleanup vines
+        if (player.getServer() != null) {
+            for (VineBind b : state.vines.values()) {
+                ServerWorld w = player.getServer().getWorld(b.worldKey);
+                if (w != null) {
+                    Entity ent = w.getEntity(b.target);
+                    if (ent instanceof LivingEntity le) {
+                        le.removeStatusEffect(StatusEffects.SLOWNESS);
+                        le.removeStatusEffect(StatusEffects.GLOWING);
+                        le.removeStatusEffect(ModEffects.TETHERED);
+                    }
+                }
+            }
+        }
+        state.vines.clear();
+        state.gases.clear();
     }
 
     @Override
-    public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
-        // not used
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
+
+    @Override
+    public boolean onAttack(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
+        if (amount >= target.getHealth()) {
+            // PVZ Zombie Pop
+            if (target instanceof ZombieEntity) {
+                if (source.isOf(ModDamageTypes.THORN) || source.isOf(ModDamageTypes.VINE_BIND)) {
+                    if (target.getWorld().random.nextFloat() < PVZ_KILL_CHANCE) {
+                        target.getWorld().playSound(null, target.getBlockPos(), ModSounds.PVZPOP, SoundCategory.HOSTILE, 0.7f, 1.0f);
+                    }
+                }
+            }
+
+            // Flower Planting
+            if (target.getWorld() instanceof ServerWorld sw) {
+                BlockPos under = target.getBlockPos().down();
+                if (sw.getBlockState(under).isOf(Blocks.GRASS_BLOCK) && sw.getBlockState(target.getBlockPos()).isAir()) {
+                    if (sw.random.nextFloat() < FLOWER_CORPSE_CHANCE) {
+                        Block flower = FLOWERS[sw.random.nextInt(FLOWERS.length)];
+                        sw.setBlockState(target.getBlockPos(), flower.getDefaultState());
+                        sw.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_GRASS_PLACE, SoundCategory.BLOCKS, 0.6f, 1.0f);
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        NatureState state = getState(player);
+
         // PASSIVE
-        // only if passive on
         if (PassiveManager.isEnabled(player)) {
             tickPhotosynthesis(player);
         }
 
-        // PRIMARY expanding gas
-        tickExpandingGas(player);
+        // PRIMARY
+        tickExpandingGas(player, state);
 
-        // SECONDARY cage lifetime / cleanup
-        tickCage(player);
+        // SECONDARY
+        tickCage(player, state);
 
-        // ULT marks upkeep/buffs
-        tickHunt(player);
+        // ULT
+        tickHunt(player, state);
     }
 
     /* ============================================================
@@ -111,7 +197,7 @@ public class NaturePower implements Power {
     private static final float GAS_HEIGHT_MAX   = 3.6f;
 
     // Poison
-    private static final int GAS_POISON_TICKS = 80;         // time
+    private static final int GAS_POISON_TICKS = 90;         // time
     private static final int GAS_POISON_AMP   = 2;          // amp
     private static final int GAS_APPLY_INTERVAL_TICKS = 10;  // checks
     private static final int GAS_REAPPLY_THRESHOLD = 35;    // only refresh when low
@@ -120,27 +206,22 @@ public class NaturePower implements Power {
     private static final int GAS_PARTICLES_MIN = 30;
     private static final int GAS_PARTICLES_MAX = 110;
 
+    // stinky
+    private static final float STINK_CHANCE = 0.02f;
+
     // make green dust
     private static final DustParticleEffect GAS_DUST =
             new DustParticleEffect(new Vector3f(0.12f, 0.95f, 0.18f), 1.75f);
 
-    // Store gas instances globally
-    private static final List<GasInstance> GAS = new ArrayList<>();
-    private static final Map<RegistryKey<World>, Long> GAS_LAST_TICK = new HashMap<>();
-
     private static final class GasInstance {
-        final UUID owner;
         final RegistryKey<World> worldKey;
         final Vec3d center;
-        final int duration;
         final int seed;
         int age;
 
-        GasInstance(UUID owner, RegistryKey<World> worldKey, Vec3d center, int duration, int seed) {
-            this.owner = owner;
+        GasInstance(RegistryKey<World> worldKey, Vec3d center, int seed) {
             this.worldKey = worldKey;
             this.center = center;
-            this.duration = duration;
             this.seed = seed;
             this.age = 0;
         }
@@ -149,6 +230,7 @@ public class NaturePower implements Power {
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
+        NatureState state = getState(player);
 
         // Spawn in front of player
         Vec3d look = player.getRotationVec(1.0f).normalize();
@@ -156,48 +238,38 @@ public class NaturePower implements Power {
 
         // Create a deterministic gas instance
         int seed = (int)(w.getTime() ^ player.getUuid().getLeastSignificantBits());
-        GAS.add(new GasInstance(player.getUuid(), w.getRegistryKey(), spawn, GAS_DURATION_TICKS, seed));
+        state.gases.add(new GasInstance(w.getRegistryKey(), spawn, seed));
+
+        // The stink easter egg
+        net.minecraft.sound.SoundEvent sound = w.random.nextFloat() < STINK_CHANCE ? ModSounds.STINK : ModSounds.SPRAY;
 
         w.playSound(null, player.getBlockPos(),
-                ModSounds.SPRAY,
+                sound,
                 player.getSoundCategory(),
                 0.8f, 0.9f);
 
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
-    /*
-     * Called from onTick. IMPORTANT: this ticks the WORLD once per tick,
-     * so gas works consistently even if multiple Nature players exist.
-     */
-    private static void tickExpandingGas(ServerPlayerEntity player) {
-        tickGasWorld(player.getServerWorld());
-    }
+    private static void tickExpandingGas(ServerPlayerEntity player, NatureState state) {
+        if (state.gases.isEmpty()) return;
 
-    private static void tickGasWorld(ServerWorld w) {
-        // Ensure process this world only once per tick (onTick runs per player)
-        long now = w.getTime();
-        RegistryKey<World> key = w.getRegistryKey();
-        Long last = GAS_LAST_TICK.get(key);
-        if (last != null && last == now) return;
-        GAS_LAST_TICK.put(key, now);
+        long now = player.getServerWorld().getTime();
 
-        if (GAS.isEmpty()) return;
-
-        Iterator<GasInstance> it = GAS.iterator();
+        Iterator<GasInstance> it = state.gases.iterator();
         while (it.hasNext()) {
             GasInstance g = it.next();
+            ServerWorld w = Objects.requireNonNull(player.getServer()).getWorld(g.worldKey);
+            if (w == null) continue;
 
-            if (!g.worldKey.equals(key)) continue; // gas is in another dimension/world
             g.age++;
-
-            if (g.age >= g.duration) {
+            if (g.age >= GAS_DURATION_TICKS) {
                 it.remove();
                 continue;
             }
 
             // progress 0..1
-            float t = g.age / (float) g.duration;
+            float t = g.age / (float) GAS_DURATION_TICKS;
             t = MathHelper.clamp(t, 0.0f, 1.0f);
 
             float r = MathHelper.lerp(t, GAS_RADIUS_START, GAS_RADIUS_MAX);
@@ -258,7 +330,7 @@ public class NaturePower implements Power {
             List<LivingEntity> hits = w.getEntitiesByClass(
                     LivingEntity.class,
                     scan,
-                    e -> e.isAlive() && !e.getUuid().equals(g.owner)
+                    e -> e.isAlive() && !e.getUuid().equals(player.getUuid())
             );
 
             double r2 = r * r;
@@ -278,7 +350,7 @@ public class NaturePower implements Power {
 
                 if ((dx * dx + dz * dz) > r2) continue;
 
-                // apply poison without “reset spamming”
+                // apply poison
                 StatusEffectInstance cur = e.getStatusEffect(StatusEffects.POISON);
                 if (cur == null || cur.getDuration() <= GAS_REAPPLY_THRESHOLD) {
                     e.addStatusEffect(new StatusEffectInstance(
@@ -292,36 +364,38 @@ public class NaturePower implements Power {
             }
         }
     }
+
     /* ============================================================
        SECONDARY
        ============================================================ */
 
-    private static final int CAGE_LIFETIME_TICKS = 240; // 6s
+    private static final int CAGE_LIFETIME_TICKS = 240; // time up
 
     private static final int CAGE_RADIUS = 12;
     private static final int CAGE_POINTS = 68; // ring density
     private static final int CAGE_HEIGHT = 6;
     private static final int CAGE_THICKNESS = 2;
 
-    // store blocks for cleanup
-    private static final Map<UUID, CageState> CAGES = new HashMap<>();
-
     private static final class CageState {
-        int ticksLeft;
+        int ticksLeft = CAGE_LIFETIME_TICKS;
+        RegistryKey<World> worldKey;
         final List<BlockPos> placed = new ArrayList<>();
-        CageState(int ticksLeft) { this.ticksLeft = ticksLeft; }
+
+        CageState(RegistryKey<World> worldKey) {
+            this.worldKey = worldKey;
+        }
     }
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
-        // play at top to still be heard, since there's only 247 channels.
+        NatureState state = getState(player);
+
         w.playSound(null, player.getBlockPos(), ModSounds.ARENABUILD, net.minecraft.sound.SoundCategory.BLOCKS, 0.8f, 1.0f);
 
-        // remove the players old cage
-        removeCageNow(player);
+        removeCageNow(player, state);
 
-        CageState state = new CageState(CAGE_LIFETIME_TICKS);
+        state.cage = new CageState(w.getRegistryKey());
 
         int cx = player.getBlockPos().getX();
         int cz = player.getBlockPos().getZ();
@@ -330,9 +404,6 @@ public class NaturePower implements Power {
         // build a ring on the ground
         for (int i = 0; i < CAGE_POINTS; i++) {
             double a = (Math.PI * 2.0) * (i / (double) CAGE_POINTS);
-
-            int dirX = (int) Math.round(Math.cos(a));
-            int dirZ = (int) Math.round(Math.sin(a));
 
             for (int t = 0; t < CAGE_THICKNESS; t++) {
                 int rNow = Math.max(1, CAGE_RADIUS - t);
@@ -354,12 +425,10 @@ public class NaturePower implements Power {
 
                     BlockState vine = ModBlocks.THORN_VINE.getDefaultState();
                     w.setBlockState(pos, vine);
-                    state.placed.add(pos);
+                    state.cage.placed.add(pos);
                 }
             }
         }
-
-        CAGES.put(player.getUuid(), state);
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
@@ -389,11 +458,34 @@ public class NaturePower implements Power {
         return w.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
     }
 
+    private static void tickCage(ServerPlayerEntity player, NatureState state) {
+        if (state.cage == null) return;
+
+        state.cage.ticksLeft--;
+        if (state.cage.ticksLeft > 0) return;
+
+        removeCageNow(player, state);
+    }
+
+    private static void removeCageNow(ServerPlayerEntity player, NatureState state) {
+        if (state.cage == null) return;
+
+        ServerWorld w = Objects.requireNonNull(player.getServer()).getWorld(state.cage.worldKey);
+        if (w != null) {
+            for (BlockPos pos : state.cage.placed) {
+                if (w.getBlockState(pos).isOf(ModBlocks.THORN_VINE)) {
+                    w.breakBlock(pos, false);
+                }
+            }
+        }
+        state.cage = null;
+    }
+
     /* ============================================================
        ULTIMATE
        ============================================================ */
     // tuning
-    private static final int VINE_DURATION_TICKS = 200; // time stuck
+    private static final int VINE_DURATION_TICKS = 220; // time stuck
     private static final double VINE_RANGE = 22.0;
     private static final int VINE_MAX_TARGETS = 8;
     private static final double VINE_CONE_DOT = 0.80; // cone degrees
@@ -416,35 +508,27 @@ public class NaturePower implements Power {
     private static final int VINE_STRIKE_LASHES_PER_TARGET = 3; // extra vine lines per target
     private static final int VINE_STRIKE_EXTRA_RANDOM = 6;      // extra “miss” lashes forward
 
-    // visuals (green vine dust)
+    // visuals
     private static final DustParticleEffect VINE_DUST =
             new DustParticleEffect(new Vector3f(0.10f, 0.85f, 0.12f), 1.35f);
 
-    // pink specks (ultimate only)
+    // pink
     private static final DustParticleEffect VINE_PINK_DUST =
             new DustParticleEffect(new Vector3f(0.95f, 0.35f, 0.85f), 1.05f);
 
     private static final float VINE_PINK_SPECK_CHANCE = 0.12f; // ~12% of particles become pink
 
-    // store binds globally (per world)
-    private static final List<VineBind> VINES = new ArrayList<>();
-    private static final Map<RegistryKey<World>, Long> VINES_LAST_TICK = new HashMap<>();
-
     private static final class VineBind {
-        final UUID owner;                 // caster
         final UUID target;                // bound entity
         final RegistryKey<World> worldKey;
         final Vec3d anchor;               // where they were hit by ult
-        final int duration;
         final int seed;
         int age;
 
-        VineBind(UUID owner, UUID target, RegistryKey<World> worldKey, Vec3d anchor, int duration, int seed) {
-            this.owner = owner;
+        VineBind(UUID target, RegistryKey<World> worldKey, Vec3d anchor, int seed) {
             this.target = target;
             this.worldKey = worldKey;
             this.anchor = anchor;
-            this.duration = duration;
             this.seed = seed;
             this.age = 0;
         }
@@ -455,6 +539,7 @@ public class NaturePower implements Power {
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
+        NatureState state = getState(player);
 
         // cast FX
         w.spawnParticles(VINE_DUST,
@@ -500,7 +585,7 @@ public class NaturePower implements Power {
             int seed = seedBase ^ 0xBEEF;
             Vec3d anchor = player.getPos();
 
-            VINES.add(new VineBind(player.getUuid(), player.getUuid(), w.getRegistryKey(), anchor, VINE_DURATION_TICKS, seed));
+            state.vines.put(player.getUuid(), new VineBind(player.getUuid(), w.getRegistryKey(), anchor, seed));
 
             // anchor particles
             w.spawnParticles(VINE_DUST, anchor.x, anchor.y + 0.2, anchor.z, 35, 0.35, 0.15, 0.35, 0.02);
@@ -539,7 +624,7 @@ public class NaturePower implements Power {
             // extra lash lines around the target
             spawnVineLashes(w, lashFrom, e, seed);
 
-            VINES.add(new VineBind(player.getUuid(), e.getUuid(), w.getRegistryKey(), anchor, VINE_DURATION_TICKS, seed));
+            state.vines.put(e.getUuid(), new VineBind(e.getUuid(), w.getRegistryKey(), anchor, seed));
 
             // bind FX on target
             w.spawnParticles(VINE_DUST,
@@ -583,9 +668,8 @@ public class NaturePower implements Power {
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
-    private static void tickHunt(ServerPlayerEntity player) {
-        // tick binds
-        tickVinesWorld(player.getServerWorld());
+    private static void tickHunt(ServerPlayerEntity player, NatureState state) {
+        tickVines(player, state);
 
         // buffs for the caster near vined
         if (player.age % VINE_BUFF_REFRESH != 0) return;
@@ -596,9 +680,8 @@ public class NaturePower implements Power {
         boolean nearAny = false;
         double r2 = VINE_BUFF_RANGE * VINE_BUFF_RANGE;
 
-        for (VineBind b : VINES) {
+        for (VineBind b : state.vines.values()) {
             if (!b.worldKey.equals(wk)) continue;
-            if (!b.owner.equals(player.getUuid())) continue;
 
             Entity ent = w.getEntity(b.target);
             if (!(ent instanceof LivingEntity le) || !le.isAlive()) continue;
@@ -618,24 +701,18 @@ public class NaturePower implements Power {
         }
     }
 
-    private static void tickVinesWorld(ServerWorld w) {
-        long now = w.getTime();
-        RegistryKey<World> key = w.getRegistryKey();
+    private static void tickVines(ServerPlayerEntity player, NatureState state) {
+        if (state.vines.isEmpty()) return;
+        long now = player.getServerWorld().getTime();
 
-        Long last = VINES_LAST_TICK.get(key);
-        if (last != null && last == now) return;
-        VINES_LAST_TICK.put(key, now);
-
-        if (VINES.isEmpty()) return;
-
-        Iterator<VineBind> it = VINES.iterator();
+        Iterator<VineBind> it = state.vines.values().iterator();
         while (it.hasNext()) {
             VineBind b = it.next();
-
-            if (!b.worldKey.equals(key)) continue;
+            ServerWorld w = Objects.requireNonNull(player.getServer()).getWorld(b.worldKey);
+            if (w == null) continue;
 
             b.age++;
-            if (b.age >= b.duration) {
+            if (b.age >= VINE_DURATION_TICKS) {
                 it.remove();
                 continue;
             }
@@ -863,19 +940,25 @@ public class NaturePower implements Power {
         );
     }
 
-    private static void removeOwnerVines(ServerPlayerEntity player) {
-        UUID id = player.getUuid();
-        VINES.removeIf(b -> b.owner.equals(id));
+    // Called by HealingPower's purge ability to cleanse the player
+    public static boolean cleanseVines(ServerPlayerEntity player) {
+        boolean removed = false;
+        for (NatureState state : ACTIVE_STATES.values()) {
+            if (state.vines.remove(player.getUuid()) != null) {
+                removed = true;
+            }
+        }
+        return removed;
     }
 
     @Override public String getName() { return "Nature"; }
-    @Override public String getPrimaryName() { return "Poison Gas"; }
-    @Override public String getSecondaryName() { return "Thorn Cage"; }
+    @Override public String getPrimaryName() { return "Toxic Spores"; }
+    @Override public String getSecondaryName() { return "Verdant Prison"; }
     @Override public String getUltimateName() { return "Wild Hunt"; }
 
-    @Override public long getPrimaryCooldownMs() { return 5_000; }
-    @Override public long getSecondaryCooldownMs() { return 5_000; }
-    @Override public long getUltimateCooldownMs() { return 8_000; }
+    @Override public long getPrimaryCooldownMs() { return 18_000; }
+    @Override public long getSecondaryCooldownMs() { return 38_000; }
+    @Override public long getUltimateCooldownMs() { return 350_000; }
 
     @Override
     public String getOverviewDescription() {
@@ -908,77 +991,5 @@ public class NaturePower implements Power {
     public String getUltimateDescription() {
         return "Shoot many vines in front of you. Any enemies close and in direct line of site will be hit by these vines and tethered to their current location, which" +
                 " will keep them trapped in that location, dealing periodic damage and slowing them. When near a tethered energy, the caster becomes empowered with speed and haste.";
-    }
-
-    /* ============================================================
-       CLEANUP
-       ============================================================ */
-
-    private static void tickCage(ServerPlayerEntity player) {
-        CageState state = CAGES.get(player.getUuid());
-        if (state == null) return;
-
-        state.ticksLeft--;
-        if (state.ticksLeft > 0) return;
-
-        // time to remove
-        removeCageNow(player);
-    }
-
-    private static void removeCageNow(ServerPlayerEntity player) {
-        CageState state = CAGES.remove(player.getUuid());
-        if (state == null) return;
-
-        ServerWorld w = player.getServerWorld();
-
-        for (BlockPos pos : state.placed) {
-            if (w.getBlockState(pos).isOf(ModBlocks.THORN_VINE)) {
-                w.breakBlock(pos, false); // drop boolean does nothing for some reason.
-            }
-        }
-    }
-
-
-
-    /* ============================================================
-       TAG HELPERS
-       ============================================================ */
-
-    private static boolean hasTagPrefix(Entity e, String prefix) {
-        for (String tag : e.getCommandTags()) if (tag.startsWith(prefix)) return true;
-        return false;
-    }
-
-    private static void removeTagPrefix(Entity e, String prefix) {
-        var it = e.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) { it.remove(); return; }
-        }
-    }
-
-    private static void setSingleTimerTag(Entity e, String prefix, int ticks) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + ticks);
-    }
-
-    private static int tickSingleTimer(Entity e, String prefix) {
-        String found = null;
-        for (String tag : e.getCommandTags()) {
-            if (tag.startsWith(prefix)) { found = tag; break; }
-        }
-        if (found == null) return -1;
-
-        e.getCommandTags().remove(found);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(found.substring(prefix.length())) - 1;
-        } catch (NumberFormatException ex) {
-            return -1;
-        }
-
-        if (ticks > 0) e.getCommandTags().add(prefix + ticks);
-        return ticks;
     }
 }

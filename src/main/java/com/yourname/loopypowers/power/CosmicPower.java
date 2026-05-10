@@ -4,11 +4,13 @@ import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.entity.BlackHoleEntity;
 import com.yourname.loopypowers.entity.ModEntities;
+import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -26,49 +28,46 @@ import java.util.UUID;
 public class CosmicPower implements Power {
 
     /* ============================================================
-       TAGS / CONSTANTS
+       STATE STORAGE
        ============================================================ */
+    // Map structure: Attacker UUID -> (Target UUID -> FateInstance)
+    private static final Map<UUID, Map<UUID, FateInstance>> ACTIVE_FATES = new HashMap<>();
+    private static final Map<UUID, Integer> ACTIVE_STARS = new HashMap<>();
 
-    private static final String FATE_DMG_TAG      = "cos_fate_dmg_";
-    private static final String FATE_TIMER_TAG    = "cos_fate_timer_";
-    private static final String FATE_TIMER_CD_TAG = "cos_fate_timer_cd_";
-    private static final String FATE_DETON_TAG    = "cos_fate_deton_";
-    private static final String FATE_OWNER_TAG    = "cos_fate_owner_";
+    private static class FateInstance {
+        public UUID ownerUuid;
+        public float storedDamage;
+        public int timerTicks;
+        public int detonateTicks;
+        public int immuneTicks;
+        public int meleeTimerCdTicks;
+    }
 
-    // Shooting star tags
-    private static final String STAR_LAUNCH_TAG = "cos_star_launch_";
-    private static final String STAR_CD_TAG     = "cos_star_cd_";
-
-    private final Map<UUID, Vec3d> starTargets = new HashMap<>();
-
-    // Black hole tag on the player
-    private static final String BLACKHOLE_TAG = "cos_blackhole_";
+    private boolean applyingReducedDamage = false;
 
     // ── Passive tuning ────────────────────────────────────────────────────────
 
     private static final int   FATE_TIMER_DEFAULT     = 200;
     private static final int   FATE_TIMER_MAX         = 300;
-    private static final float FATE_DAMAGE_CAP        = 50.0f;
-    private static final int   FATE_DETONATE_TICKS    = 20;
+    private static final float FATE_DAMAGE_CAP        = 60.0f;
+    private static final int   FATE_DETONATE_TICKS    = 30;
     private static final int   FATE_DETONATE_INTERVAL = 10;
     private static final float MELEE_FATE_RATIO       = 0.8f;
     private static final int   MELEE_TIMER_ADD        = 12;
     private static final int   MELEE_TIMER_CD         = 10;
-
-    private static final String FATE_IMMUNE_TAG   = "cos_fate_immune_";
-    private static final int    FATE_IMMUNE_TICKS = 200;
+    private static final int   FATE_IMMUNE_TICKS      = 200;
 
     // ── Primary tuning ────────────────────────────────────────────────────────
 
     private static final double RAY_RANGE         = 30.0;
-    private static final float  RAY_DIRECT_DAMAGE = 2.0f;
-    private static final float  RAY_FATE_STORE    = 7.0f;
+    private static final float  RAY_DIRECT_DAMAGE = 3.5f;
+    private static final float  RAY_FATE_STORE    = 9.0f;
     private static final int    RAY_TIMER_ADD     = 50;
 
     // ── Secondary tuning ─────────────────────────────────────────────────────
 
     private static final double STAR_SLAM_RADIUS     = 4.0;
-    private static final float  STAR_FATE_STORE      = 9.0f;
+    private static final float  STAR_FATE_STORE      = 14.0f;
     private static final float  STAR_TIMER_REDUCTION = 0.60f;
     private static final int    STAR_ARC_TICKS       = 40;
 
@@ -82,189 +81,253 @@ public class CosmicPower implements Power {
        ============================================================ */
 
     @Override
-    public void onAssign(ServerPlayerEntity player) {}
+    public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("cos_")); // Clean old tags
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("cos_"));
+        player.removeStatusEffect(ModEffects.BRACED);
+        player.removeStatusEffect(ModEffects.FATE);
+
+        ACTIVE_STARS.remove(player.getUuid());
+
+        // Instantly remove all targets owned by this player
+        Map<UUID, FateInstance> myTargets = ACTIVE_FATES.remove(player.getUuid());
+        if (myTargets != null && player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                for (UUID targetId : myTargets.keySet()) {
+                    Entity e = w.getEntity(targetId);
+                    if (e instanceof LivingEntity le) le.removeStatusEffect(ModEffects.FATE);
+                }
+            }
+        }
+
+        // Despawn active black holes
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                for (BlackHoleEntity bh : w.getEntitiesByClass(BlackHoleEntity.class, player.getBoundingBox().expand(150), Entity::isAlive)) {
+                    if (player.equals(bh.getOwner())) {
+                        bh.discard();
+                    }
+                }
+            }
+        }
+
+        // Despawn active black holes
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                for (BlackHoleEntity bh : w.getEntitiesByClass(BlackHoleEntity.class, player.getBoundingBox().expand(150), Entity::isAlive)) {
+                    if (player.equals(bh.getOwner())) {
+                        bh.discard();
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
+        UUID playerId = player.getUuid();
 
-        for (LivingEntity e : world.getEntitiesByClass(
-                LivingEntity.class,
-                player.getBoundingBox().expand(Math.max(BH_OUTER_RADIUS, RAY_RANGE) + 5),
-                LivingEntity::isAlive)) {
+        // 1. Get ONLY the targets owned by this specific player
+        Map<UUID, FateInstance> myTargets = ACTIVE_FATES.get(playerId);
 
-            if (e == player) continue;
+        // If the player has targets, process them
+        if (myTargets != null && !myTargets.isEmpty()) {
+            Iterator<Map.Entry<UUID, FateInstance>> it = myTargets.entrySet().iterator();
 
-            tickFate(e, world);
-            tickTag(e, FATE_IMMUNE_TAG);
+            while (it.hasNext()) {
+                Map.Entry<UUID, FateInstance> entry = it.next();
+                UUID targetId = entry.getKey();
+                FateInstance fate = entry.getValue();
+
+                Entity ent = world.getEntity(targetId);
+                if (!(ent instanceof LivingEntity target) || !target.isAlive()) {
+                    it.remove();
+                    continue;
+                }
+
+                // Tick Immunity
+                if (fate.immuneTicks > 0) {
+                    fate.immuneTicks--;
+                    if (fate.immuneTicks <= 0 && fate.storedDamage <= 0) it.remove(); // fully expired
+                    continue;
+                }
+
+                // Tick Melee CD
+                if (fate.meleeTimerCdTicks > 0) {
+                    fate.meleeTimerCdTicks--;
+                }
+
+                // Tick Detonation
+                if (fate.detonateTicks > 0) {
+                    if (fate.storedDamage > 0 && target.age % FATE_DETONATE_INTERVAL == 0) {
+                        int ticks = FATE_DETONATE_TICKS / FATE_DETONATE_INTERVAL;
+                        float damagePerTick = fate.storedDamage / ticks;
+
+                        target.damage(ModDamageTypes.fate(world, player), damagePerTick);
+                        spawnDetonateParticles(world, target);
+                    }
+
+                    fate.detonateTicks--;
+                    if (fate.detonateTicks <= 0) {
+                        fate.storedDamage = 0;
+                        fate.immuneTicks = FATE_IMMUNE_TICKS;
+                        target.removeStatusEffect(ModEffects.FATE);
+                    }
+                    continue;
+                }
+
+                // Tick Timer
+                if (fate.timerTicks > 0) {
+                    fate.timerTicks--;
+                    if (fate.timerTicks <= 0) {
+                        fate.detonateTicks = FATE_DETONATE_TICKS;
+                        spawnDetonateStartParticles(world, target);
+                        target.removeStatusEffect(ModEffects.FATE);
+                    } else {
+                        spawnFateAuraParticles(world, target, fate);
+                        syncFateEffect(target, fate.timerTicks);
+                    }
+                } else if (fate.storedDamage <= 0) {
+                    // If it has no timer, no immunity, no detonation, and no damage, clean it up
+                    it.remove();
+                }
+            }
         }
-        handleShootingStar(player);
 
-        tickTag(player, BLACKHOLE_TAG);
-        tickTag(player, STAR_CD_TAG);
-        tickTag(player, FATE_TIMER_CD_TAG);
-    }
-
-    @Override
-    public void onHit(ServerPlayerEntity attacker, LivingEntity target) {}
-
-    public static void applyMeleeFate(ServerPlayerEntity attacker,
-                                      LivingEntity target,
-                                      float damageDealt) {
-        float fatePortion = damageDealt * MELEE_FATE_RATIO;
-        addFate(target, fatePortion, 0, attacker.getUuid());
-
-        int cd = getFateRaw(target, FATE_TIMER_CD_TAG);
-        if (cd <= 0) {
-            addFate(target, 0, MELEE_TIMER_ADD, null);
-            removeTagPrefix(target, FATE_TIMER_CD_TAG);
-            target.getCommandTags().add(FATE_TIMER_CD_TAG + MELEE_TIMER_CD);
+        // Shooting star logic
+        if (ACTIVE_STARS.containsKey(playerId)) {
+            int ticks = ACTIVE_STARS.get(playerId) - 1;
+            if (ticks <= 0) {
+                ACTIVE_STARS.remove(playerId);
+            } else {
+                ACTIVE_STARS.put(playerId, ticks);
+                handleShootingStar(player);
+            }
         }
     }
 
     /* ============================================================
-       PASSIVE
+       PASSIVE (ATTACK HOOK)
        ============================================================ */
 
-    public static boolean applyingReducedDamage = false;
+    @Override
+    public boolean onAttack(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
+        if (!PassiveManager.isEnabled(attacker)) return true;
+        if (source.getSource() != attacker) return true;
+        if (this.applyingReducedDamage) return true;
 
-    public static boolean isApplyingReducedDamage() {
-        return applyingReducedDamage;
+        if (source.isOf(ModDamageTypes.FATE) || source.isOf(ModDamageTypes.BLACK_HOLE)) return true;
+
+        applyMeleeFate(attacker, target, amount);
+
+        this.applyingReducedDamage = true;
+        target.damage(source, amount * 0.4f);
+        this.applyingReducedDamage = false;
+
+        return false;
     }
 
-    private static void addFate(LivingEntity target,
-                                float fateDmg,
-                                int timerAdd,
-                                UUID attackerUuid) {
+    public static void applyMeleeFate(ServerPlayerEntity attacker, LivingEntity target, float damageDealt) {
+        float fatePortion = damageDealt * MELEE_FATE_RATIO;
+        addFate(target, fatePortion, 0, attacker.getUuid());
 
-        if (hasTag(target, FATE_IMMUNE_TAG)) return;
+        // check if melee CD allows us to add timer
+        Map<UUID, FateInstance> playerFates = ACTIVE_FATES.get(attacker.getUuid());
+        if (playerFates != null) {
+            FateInstance fate = playerFates.get(target.getUuid());
+            if (fate != null && fate.meleeTimerCdTicks <= 0) {
+                addFate(target, 0, MELEE_TIMER_ADD, attacker.getUuid());
+                fate.meleeTimerCdTicks = MELEE_TIMER_CD;
+            }
+        }
+    }
 
-        // ── Damage pool ───────────────────────────────────────────────────────
-        int currentDmgRaw = getFateRaw(target, FATE_DMG_TAG);
-        int capRaw        = Math.round(FATE_DAMAGE_CAP * 10);
-        int added         = Math.round(fateDmg * 10);
-        int newDmgRaw     = Math.min(currentDmgRaw + added, capRaw);
+    private static void addFate(LivingEntity target, float fateDmg, int timerAdd, UUID attackerUuid) {
+        UUID targetId = target.getUuid();
+        FateInstance fate = null;
+        UUID previousOwner = null;
 
-        boolean hitCapNow    = currentDmgRaw < capRaw && newDmgRaw >= capRaw;
-        boolean alreadyAtCap = currentDmgRaw >= capRaw && added > 0;
+        // Find if this target already has fate applied by ANY player
+        for (Map.Entry<UUID, Map<UUID, FateInstance>> entry : ACTIVE_FATES.entrySet()) {
+            if (entry.getValue().containsKey(targetId)) {
+                fate = entry.getValue().get(targetId);
+                previousOwner = entry.getKey();
+                break;
+            }
+        }
 
-        removeTagPrefix(target, FATE_DMG_TAG);
-        target.getCommandTags().add(FATE_DMG_TAG + newDmgRaw);
+        if (fate == null) {
+            fate = new FateInstance();
+        }
+
+        // Handle ownership transfer (if a new attacker hits an already-afflicted target)
+        if (attackerUuid != null && !attackerUuid.equals(previousOwner)) {
+            if (previousOwner != null) {
+                ACTIVE_FATES.get(previousOwner).remove(targetId); // Remove from old owner
+            }
+            // Add to new owner
+            ACTIVE_FATES.computeIfAbsent(attackerUuid, k -> new HashMap<>()).put(targetId, fate);
+            fate.ownerUuid = attackerUuid;
+        }
+
+        if (fate.immuneTicks > 0) return;
+
+        float currentDmg = fate.storedDamage;
+        float newDmg = Math.min(currentDmg + fateDmg, FATE_DAMAGE_CAP);
+
+        boolean hitCapNow = currentDmg < FATE_DAMAGE_CAP && newDmg >= FATE_DAMAGE_CAP;
+        boolean alreadyAtCap = currentDmg >= FATE_DAMAGE_CAP && fateDmg > 0;
+
+        fate.storedDamage = newDmg;
 
         if ((hitCapNow || alreadyAtCap) && target.getWorld() instanceof ServerWorld world) {
             spawnFateCapParticles(world, target);
             playFateCapSound(world, target);
         }
 
-        // ── Timer ─────────────────────────────────────────────────────────────
-        int currentTimer = getFateRaw(target, FATE_TIMER_TAG);
-        int newTimer;
-
-        if (currentTimer <= 0) {
-            newTimer = FATE_TIMER_DEFAULT;
+        if (fate.timerTicks <= 0) {
+            fate.timerTicks = FATE_TIMER_DEFAULT;
         } else {
-            newTimer = Math.min(currentTimer + timerAdd, FATE_TIMER_MAX);
+            fate.timerTicks = Math.min(fate.timerTicks + timerAdd, FATE_TIMER_MAX);
         }
 
-        removeTagPrefix(target, FATE_TIMER_TAG);
-        target.getCommandTags().add(FATE_TIMER_TAG + newTimer);
-
-        // ── Owner - for kill credit ───────────────────────────────────────────────
-        if (attackerUuid != null) {
-            removeTagPrefix(target, FATE_OWNER_TAG);
-            target.getCommandTags().add(FATE_OWNER_TAG + attackerUuid);
-        }
-
-        // ── Sync status effect ────────────────────────────────────────────────
-        syncFateEffect(target, newTimer);
-    }
-
-    private void tickFate(LivingEntity entity, ServerWorld world) {
-        boolean detonating = tickTag(entity, FATE_DETON_TAG);
-
-        if (detonating) {
-            int dmgRaw = getFateRaw(entity, FATE_DMG_TAG);
-
-            if (dmgRaw > 0 && entity.age % FATE_DETONATE_INTERVAL == 0) {
-
-                float totalDamage   = dmgRaw / 10.0f;
-                int   ticks         = FATE_DETONATE_TICKS / FATE_DETONATE_INTERVAL;
-                float damagePerTick = totalDamage / ticks;
-
-                Entity attacker = resolveOwner(entity, world);
-
-                entity.damage(
-                        ModDamageTypes.fate(world, attacker),
-                        damagePerTick
-                );
-
-                spawnDetonateParticles(world, entity);
-            }
-
-            // After the last detonation tick, clean up and apply immunity.
-            if (!hasTag(entity, FATE_DETON_TAG)) {
-                removeTagPrefix(entity, FATE_DMG_TAG);
-                removeTagPrefix(entity, FATE_OWNER_TAG);
-                removeTagPrefix(entity, FATE_IMMUNE_TAG);
-                entity.getCommandTags().add(FATE_IMMUNE_TAG + FATE_IMMUNE_TICKS);
-
-                // Guard-remove – the effect was already cleared at detonation
-                // start below, but removes it in case something re-applied it.
-                entity.removeStatusEffect(ModEffects.FATE);
-            }
-
-            return;
-        }
-
-        // Normal countdown
-        int timer = getFateRaw(entity, FATE_TIMER_TAG);
-        if (timer <= 0) return;
-
-        timer--;
-        removeTagPrefix(entity, FATE_TIMER_TAG);
-
-        if (timer <= 0) {
-            // Timer expired – begin detonation
-            entity.getCommandTags().add(FATE_DETON_TAG + FATE_DETONATE_TICKS);
-            spawnDetonateStartParticles(world, entity);
-
-            // Remove the effect now
-            entity.removeStatusEffect(ModEffects.FATE);
-        } else {
-            entity.getCommandTags().add(FATE_TIMER_TAG + timer);
-            spawnFateAuraParticles(world, entity, timer);
-
-            // Sync every tick
-            syncFateEffect(entity, timer);
-        }
+        syncFateEffect(target, fate.timerTicks);
     }
 
     static void reduceFateTimer(LivingEntity target, float reduction) {
-        int current = getFateRaw(target, FATE_TIMER_TAG);
-        if (current <= 0) return;
+        UUID targetId = target.getUuid();
+        FateInstance fate = null;
 
-        int reduced = Math.max(0, current - Math.round(current * reduction));
-        removeTagPrefix(target, FATE_TIMER_TAG);
-
-        if (reduced > 0) {
-            target.getCommandTags().add(FATE_TIMER_TAG + reduced);
+        // Find fate instance regardless of who owns it
+        for (Map<UUID, FateInstance> playerFates : ACTIVE_FATES.values()) {
+            fate = playerFates.get(targetId);
+            if (fate != null) break;
         }
 
-        // Sync immediately
-        syncFateEffect(target, reduced);
+        if (fate == null || fate.timerTicks <= 0 || fate.detonateTicks > 0 || fate.immuneTicks > 0) return;
 
-        // If reduced == 0, tickFate will start detonation on the next tick.
+        fate.timerTicks = Math.max(0, fate.timerTicks - Math.round(fate.timerTicks * reduction));
+        syncFateEffect(target, fate.timerTicks);
     }
 
     // ── Status-effect sync ────────────────────────────────────────────────────
     private static void syncFateEffect(LivingEntity entity, int timerTicks) {
         entity.removeStatusEffect(ModEffects.FATE);
-
         if (timerTicks <= 0) return;
 
         entity.addStatusEffect(new StatusEffectInstance(
                 ModEffects.FATE,
-                timerTicks, // duration mirrors the tag exactly
+                timerTicks,
                 0,
                 false,
                 false,      // hide particles
@@ -274,12 +337,11 @@ public class CosmicPower implements Power {
 
     // ── Particle helpers ─────────────────────────────────────────────────────
 
-    private void spawnFateAuraParticles(ServerWorld world, LivingEntity entity, int timer) {
-        int dmgRaw    = getFateRaw(entity, FATE_DMG_TAG);
-        int starCount = MathHelper.clamp(dmgRaw / 10, 0, 19);
+    private void spawnFateAuraParticles(ServerWorld world, LivingEntity entity, FateInstance fate) {
+        int starCount = MathHelper.clamp((int)fate.storedDamage, 0, 19);
         long time     = entity.getWorld().getTime();
 
-        float  timerFraction = (float) timer / FATE_TIMER_MAX;
+        float  timerFraction = (float) fate.timerTicks / FATE_TIMER_MAX;
         double speed         = 0.05 + (1.0 - timerFraction) * 0.35;
         double angle         = time * speed;
         double orbitRadius   = 0.8 + 0.35;
@@ -352,6 +414,10 @@ public class CosmicPower implements Power {
             world.spawnParticles(ParticleTypes.ELECTRIC_SPARK, x, y, z, 1,
                     (pos.x - x) * 0.2, 0.02, (pos.z - z) * 0.2, 0);
         }
+
+        if (entity instanceof ServerPlayerEntity targetPlayer) {
+            CameraShake.shakeNearby(targetPlayer, 5, 10, 0.06f);
+        }
     }
 
     private static void spawnFateCapParticles(ServerWorld world, LivingEntity entity) {
@@ -406,8 +472,6 @@ public class CosmicPower implements Power {
             if (hit.isEmpty()) continue;
 
             e.damage(ModDamageTypes.cosmicRay(world, player), RAY_DIRECT_DAMAGE);
-            // addFate calls syncFateEffect internally, so the timer extension
-            // from the ray is reflected on the HUD immediately.
             addFate(e, RAY_FATE_STORE, RAY_TIMER_ADD, player.getUuid());
 
             Vec3d hitPos = hit.get();
@@ -482,8 +546,7 @@ public class CosmicPower implements Power {
         player.setVelocity(0, 1.2, 0);
         player.velocityModified = true;
 
-        removeTagPrefix(player, STAR_LAUNCH_TAG);
-        player.getCommandTags().add(STAR_LAUNCH_TAG + STAR_ARC_TICKS);
+        ACTIVE_STARS.put(player.getUuid(), STAR_ARC_TICKS);
 
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH,
@@ -494,8 +557,6 @@ public class CosmicPower implements Power {
     }
 
     private void handleShootingStar(ServerPlayerEntity player) {
-        if (!hasTag(player, STAR_LAUNCH_TAG)) return;
-
         ServerWorld world = player.getServerWorld();
         spawnStarTrailParticles(world, player);
 
@@ -524,10 +585,7 @@ public class CosmicPower implements Power {
             if (e.getPos().distanceTo(slamPos) > STAR_SLAM_RADIUS) continue;
 
             e.damage(ModDamageTypes.shootingStar(world, player), 4.0f);
-            // addFate syncs the effect for the fate damage portion
             addFate(e, STAR_FATE_STORE, 0, player.getUuid());
-            // reduceFateTimer then re-syncs with the reduced value,
-            // so the HUD ends up showing the post-slam timer in one frame.
             reduceFateTimer(e, STAR_TIMER_REDUCTION);
         }
 
@@ -538,7 +596,7 @@ public class CosmicPower implements Power {
 
         player.setVelocity(0, 0, 0);
         player.velocityModified = true;
-        removeTagPrefix(player, STAR_LAUNCH_TAG);
+        ACTIVE_STARS.remove(player.getUuid());
     }
 
     private void spawnStarTrailParticles(ServerWorld world, ServerPlayerEntity player) {
@@ -581,9 +639,6 @@ public class CosmicPower implements Power {
         bh.setTravelDirection(lookDir);
         world.spawnEntity(bh);
 
-        removeTagPrefix(player, BLACKHOLE_TAG);
-        player.getCommandTags().add(BLACKHOLE_TAG + BlackHoleEntity.LIFESPAN);
-
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.BLOCK_PORTAL_AMBIENT,
                 player.getSoundCategory(), 1.2f, 0.4f);
@@ -594,11 +649,6 @@ public class CosmicPower implements Power {
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
-    /**
-     * Called by BlackHoleEntity each tick for entities in the event horizon.
-     * drainFateTimer calls reduceFateTimer which calls syncFateEffect, so the
-     * HUD timer shortens in real time as the black hole drains it.
-     */
     public static void drainFateTimer(LivingEntity target) {
         reduceFateTimer(target, BH_TIMER_REDUCTION);
     }
@@ -609,13 +659,13 @@ public class CosmicPower implements Power {
 
     @Override public String getName()          { return "Cosmic"; }
     @Override public String getPassiveName()   { return "Written in the Stars"; }
-    @Override public String getPrimaryName()   { return "Cosmic Ray"; }
-    @Override public String getSecondaryName() { return "Shooting Star"; }
-    @Override public String getUltimateName()  { return "Black Hole"; }
+    @Override public String getPrimaryName()   { return "Pulsar"; }
+    @Override public String getSecondaryName() { return "Starfall"; }
+    @Override public String getUltimateName()  { return "Event Horizon"; }
 
-    @Override public long getPrimaryCooldownMs()   { return 3000; }
-    @Override public long getSecondaryCooldownMs() { return 8000; }
-    @Override public long getUltimateCooldownMs()  { return 15000; }
+    @Override public long getPrimaryCooldownMs()   { return 7_000; }
+    @Override public long getSecondaryCooldownMs() { return 22_000; }
+    @Override public long getUltimateCooldownMs()  { return 250_000; }
 
     @Override
     public String getOverviewDescription() {
@@ -627,14 +677,14 @@ public class CosmicPower implements Power {
     @Override
     public String getPassiveDescription() {
         return "This is what your entire power revolves around. Your basic melee hits and some abilities apply a debuff called Fate, there are two elements to this debuff:" +
-                " /n Fate damage: This is the amount of damage Fate currently stores, it increases with the hits you do and is indicated by the amount of dust coming off the" +
+                " \n Fate damage: This is the amount of damage Fate currently stores, it increases with the hits you do and is indicated by the amount of dust coming off the" +
                 " effected entity. This has a hard cap, when an entity has reached max damage, hitting it will play a sound and display star particles." +
-                " /n Fate Timer: This is the time until the stored fate damage is quickly applied, it is indicated by the orbiting sun around the entity, with faster orbit speeds" +
+                "\n Fate Timer: This is the time until the stored fate damage is quickly applied, it is indicated by the orbiting sun around the entity, with faster orbit speeds" +
                 " meaning it is closer to detonation and extra fire particles will also appear when about to detonate." +
-                " /n When the timer expires, the entity will explode and have the debuff removed, quickly taking all of the damage that was stored over a few seconds." +
+                " \n When the timer expires, the entity will explode and have the debuff removed, quickly taking all of the damage that was stored over a few seconds." +
                 " They will then be immune to building fate for a long time (if they survive)." +
-                "/n" +
-                "/n But, your melee hits do significantly less damage and the lost damage is stored as Fate, melee hits also increase the countdown timer, giving you more time to build fate.";
+                "\n" +
+                "\n But, your melee hits do significantly less damage and the lost damage is stored as Fate, melee hits also increase the countdown timer, giving you more time to build fate.";
     }
 
     @Override
@@ -654,80 +704,12 @@ public class CosmicPower implements Power {
     @Override
     public String getUltimateDescription() {
         return "Summon a slow-moving black hole a few blocks in front of you." +
-                "/n This black hole travels slowly in the direction you cast it, having a large pull radius that gets stronger the closer entities are to the centre." +
-                "/n Any entities in the centre of the black hole will take constant damage (this does not apply Fate damage) and their Fate timer will be quickly drained down." +
-                "/n Essentially, this is a way to quickly drain fate and explode groups of entities over an area.";
+                "\n This black hole travels slowly in the direction you cast it, having a large pull radius that gets stronger the closer entities are to the centre." +
+                "\n Any entities in the centre of the black hole will take constant damage (this does not apply Fate damage) and their Fate timer will be quickly drained down." +
+                "\n Essentially, this is a way to quickly drain fate and explode groups of entities over an area.";
     }
 
-    /* ============================================================
-       HELPERS
-       ============================================================ */
-
-    private static Entity resolveOwner(LivingEntity entity, ServerWorld world) {
-        for (String tag : entity.getCommandTags()) {
-            if (tag.startsWith(FATE_OWNER_TAG)) {
-                try {
-                    UUID uuid = UUID.fromString(tag.substring(FATE_OWNER_TAG.length()));
-                    return world.getServer().getPlayerManager().getPlayer(uuid);
-                } catch (IllegalArgumentException ignored) {}
-            }
-        }
-        return null;
-    }
-
-    private static int getFateRaw(LivingEntity entity, String prefix) {
-        for (String tag : entity.getCommandTags()) {
-            if (tag.startsWith(prefix)) {
-                try {
-                    return Integer.parseInt(tag.substring(prefix.length()));
-                } catch (NumberFormatException ignored) {}
-            }
-        }
-        return 0;
-    }
-
-    private static boolean hasTag(LivingEntity entity, String prefix) {
-        for (String tag : entity.getCommandTags()) {
-            if (tag.startsWith(prefix)) return true;
-        }
-        return false;
-    }
-
-    private static boolean tickTag(LivingEntity entity, String prefix) {
-        Iterator<String> it = entity.getCommandTags().iterator();
-        String newTag = null;
-        boolean active = false;
-
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) {
-                try {
-                    int ticks = Integer.parseInt(tag.substring(prefix.length())) - 1;
-                    it.remove();
-                    if (ticks > 0) {
-                        newTag = prefix + ticks;
-                        active = true;
-                    }
-                } catch (NumberFormatException ignored) {
-                    it.remove();
-                }
-                break;
-            }
-        }
-
-        if (newTag != null) entity.getCommandTags().add(newTag);
-        return active;
-    }
-
-    private static void removeTagPrefix(Entity e, String prefix) {
-        Iterator<String> it = e.getCommandTags().iterator();
-        while (it.hasNext()) {
-            if (it.next().startsWith(prefix)) it.remove();
-        }
-    }
-
-    private LivingEntity getEntityOnBeam(ServerWorld world, ServerPlayerEntity player,
-                                         Vec3d origin, Vec3d end) {
+    private LivingEntity getEntityOnBeam(ServerWorld world, ServerPlayerEntity player, Vec3d origin, Vec3d end) {
         LivingEntity closest = null;
         double closestDist = Double.MAX_VALUE;
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class,

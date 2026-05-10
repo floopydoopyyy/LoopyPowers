@@ -1,10 +1,10 @@
 package com.yourname.loopypowers.entity;
 
-import com.yourname.loopypowers.power.DimensionalPower;
+import com.yourname.loopypowers.effect.ModEffects;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.particle.ParticleTypes;
+import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
@@ -53,76 +53,76 @@ public class DisplaceEntity extends Entity {
 
             Vec3d vel = this.getVelocity();
             double speed = vel.length();
-
             Vec3d dir = speed > 1.0e-6 ? vel.normalize() : new Vec3d(0, 0, 1);
 
+            // colours
+            DustParticleEffect darkBlue = new DustParticleEffect(new Vector3f(0.05f, 0.1f, 0.4f), 0.8f);
+            DustParticleEffect midBlue = new DustParticleEffect(new Vector3f(0.2f, 0.4f, 1.0f), 0.6f);
+            DustParticleEffect brightBlue = new DustParticleEffect(new Vector3f(0.6f, 0.8f, 1.0f), 0.4f);
+
             // core
-            DustParticleEffect core = new DustParticleEffect(
-                    new Vector3f(0.3f, 0.6f, 1.0f), // unified blue
-                    0.85f
-            );
+            sw.spawnParticles(brightBlue, this.getX(), this.getY(), this.getZ(), 2, 0.02, 0.02, 0.02, 0.01);
+            sw.spawnParticles(midBlue, this.getX(), this.getY(), this.getZ(), 3, 0.05, 0.05, 0.05, 0.02);
 
-            // tighter trail
-            Vec3d back = dir.multiply(-0.2);
+            int zaps = 1 + sw.random.nextInt(2); // 1 to 2 distinct lightning arcs per tick
 
-            sw.spawnParticles(core,
-                    this.getX() + back.x,
-                    this.getY() + back.y,
-                    this.getZ() + back.z,
-                    5,
-                    0.03, 0.03, 0.03,
-                    0.002
-            );
-
-            // forward
-            if (speed > 0.01) {
-                Vec3d ahead = dir.multiply(0.35);
-
-                sw.spawnParticles(core,
-                        this.getX() + ahead.x,
-                        this.getY() + ahead.y,
-                        this.getZ() + ahead.z,
-                        2,
-                        0.01, 0.01, 0.01,
-                        0.0
+            for (int z = 0; z < zaps; z++) {
+                // arc slightly off-centre
+                Vec3d startPos = this.getPos().add(
+                        (sw.random.nextDouble() - 0.5) * 0.1,
+                        (sw.random.nextDouble() - 0.5) * 0.1,
+                        (sw.random.nextDouble() - 0.5) * 0.1
                 );
-            }
 
-            // zap stuff
-            if (sw.random.nextFloat() < 0.78f) {
-
-                // random outward direction
+                //  random direction
                 Vec3d baseDir = new Vec3d(
                         sw.random.nextGaussian(),
-                        sw.random.nextGaussian() * 0.6,
+                        sw.random.nextGaussian(),
                         sw.random.nextGaussian()
                 ).normalize();
 
-                Vec3d current = this.getPos();
+                // bias opposite to velocity
+                if (baseDir.dotProduct(dir) > 0.3) {
+                    baseDir = baseDir.multiply(-0.5)
+                            .add(sw.random.nextGaussian() * 0.5, sw.random.nextGaussian() * 0.5, sw.random.nextGaussian() * 0.5)
+                            .normalize();
+                }
 
-                // create segmented zigzag
-                for (int i = 0; i < 4; i++) {
+                Vec3d current = startPos;
+                int segments = 2 + sw.random.nextInt(3); // 2 to 4 segments per zap
 
-                    // jitter it
-                    Vec3d jitter = new Vec3d(
-                            sw.random.nextGaussian() * 0.25,
-                            sw.random.nextGaussian() * 0.25,
-                            sw.random.nextGaussian() * 0.25
-                    );
+                for (int i = 0; i < segments; i++) {
+                    // jitter
+                    Vec3d stepDir = baseDir.add(
+                            sw.random.nextGaussian() * 0.3,
+                            sw.random.nextGaussian() * 0.3,
+                            sw.random.nextGaussian() * 0.3
+                    ).normalize().multiply(0.1 + sw.random.nextDouble() * 0.2); // Shorter step length
 
-                    Vec3d stepDir = baseDir.add(jitter).normalize().multiply(0.25);
+                    Vec3d nextStep = current.add(stepDir);
 
-                    current = current.add(stepDir);
+                    // interpolate particles along the segment
+                    double dist = current.distanceTo(nextStep);
+                    int subSteps = (int) Math.max(2, Math.ceil(dist / 0.15));
 
-                    sw.spawnParticles(
-                            core,
-                            current.x,
-                            current.y,
-                            current.z,
-                            1,
-                            0, 0, 0,
-                            0
-                    );
+                    for (int s = 0; s <= subSteps; s++) {
+                        double t = (double) s / subSteps;
+                        double px = current.x + (nextStep.x - current.x) * t;
+                        double py = current.y + (nextStep.y - current.y) * t;
+                        double pz = current.z + (nextStep.z - current.z) * t;
+
+                        // Mix bright and mid blues for the arc
+                        DustParticleEffect sparkCol = sw.random.nextFloat() < 0.4f ? brightBlue : midBlue;
+                        sw.spawnParticles(sparkCol, px, py, pz, 1, 0, 0, 0, 0);
+
+                        // Throw out occasional dark matter sparks (less often)
+                        if (sw.random.nextFloat() < 0.1f) {
+                            sw.spawnParticles(darkBlue, px, py, pz, 1, 0.02, 0.02, 0.02, 0.01);
+                        }
+                    }
+
+                    current = nextStep;
+                    baseDir = stepDir.normalize(); // carry momentum to next segment
                 }
             }
         }
@@ -144,19 +144,8 @@ public class DisplaceEntity extends Entity {
 
             hit.add(t.getUuid());
 
-            // APPLY DISPLACEMENT
-            DimensionalPower.removeTagPrefix(t, "int_displaced_");
-            t.getCommandTags().add("int_displaced_" + 60);
-
-            // hit effect
-            if (this.getWorld() instanceof ServerWorld sw) {
-                sw.spawnParticles(ParticleTypes.PORTAL,
-                        t.getX(), t.getBodyY(0.5), t.getZ(),
-                        10,
-                        0.3, 0.5, 0.3,
-                        0.05
-                );
-            }
+            // apply effect
+            t.addStatusEffect(new StatusEffectInstance(ModEffects.DISPLACED, 120, 0, false, false, false));
         }
     }
 

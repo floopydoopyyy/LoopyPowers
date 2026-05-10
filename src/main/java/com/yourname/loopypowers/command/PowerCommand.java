@@ -25,6 +25,8 @@ import static com.mojang.brigadier.arguments.StringArgumentType.word;
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 import static com.mojang.brigadier.arguments.IntegerArgumentType.integer;
 import static com.mojang.brigadier.arguments.IntegerArgumentType.getInteger;
+import static com.mojang.brigadier.arguments.FloatArgumentType.floatArg;
+import static com.mojang.brigadier.arguments.FloatArgumentType.getFloat;
 
 public class PowerCommand {
 
@@ -39,7 +41,7 @@ public class PowerCommand {
     static {
         POWERS.put("speed",         SpeedPower::new);
         POWERS.put("fire",          FirePower::new);
-        POWERS.put("teleport",      TeleportPower::new);
+        POWERS.put("teleportation",      TeleportPower::new);
         POWERS.put("lightning",     LightningPower::new);
         POWERS.put("flight",        FlightPower::new);
         POWERS.put("blood",         BloodPower::new);
@@ -84,6 +86,25 @@ public class PowerCommand {
     private static void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(
                 literal("power")
+
+                        // LIST - op
+                        // lists all online players, their power, and level
+                        .then(literal("list")
+                                .requires(src -> src.hasPermissionLevel(2))
+                                .executes(PowerCommand::listPowers)
+                        )
+
+                        // SHUFFLE - op
+                        // assigns random powers
+                        .then(literal("shuffle")
+                                .requires(src -> src.hasPermissionLevel(2))
+                                // /power shuffle (all online)
+                                .executes(PowerCommand::shuffleAll)
+                                // /power shuffle <selector>
+                                .then(argument(ARG_TARGETS, EntityArgumentType.players())
+                                        .executes(PowerCommand::shuffleTargets)
+                                )
+                        )
 
                         // SET - op
                         .then(literal("set")
@@ -180,6 +201,15 @@ public class PowerCommand {
                         .then(literal("debug")
                                 .requires(src -> src.hasPermissionLevel(2))
 
+                                // /power debug resetstate [selector]
+                                // calls onRemove -> onAssign cleanly to reboot state maps without wiping save data
+                                .then(literal("resetstate")
+                                        .executes(PowerCommand::debugResetStateSelf)
+                                        .then(argument(ARG_TARGETS, EntityArgumentType.players())
+                                                .executes(PowerCommand::debugResetStateTargets)
+                                        )
+                                )
+
                                 // /power debug clearcooldowns [selector]
                                 .then(literal("clearcooldowns")
                                         .executes(PowerCommand::debugClearAllCooldownsSelf)
@@ -216,6 +246,54 @@ public class PowerCommand {
                                         )
                                 )
 
+                                // /power debug forcecooldowns <seconds> [selector]
+                                .then(literal("forcecooldowns")
+                                        .then(argument("seconds", integer(1))
+                                                .executes(PowerCommand::debugForceCooldownsSelf)
+                                                .then(argument(ARG_TARGETS, EntityArgumentType.players())
+                                                        .executes(PowerCommand::debugForceCooldownsTargets)
+                                                )
+                                        )
+                                )
+
+                                // /power debug forcecooldown <primary|secondary|ultimate> <seconds> [selector]
+                                .then(literal("forcecooldown")
+                                        .then(literal("primary")
+                                                .then(argument("seconds", integer(1))
+                                                        .executes(ctx -> debugForceCooldownSelf(ctx, AbilityTypes.PRIMARY))
+                                                        .then(argument(ARG_TARGETS, EntityArgumentType.players())
+                                                                .executes(ctx -> debugForceCooldownTargets(ctx, AbilityTypes.PRIMARY))
+                                                        )
+                                                )
+                                        )
+                                        .then(literal("secondary")
+                                                .then(argument("seconds", integer(1))
+                                                        .executes(ctx -> debugForceCooldownSelf(ctx, AbilityTypes.SECONDARY))
+                                                        .then(argument(ARG_TARGETS, EntityArgumentType.players())
+                                                                .executes(ctx -> debugForceCooldownTargets(ctx, AbilityTypes.SECONDARY))
+                                                        )
+                                                )
+                                        )
+                                        .then(literal("ultimate")
+                                                .then(argument("seconds", integer(1))
+                                                        .executes(ctx -> debugForceCooldownSelf(ctx, AbilityTypes.ULTIMATE))
+                                                        .then(argument(ARG_TARGETS, EntityArgumentType.players())
+                                                                .executes(ctx -> debugForceCooldownTargets(ctx, AbilityTypes.ULTIMATE))
+                                                        )
+                                                )
+                                        )
+                                )
+
+                                // /power debug cooldownmultiplier <multiplier> [selector]
+                                .then(literal("cooldownmultiplier")
+                                        .then(argument("multiplier", floatArg(0.0f))
+                                                .executes(PowerCommand::debugCooldownMultiplierSelf)
+                                                .then(argument(ARG_TARGETS, EntityArgumentType.players())
+                                                        .executes(PowerCommand::debugCooldownMultiplierTargets)
+                                                )
+                                        )
+                                )
+
                                 // /power debug save [selector]
                                 // force-writes current state to disk without waiting for disconnect
                                 .then(literal("save")
@@ -247,6 +325,59 @@ public class PowerCommand {
                                 )
                         )
         );
+    }
+
+    // ============================================================
+    // LIST
+    // ============================================================
+
+    private static int listPowers(CommandContext<ServerCommandSource> ctx) {
+        ServerCommandSource src = ctx.getSource();
+        List<ServerPlayerEntity> players = src.getServer().getPlayerManager().getPlayerList();
+
+        if (players.isEmpty()) {
+            src.sendError(Text.literal("No players online."));
+            return 0;
+        }
+
+        src.sendFeedback(() -> Text.literal("§6--- Online Players ---"), false);
+        for (ServerPlayerEntity p : players) {
+            Power power = PowerManager.getPower(p);
+            int level = PowerManager.getLevel(p);
+            String pName = power != null ? "§a" + power.getName() : "§7NONE";
+
+            src.sendFeedback(() -> Text.literal("§b" + p.getName().getString() + " §f- " + pName + " §8(Lv." + level + ")"), false);
+        }
+
+        return 1;
+    }
+
+    // ============================================================
+    // SHUFFLE
+    // ============================================================
+
+    private static int shuffleAll(CommandContext<ServerCommandSource> ctx) {
+        ServerCommandSource src = ctx.getSource();
+        return applyShuffle(src, src.getServer().getPlayerManager().getPlayerList());
+    }
+
+    private static int shuffleTargets(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        return applyShuffle(ctx.getSource(), EntityArgumentType.getPlayers(ctx, ARG_TARGETS));
+    }
+
+    private static int applyShuffle(ServerCommandSource src, Collection<ServerPlayerEntity> targets) {
+        if (targets.isEmpty()) {
+            src.sendError(Text.literal("No targets found to shuffle."));
+            return 0;
+        }
+
+        for (ServerPlayerEntity p : targets) {
+            PowerManager.assignRandomPower(p);
+            p.sendMessage(Text.literal("§dYour power has been shuffled,"), false);
+        }
+
+        src.sendFeedback(() -> Text.literal("Shuffled powers for " + targets.size() + " player(s)."), true);
+        return 1;
     }
 
     // ============================================================
@@ -706,6 +837,119 @@ public class PowerCommand {
     // DEBUG
     // ============================================================
 
+    // ---------- Debug: resetstate ----------
+
+    private static int debugResetStateSelf(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity player = requirePlayer(ctx);
+        applyResetState(ctx.getSource(), List.of(player));
+        return 1;
+    }
+
+    private static int debugResetStateTargets(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        final Collection<ServerPlayerEntity> targets = EntityArgumentType.getPlayers(ctx, ARG_TARGETS);
+        applyResetState(ctx.getSource(), targets);
+        return 1;
+    }
+
+    private static void applyResetState(ServerCommandSource src, Collection<ServerPlayerEntity> targets) {
+        int count = 0;
+        for (ServerPlayerEntity p : targets) {
+            Power power = PowerManager.getPower(p);
+            if (power != null) {
+                // Call onRemove to wipe active state memory
+                power.onRemove(p);
+                // Immediately call onAssign to rebuild the state
+                power.onAssign(p);
+                p.sendMessage(Text.literal("§eYour power state has been forcibly reset."), false);
+                count++;
+            }
+        }
+        int finalCount = count;
+        src.sendFeedback(() -> Text.literal("Reset power state for " + finalCount + " player(s)."), true);
+    }
+
+    // ---------- Debug: forcecooldowns ----------
+
+    private static int debugForceCooldownsSelf(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity player = requirePlayer(ctx);
+        int seconds = getInteger(ctx, "seconds");
+        debugForceCooldowns(ctx.getSource(), List.of(player), seconds);
+        return 1;
+    }
+
+    private static int debugForceCooldownsTargets(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        final Collection<ServerPlayerEntity> targets = EntityArgumentType.getPlayers(ctx, ARG_TARGETS);
+        int seconds = getInteger(ctx, "seconds");
+        debugForceCooldowns(ctx.getSource(), targets, seconds);
+        return 1;
+    }
+
+    private static void debugForceCooldowns(ServerCommandSource src, Collection<ServerPlayerEntity> targets, int seconds) {
+        long ms = seconds * 1000L;
+        for (ServerPlayerEntity p : targets) {
+            Power power = PowerManager.getPower(p);
+            if (power != null) {
+                PowerManager.startCooldown(p, PowerManager.abilityKey(power, AbilityTypes.PRIMARY), ms);
+                PowerManager.startCooldown(p, PowerManager.abilityKey(power, AbilityTypes.SECONDARY), ms);
+                PowerManager.startCooldown(p, PowerManager.abilityKey(power, AbilityTypes.ULTIMATE), ms);
+                p.sendMessage(Text.literal("§eAll abilities forced on cooldown for " + seconds + "s."), false);
+            }
+        }
+        src.sendFeedback(() -> Text.literal("Forced all abilities on cooldown for " + targets.size() + " player(s)."), false);
+    }
+
+    // ---------- Debug: forcecooldown ----------
+
+    private static int debugForceCooldownSelf(CommandContext<ServerCommandSource> ctx, AbilityTypes type) {
+        ServerPlayerEntity player = requirePlayer(ctx);
+        int seconds = getInteger(ctx, "seconds");
+        debugForceCooldown(ctx.getSource(), List.of(player), type, seconds);
+        return 1;
+    }
+
+    private static int debugForceCooldownTargets(CommandContext<ServerCommandSource> ctx, AbilityTypes type) throws CommandSyntaxException {
+        final Collection<ServerPlayerEntity> targets = EntityArgumentType.getPlayers(ctx, ARG_TARGETS);
+        int seconds = getInteger(ctx, "seconds");
+        debugForceCooldown(ctx.getSource(), targets, type, seconds);
+        return 1;
+    }
+
+    private static void debugForceCooldown(ServerCommandSource src, Collection<ServerPlayerEntity> targets, AbilityTypes type, int seconds) {
+        long ms = seconds * 1000L;
+        for (ServerPlayerEntity p : targets) {
+            Power power = PowerManager.getPower(p);
+            if (power != null) {
+                PowerManager.startCooldown(p, PowerManager.abilityKey(power, type), ms);
+                p.sendMessage(Text.literal("§e" + type.name() + " forced on cooldown for " + seconds + "s."), false);
+            }
+        }
+        src.sendFeedback(() -> Text.literal("Forced " + type.name() + " cooldown for " + targets.size() + " player(s)."), false);
+    }
+
+    // ---------- Debug: cooldownmultiplier ----------
+
+    private static int debugCooldownMultiplierSelf(CommandContext<ServerCommandSource> ctx) {
+        ServerPlayerEntity player = requirePlayer(ctx);
+        float mult = getFloat(ctx, "multiplier");
+        debugCooldownMultiplier(ctx.getSource(), List.of(player), mult);
+        return 1;
+    }
+
+    private static int debugCooldownMultiplierTargets(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        final Collection<ServerPlayerEntity> targets = EntityArgumentType.getPlayers(ctx, ARG_TARGETS);
+        float mult = getFloat(ctx, "multiplier");
+        debugCooldownMultiplier(ctx.getSource(), targets, mult);
+        return 1;
+    }
+
+    private static void debugCooldownMultiplier(ServerCommandSource src, Collection<ServerPlayerEntity> targets, float mult) {
+        for (ServerPlayerEntity p : targets) {
+            PowerManager.setPlayerCooldownMultiplier(p, mult);
+            p.sendMessage(Text.literal("§aYour cooldown multiplier was set to " + mult + "x."), false);
+        }
+        src.sendFeedback(() -> Text.literal("Set cooldown multiplier to " + mult + "x for " + targets.size() + " player(s)."), false);
+    }
+
     private static int debugClearAllCooldownsSelf(CommandContext<ServerCommandSource> ctx) {
         ServerPlayerEntity player = requirePlayer(ctx);
         debugClearAllCooldowns(ctx.getSource(), List.of(player));
@@ -857,8 +1101,8 @@ public class PowerCommand {
     // ---------- Debug: toggle onepunch ----------
 
     private static int debugToggleOnePunch(CommandContext<ServerCommandSource> ctx) {
-        Loopypowers.onePunchDebugEnabled = !Loopypowers.onePunchDebugEnabled;
-        String state = Loopypowers.onePunchDebugEnabled ? "§aENABLED" : "§cDISABLED";
+        StrengthPower.onePunchDebugEnabled = !StrengthPower.onePunchDebugEnabled;
+        String state = StrengthPower.onePunchDebugEnabled ? "§aENABLED" : "§cDISABLED";
         ctx.getSource().sendFeedback(() -> Text.literal("One Punch mode is now " + state + "§f."), true);
         return 1;
     }

@@ -80,10 +80,14 @@ public class PowerFireballEntity extends FireballEntity {
                 return;
             }
 
-            // Explode in ANY
+            // Explode in ANY fluid to prevent lag machines
             FluidState fs = this.getWorld().getFluidState(this.getBlockPos());
             if (!fs.isEmpty()) {
-                explodeInWater();
+                this.onCollision(BlockHitResult.createMissed(
+                        this.getPos(),
+                        this.getHorizontalFacing(),
+                        this.getBlockPos()
+                ));
                 return;
             }
 
@@ -98,9 +102,8 @@ public class PowerFireballEntity extends FireballEntity {
             lastTrailPos = now;
             return;
         }
-        // what the fuck is a client particle im k
-        Vec3d delta = now.subtract(lastTrailPos);
 
+        Vec3d delta = now.subtract(lastTrailPos);
         int steps = 6;
 
         for (int s = 0; s <= steps; s++) {
@@ -124,8 +127,9 @@ public class PowerFireballEntity extends FireballEntity {
 
     @Override
     protected float getDrag() {
-        return 1.0f; // no slowdown i think
+        return 1.0f; // no slowdown
     }
+
     // all custom parameters
     public void setDamageValues(float directHitDamage, float extraExplosionDamage) {
         this.directHitDamage = directHitDamage;
@@ -133,108 +137,63 @@ public class PowerFireballEntity extends FireballEntity {
     }
 
     @Override
-    protected void onEntityHit(EntityHitResult entityHitResult) {
-        super.onEntityHit(entityHitResult);
-
-        Entity hit = entityHitResult.getEntity();
-        Entity owner = this.getOwner();
-
-        // death message stuff
-        DamageSource src = this.getDamageSources().fireball(this, owner);
-
-        // direct hit damage
-        hit.damage(src, this.directHitDamage);
-
-        // Camera shake if it would FUCKING WIORK
-        if (!this.getWorld().isClient) {
-            float strength = 0.8f; // tweak
-            double radius = 12.0;
-            int ticks = 8;
-
-            // Use the hit entity if it's a player, otherwise use the owner if it's a player
-            if (hit instanceof ServerPlayerEntity hitPlayer) {
-                CameraShake.shakeNearby(hitPlayer, radius, ticks, strength);
-            } else if (owner instanceof ServerPlayerEntity ownerPlayer) {
-                CameraShake.shakeNearby(ownerPlayer, radius, ticks, strength);
-            }
-        }
-
-        // IGNITE HIT
-        if (hit instanceof LivingEntity living) {
-            living.setOnFireFor(4);
-        }
-    }
-
-    @Override
     protected void onCollision(HitResult hitResult) {
-        if (this.getWorld().isClient) {
-            super.onCollision(hitResult);
-            return;
+        if (this.getWorld().isClient) return;
+
+        Entity directTarget = null;
+        if (hitResult.getType() == HitResult.Type.ENTITY) {
+            directTarget = ((EntityHitResult) hitResult).getEntity();
         }
 
-        // explosion power stiff
         if (this.getWorld() instanceof ServerWorld serverWorld) {
             Entity owner = this.getOwner();
+            DamageSource directSrc = this.getDamageSources().fireball(this, owner);
+            DamageSource splashSrc = this.getDamageSources().explosion(this, owner);
 
-            DamageSource explosionSource = this.getDamageSources().explosion(this, owner);
-
+            // 1. Create the Vanilla Explosion (For visual effects and block breaking)
             serverWorld.createExplosion(
-                    this,                 // entity that exploded
-                    explosionSource,      // damage source
-                    null,                 // idfk
+                    this,
+                    splashSrc,
+                    null,
                     this.getX(),
                     this.getY(),
                     this.getZ(),
                     (float) myExplosionPower,
-                    true,                 // creates fire
+                    true,
                     World.ExplosionSourceType.MOB
             );
-        }
 
-        // Extra AOE
-        if (extraExplosionDamage > 0.0f && this.getWorld() instanceof ServerWorld serverWorld) {
-            float radius = Math.max(2.0f, extraExplosionDamage * 0.35f);
+            // damage calc (calc is short for calculation BTW)
+            float radius = Math.max(3.0f, extraExplosionDamage * 0.4f);
             Box box = new Box(this.getPos(), this.getPos()).expand(radius);
-
-            Entity owner = this.getOwner();
-            DamageSource src = this.getDamageSources().explosion(this, owner);
 
             for (Entity e : serverWorld.getOtherEntities(this, box)) {
                 if (!(e instanceof LivingEntity living)) continue;
                 if (owner != null && e == owner) continue;
 
-                double dist = e.squaredDistanceTo(this);
-                double max = radius * radius;
-                float scale = (float) Math.max(0.0, 1.0 - (dist / max));
+                // Strip vanilla i-frames so my damage overrides the vanilla explosion damage
+                living.timeUntilRegen = 0;
 
-                living.damage(src, extraExplosionDamage * scale);
+                if (e == directTarget) {
+                    // direct hits to splash + collision damage
+                    living.damage(directSrc, directHitDamage + extraExplosionDamage);
+                    living.setOnFireFor(5);
+
+                    if (owner instanceof ServerPlayerEntity ownerPlayer) {
+                        CameraShake.shakeNearby(ownerPlayer, 12.0, 8, 0.8f);
+                    }
+                } else {
+                    // indirect hits take scaled splash damage based on distance
+                    double dist = e.getPos().distanceTo(this.getPos());
+                    double falloff = 1.0 - (dist / radius);
+
+                    if (falloff > 0) {
+                        living.damage(splashSrc, (float) (extraExplosionDamage * falloff));
+                        living.setOnFireFor(3);
+                    }
+                }
             }
         }
-
-        // Remove projectile after impact
-        this.discard();
-    }
-
-    private void explodeInWater() { // only purpose of this is to stop lag machines
-
-        if (!(this.getWorld() instanceof ServerWorld serverWorld)) return;
-
-        Entity owner = this.getOwner();
-
-        DamageSource explosionSource =
-                this.getDamageSources().explosion(this, owner);
-
-        serverWorld.createExplosion(
-                this,
-                explosionSource,
-                null,
-                this.getX(),
-                this.getY(),
-                this.getZ(),
-                (float) myExplosionPower,
-                false, // usually better: no fire underwater
-                World.ExplosionSourceType.MOB
-        );
 
         this.discard();
     }

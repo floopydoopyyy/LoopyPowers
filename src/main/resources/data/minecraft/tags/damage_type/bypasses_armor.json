@@ -2,6 +2,13 @@
   "replace": false,
   "values": [
     "loopypowers:bet",
-    "loopypowers:ritual"
+    "loopypowers:ritual",
+    "loopypowers:bloodself",
+    "loopypowers:onepunch",
+    "loopypowers:debris_orbit",
+    "loopypowers:thorn",
+    "loopypowers:strangle",
+    "loopypowers:cosmic_ray",
+    "loopypowers:fracture"
   ]
 }

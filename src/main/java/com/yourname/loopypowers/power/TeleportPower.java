@@ -22,10 +22,35 @@ import com.yourname.loopypowers.network.RenderPackets;
 import net.minecraft.world.RaycastContext;
 import org.joml.Vector3f;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 
 public class TeleportPower implements Power {
+
+    /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, TeleportState> ACTIVE_STATES = new HashMap<>();
+
+    private static class TeleportState {
+        int blinkCharges = PRIMARY_MAX_CHARGES;
+        int blinkRechargeTicks = -1;
+        int blinkLockTicks = 0;
+
+        int dodgeCdTicks = 0;
+        int phaseTicks = 0;
+
+        int frenzyTicks = 0;
+        int frenzyStep = 0;
+    }
+
+    private static TeleportState getState(ServerPlayerEntity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new TeleportState());
+    }
 
     /* ============================================================
        CONSTANTS - PASSIVE
@@ -33,7 +58,7 @@ public class TeleportPower implements Power {
     private static final float PASSIVE_DODGE_CHANCE = 0.18f; // percentage chance to dodge
     private static final int PASSIVE_HIDE_TICKS = 12;        // how long dodge invisibility effect is
     private static final int PASSIVE_IFRAME_TICKS = 18;      // window of invincibility
-    private static final int PASSIVE_COOLDOWN_TICKS = 280;   // dodge cooldown in ticks
+    private static final int PASSIVE_COOLDOWN_TICKS = 160;   // dodge cooldown in ticks
 
     /* ============================================================
        CONSTANTS - PRIMARY
@@ -43,11 +68,6 @@ public class TeleportPower implements Power {
     private static final int PRIMARY_LOCK_TICKS = 5;                 // tiny anti-spam delay between blinks
     private static final double PRIMARY_BLINK_DIST = 14.0;           // distance of the blink
     private static final double PRIMARY_AIR_LOOK_THRESHOLD = 0.55;   // decides if angle is high enough for air teleport
-
-    // Internal logic tags for primary charges
-    private static final String BLINK_CHARGES = "tp_blink_c_";
-    private static final String BLINK_RECHARGE = "tp_blink_r_";
-    private static final String BLINK_LOCK = "tp_blink_lock_";
 
     /* ============================================================
        CONSTANTS - SECONDARY
@@ -63,7 +83,7 @@ public class TeleportPower implements Power {
     private static final int ULTIMATE_DURATION_TICKS = 120;       // 6 seconds
     private static final int ULTIMATE_ATTACK_STEP_INITIAL = 4;    // startup delay before first swing
     private static final int ULTIMATE_ATTACK_STEP_ONGOING = 6;    // ticks between each swing
-    private static final double ULTIMATE_SEARCH_RADIUS = 6.0;     // how far to look for targets
+    private static final double ULTIMATE_SEARCH_RADIUS = 7.0;     // how far to look for targets
     private static final double ULTIMATE_TELEPORT_OFFSET = -1.5;  // how far behind victim to teleport
     private static final double ULTIMATE_AURA_RADIUS = 11.0;      // visual ring radius
 
@@ -73,21 +93,66 @@ public class TeleportPower implements Power {
 
     private static final Random RNG = new Random();
 
+    /* ============================================================
+       LIFECYCLE
+       ============================================================ */
+
+    @Override
+    public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("tp_")); // Clean legacy tags
+        ACTIVE_STATES.put(player.getUuid(), new TeleportState());
+    }
+
+    @Override
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("tp_"));
+        ACTIVE_STATES.remove(player.getUuid());
+        player.removeStatusEffect(StatusEffects.HASTE);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
+
+    @Override
+    public void onTick(ServerPlayerEntity player) {
+        TeleportState state = getState(player);
+
+        // Primary Charges
+        if (state.blinkLockTicks > 0) state.blinkLockTicks--;
+        tickBlinkRecharge(state);
+        updateBlinkCooldownUI(player, state);
+
+        // tick timers
+        if (state.dodgeCdTicks > 0) state.dodgeCdTicks--;
+        if (state.phaseTicks > 0) state.phaseTicks--;
+
+        if (state.frenzyTicks > 0) {
+            tickFrenzy(player, state);
+        }
+    }
+
     // =========================
     // PASSIVE
     // =========================
 
+    @Override
+    public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        return !tryDodge(victim);
+    }
+
     /**
-     * Called from ServerLivingEntityEvents.ALLOW_DAMAGE.
      * Return true if we dodged (meaning: cancel the damage).
-     * if this code breaks again im going to jump
      */
     public boolean tryDodge(ServerPlayerEntity player) {
         // do not dodge if passive off
         if (!PassiveManager.isEnabled(player)) return false;
 
+        TeleportState state = getState(player);
+
         // leave if cooldown is active
-        if (hasTagPrefix(player, "tp_dodge_cd_")) return false;
+        if (state.dodgeCdTicks > 0) return false;
 
         if (RNG.nextFloat() > PASSIVE_DODGE_CHANCE) return false; // dice roll
 
@@ -95,10 +160,10 @@ public class TeleportPower implements Power {
         RenderPackets.hidePlayerFromOthers(player, PASSIVE_HIDE_TICKS);
 
         // window of invincibility (otherwise it would just hit again)
-        setSingleTimerTag(player, "tp_phase_", PASSIVE_IFRAME_TICKS); // keep this one higher in the sequence otherwise damage will just happen again
+        state.phaseTicks = PASSIVE_IFRAME_TICKS;
 
         // cooldown setting
-        setSingleTimerTag(player, "tp_dodge_cd_", PASSIVE_COOLDOWN_TICKS);
+        state.dodgeCdTicks = PASSIVE_COOLDOWN_TICKS;
 
         // particles
         var w = player.getServerWorld();
@@ -115,76 +180,64 @@ public class TeleportPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        if (getTimerLeft(player, BLINK_LOCK) > 0) return;
-
-        int charges = getIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
-        if (charges <= 0) return;
+        TeleportState state = getState(player);
+        if (state.blinkLockTicks > 0) return;
+        if (state.blinkCharges <= 0) return;
 
         // consume charge
-        setIntTag(player, BLINK_CHARGES, charges - 1);
-        setSingleTimerTag(player, BLINK_LOCK, PRIMARY_LOCK_TICKS);
+        state.blinkCharges--;
+        state.blinkLockTicks = PRIMARY_LOCK_TICKS;
 
         // start recharge if not running
-        if (getTimerLeft(player, BLINK_RECHARGE) < 0) {
-            setSingleTimerTag(player, BLINK_RECHARGE, PRIMARY_RECHARGE_TICKS);
+        if (state.blinkRechargeTicks < 0) {
+            state.blinkRechargeTicks = PRIMARY_RECHARGE_TICKS;
         }
 
         blinkForward(player, PRIMARY_BLINK_DIST);
     }
 
-    private static void tickBlinkRecharge(ServerPlayerEntity player) {
-        int charges = getIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
-
+    private static void tickBlinkRecharge(TeleportState state) {
         // if full, exit
-        if (charges >= PRIMARY_MAX_CHARGES) {
-            removeTagPrefix(player, BLINK_RECHARGE);
+        if (state.blinkCharges >= PRIMARY_MAX_CHARGES) {
+            state.blinkRechargeTicks = -1;
             return;
         }
 
-        // start timer if not running and charge has been used
-        if (getTimerLeft(player, BLINK_RECHARGE) < 0) {
-            setSingleTimerTag(player, BLINK_RECHARGE, PRIMARY_RECHARGE_TICKS);
-        }
-
         // tick timer
-        int leftAfterTick = tickSingleTimer(player, BLINK_RECHARGE);
-        if (leftAfterTick < 0) return;
+        if (state.blinkRechargeTicks >= 0) {
+            state.blinkRechargeTicks--;
 
-        // when hit 0, give a charge
-        if (leftAfterTick == 0) {
-            charges = Math.min(PRIMARY_MAX_CHARGES, charges + 1);
-            setIntTag(player, BLINK_CHARGES, charges);
+            // when hit 0, give a charge
+            if (state.blinkRechargeTicks <= 0) {
+                state.blinkCharges++;
 
-            // If still not full, start next recharge window
-            if (charges < PRIMARY_MAX_CHARGES) {
-                setSingleTimerTag(player, BLINK_RECHARGE, PRIMARY_RECHARGE_TICKS);
-            } else {
-                removeTagPrefix(player, BLINK_RECHARGE);
+                // If still not full, start next recharge window
+                if (state.blinkCharges < PRIMARY_MAX_CHARGES) {
+                    state.blinkRechargeTicks = PRIMARY_RECHARGE_TICKS;
+                } else {
+                    state.blinkRechargeTicks = -1;
+                }
             }
         }
     }
 
-    private static void updateBlinkCooldownUI(ServerPlayerEntity player) {
+    private static void updateBlinkCooldownUI(ServerPlayerEntity player, TeleportState state) {
         String key = "Teleport:PRIMARY";
 
-        int charges = getIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
-
         // hide ui when at full charge
-        if (charges >= PRIMARY_MAX_CHARGES) {
+        if (state.blinkCharges >= PRIMARY_MAX_CHARGES) {
             CooldownUI.clearCooldown(player, key);
             return;
         }
 
         // show progress towards nearest charge
-        int leftTicks = getTimerLeft(player, BLINK_RECHARGE);
-
-        // if timer isn't present show it anyway
+        int leftTicks = state.blinkRechargeTicks;
         if (leftTicks < 0) leftTicks = PRIMARY_RECHARGE_TICKS;
 
         long endMs = System.currentTimeMillis() + (leftTicks * 50L);
 
         String suffix = CooldownUI.makeChargeSuffix(
-                charges, PRIMARY_MAX_CHARGES, leftTicks, PRIMARY_RECHARGE_TICKS
+                state.blinkCharges, PRIMARY_MAX_CHARGES, leftTicks, PRIMARY_RECHARGE_TICKS
         );
 
         CooldownUI.setCooldownEnd(player, key, endMs, suffix);
@@ -412,10 +465,9 @@ public class TeleportPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        player.getCommandTags().add("tp_frenzy");
-        setSingleTimerTag(player, "tp_frenzy_ticks_", ULTIMATE_DURATION_TICKS);
-        // Attack every N ticks
-        setSingleTimerTag(player, "tp_frenzy_step_", ULTIMATE_ATTACK_STEP_INITIAL);
+        TeleportState state = getState(player);
+        state.frenzyTicks = ULTIMATE_DURATION_TICKS;
+        state.frenzyStep = ULTIMATE_ATTACK_STEP_INITIAL;
 
         player.getServerWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_SCREAM, player.getSoundCategory(), 0.8f, 1.4f);
     }
@@ -423,52 +475,20 @@ public class TeleportPower implements Power {
     @Override
     public long getUltimateCooldownMs() { return ULTIMATE_COOLDOWN_MS; }
 
-    @Override
-    public void onAssign(ServerPlayerEntity player) {
-        setIntTag(player, BLINK_CHARGES, PRIMARY_MAX_CHARGES);
-        removeTagPrefix(player, BLINK_RECHARGE);
-        removeTagPrefix(player, BLINK_LOCK);
-    }
+    private void tickFrenzy(ServerPlayerEntity player, TeleportState state) {
+        state.frenzyTicks--;
+        if (state.frenzyTicks <= 0) return;
 
-    @Override
-    public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, BLINK_CHARGES);
-        removeTagPrefix(player, BLINK_RECHARGE);
-        removeTagPrefix(player, BLINK_LOCK);
-    }
-
-    @Override
-    public void onTick(ServerPlayerEntity player) {
-
-        // Primary Charges
-        tickSingleTimer(player, BLINK_LOCK);
-        tickBlinkRecharge(player);
-        updateBlinkCooldownUI(player);
-
-        // tick timers
-        tickSingleTimer(player, "tp_dodge_cd_");
-        tickSingleTimer(player, "tp_phase_");
-        tickSingleTimer(player, "tp_frenzy_cd_");
-
-        if (hasTagPrefix(player, "tp_frenzy_ticks_")) {
-            tickFrenzy(player);
-        }
-    }
-
-    private void tickFrenzy(ServerPlayerEntity player) {
-        int ticksLeft = tickSingleTimer(player, "tp_frenzy_ticks_");
-        if (ticksLeft <= 0) {
-            return;
-        }
         ServerWorld world = player.getServerWorld();
         spawnFrenzyRadius(world, player, ULTIMATE_AURA_RADIUS);
         spawnFrenzyAura(world, player);
 
-        int stepLeft = tickSingleTimer(player, "tp_frenzy_step_");
-        if (stepLeft > 0) return;
-        setSingleTimerTag(player, "tp_frenzy_step_", ULTIMATE_ATTACK_STEP_ONGOING);
+        if (state.frenzyStep > 0) {
+            state.frenzyStep--;
+            return;
+        }
 
-        world = player.getServerWorld();
+        state.frenzyStep = ULTIMATE_ATTACK_STEP_ONGOING;
 
         Box box = new Box(player.getPos(), player.getPos()).expand(ULTIMATE_SEARCH_RADIUS);
         List<LivingEntity> targets = world.getEntitiesByClass(LivingEntity.class, box,
@@ -634,80 +654,6 @@ public class TeleportPower implements Power {
         );
     }
 
-    private static boolean hasTagPrefix(Entity p, String prefix) {
-        for (String tag : p.getCommandTags()) if (tag.startsWith(prefix)) return true;
-        return false;
-    }
-
-    private static void removeTagPrefix(Entity p, String prefix) {
-        var it = p.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) {
-                it.remove();
-                return;
-            }
-        }
-    }
-
-    private static void setSingleTimerTag(Entity p, String prefix, int ticks) {
-        removeTagPrefix(p, prefix);
-        p.getCommandTags().add(prefix + ticks);
-    }
-
-    private static int tickSingleTimer(Entity p, String prefix) {
-        var it = p.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (!tag.startsWith(prefix)) continue;
-
-            int ticks;
-            try {
-                ticks = Integer.parseInt(tag.substring(prefix.length())) - 1;
-            } catch (NumberFormatException e) {
-                it.remove();
-                return -1;
-            }
-
-            it.remove();
-
-            if (ticks > 0) {
-                p.getCommandTags().add(prefix + ticks);
-            }
-            return ticks;
-        }
-        return -1;
-    }
-
-    private static int getTimerLeft(Entity e, String prefix) {
-        for (String tag : e.getCommandTags()) {
-            if (!tag.startsWith(prefix)) continue;
-            try {
-                return Integer.parseInt(tag.substring(prefix.length()));
-            } catch (NumberFormatException ex) {
-                return -1;
-            }
-        }
-        return -1;
-    }
-
-    private static int getIntTag(Entity e, String prefix, int fallback) {
-        for (String tag : e.getCommandTags()) {
-            if (!tag.startsWith(prefix)) continue;
-            try {
-                return Integer.parseInt(tag.substring(prefix.length()));
-            } catch (NumberFormatException ex) {
-                return fallback;
-            }
-        }
-        return fallback;
-    }
-
-    private static void setIntTag(Entity e, String prefix, int value) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + value);
-    }
-
     private static void spawnBlinkTrail(ServerWorld world, Vec3d from, Vec3d to) {
         Vec3d delta = to.subtract(from); // i would try to explain this but even i don't know. I was looking at a forum
         double len = delta.length();
@@ -730,7 +676,7 @@ public class TeleportPower implements Power {
     }
 
     // names
-    @Override public String getName() { return "Teleport"; }
+    @Override public String getName() { return "Teleportation"; }
     @Override public String getPrimaryName() { return "Blink"; }
     @Override public String getSecondaryName() { return "Boogie Woogie"; }
     @Override public String getUltimateName() { return "Frenzy"; }

@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.manager;
 
 import com.yourname.loopypowers.CooldownUI;
+import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.network.AbilityPackets;
 import com.yourname.loopypowers.power.*;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -61,23 +62,34 @@ public class PowerManager {
     }
 
     /**
-     * Sets a player's power, calling onRemove on the old one and onAssign on
-     * the new one, then persisting immediately so the change survives a crash.
+     * Default alias for setting a power. Triggers the chat announcements.
      */
     public static void setPower(ServerPlayerEntity player, Power power) {
+        setPower(player, power, false);
+    }
+
+    /**
+     * Sets a player's power, calling onRemove on the old one and onAssign on
+     * the new one, then persisting immediately so the change survives a crash.
+     * * @param silent If true, suppresses the "You gained the power" chat messages.
+     * Used during logins and respawns to avoid spam.
+     */
+    public static void setPower(ServerPlayerEntity player, Power power, boolean silent) {
         Power old = getPower(player);
         if (old != null) old.onRemove(player);
 
         PLAYER_POWERS.put(player.getUuid(), power);
         power.onAssign(player);
 
-        //setLevel(player, 1);
         syncClientFlags(player);
 
         // Persist immediately so admin commands survive crashes
         PlayerDataStore.save(player);
 
-        player.sendMessage(Text.literal("§aYou gained: §e" + power.getName()), false);
+        if (!silent) {
+            player.sendMessage(Text.literal("§eYou gained the power: §6" + power.getName()), false);
+            player.sendMessage(Text.literal("§eType '/power help overview' for ability explanations."));
+        }
     }
 
     public static void removePower(ServerPlayerEntity player) {
@@ -87,7 +99,7 @@ public class PowerManager {
         clearAllCooldowns(player);
         player.clearStatusEffects();
 
-        // Save the now-empty state so the file reflects the removal
+        // Save the now-empty state so the file also has this
         PlayerDataStore.save(player);
     }
 
@@ -201,7 +213,7 @@ public class PowerManager {
 
     /** Applies overrides and multipliers to produce the final cooldown duration. */
     private static long computeFinalCooldownMs(ServerPlayerEntity player, Power power, AbilityTypes type, long baseMs) {
-        long ms = modifyCooldown(player, power, baseMs);
+        long ms = modifyCooldown(player, power, type, baseMs);
 
         Long override = COOLDOWN_OVERRIDE_MS.get(abilityKey(power, type));
         if (override != null) ms = override;
@@ -219,7 +231,18 @@ public class PowerManager {
 
     public static void usePrimary(ServerPlayerEntity player) {
         Power power = PLAYER_POWERS.get(player.getUuid());
-        if (power == null) return;
+        
+        // No power check
+        if (power == null) {
+            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
+            return;
+        }
+
+        // Displaced lock EXCEPTIONS
+        if (player.hasStatusEffect(ModEffects.DISPLACED) && !(power instanceof HealingPower)) {
+            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+            return;
+        }
 
         String key = abilityKey(power, AbilityTypes.PRIMARY);
         if (!isCooldownReady(player, key)) return;
@@ -231,13 +254,23 @@ public class PowerManager {
     }
 
     public static void useSecondary(ServerPlayerEntity player) {
-        if (getLevel(player) < 2) {
-            CooldownUI.pushActionbarOverride(player, "§cYou must be connection level 2 to use your secondary.", 30);
+        Power power = PLAYER_POWERS.get(player.getUuid());
+
+        // No power check
+        if (power == null) {
+            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
             return;
         }
 
-        Power power = PLAYER_POWERS.get(player.getUuid());
-        if (power == null) return;
+        if (player.hasStatusEffect(ModEffects.DISPLACED)) {
+            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+            return;
+        }
+
+        if (getLevel(player) < 2) {
+            CooldownUI.pushActionbarOverride(player, "§cYou must be level 2 to use your secondary.", 30);
+            return;
+        }
 
         String key = abilityKey(power, AbilityTypes.SECONDARY);
         if (!isCooldownReady(player, key)) return;
@@ -249,13 +282,23 @@ public class PowerManager {
     }
 
     public static void useUltimate(ServerPlayerEntity player) {
-        if (getLevel(player) < 3) {
-            CooldownUI.pushActionbarOverride(player, "§cYou must be connection level 3 to use your ultimate.", 30);
+        Power power = PLAYER_POWERS.get(player.getUuid());
+
+        // No power check
+        if (power == null) {
+            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
             return;
         }
 
-        Power power = PLAYER_POWERS.get(player.getUuid());
-        if (power == null) return;
+        if (player.hasStatusEffect(ModEffects.DISPLACED)) {
+            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+            return;
+        }
+
+        if (getLevel(player) < 3) {
+            CooldownUI.pushActionbarOverride(player, "§cYou must be level 3 to use your ultimate.", 30);
+            return;
+        }
 
         String key = abilityKey(power, AbilityTypes.ULTIMATE);
         if (!isCooldownReady(player, key)) return;
@@ -275,10 +318,10 @@ public class PowerManager {
         ServerPlayNetworking.send(player, AbilityPackets.SYNC_STRENGTH_POWER, buf);
     }
 
-    private static long modifyCooldown(ServerPlayerEntity player, Power power, long baseMs) {
-        if (power instanceof StrengthPower
-                && player.getCommandTags().stream().anyMatch(t -> t.startsWith("st_raging_"))) {
-            return Math.max(250L, (long)(baseMs * 0.20));
+    private static long modifyCooldown(ServerPlayerEntity player, Power power, AbilityTypes type, long baseMs) {
+        // ask StrengthPower if they are raging, but exclude the ultimate ability
+        if (power instanceof StrengthPower && type != AbilityTypes.ULTIMATE && StrengthPower.isRaging(player)) {
+            return Math.max(250L, (long)(baseMs * 0.20)); // 80% reduction
         }
         return baseMs;
     }
@@ -311,7 +354,7 @@ public class PowerManager {
         int current = getLevel(player);
         if (current < 3) {
             setLevel(player, current + 1);
-            player.sendMessage(Text.literal("§bYour power evolved to Level " + (current + 1) + "!"), false);
+            player.sendMessage(Text.literal("§bYour bond evolved to Level " + (current + 1) + "!"), false);
         }
     }
 
@@ -352,6 +395,7 @@ public class PowerManager {
             for (Power p : ALL_POWERS) {
                 if (p.getName().equals(name)) {
                     PLAYER_POWERS.put(player.getUuid(), p);
+                    // Silently assign the power on load
                     p.onAssign(player);
                     syncClientFlags(player);
                     break;
@@ -393,5 +437,16 @@ public class PowerManager {
         Map<String, Long> oldMap = COOLDOWN_END_MS.get(oldPlayer.getUuid());
         if (oldMap == null) return;
         COOLDOWN_END_MS.put(newPlayer.getUuid(), new HashMap<>(oldMap));
+    }
+
+    /**
+     * MUST be called when a player disconnects to prevent memory leaks
+     */
+    public static void clearPlayerState(ServerPlayerEntity player) {
+        UUID id = player.getUuid();
+        PLAYER_POWERS.remove(id);
+        PLAYER_LEVELS.remove(id);
+        COOLDOWN_END_MS.remove(id);
+        PLAYER_CD_MULT.remove(id);
     }
 }

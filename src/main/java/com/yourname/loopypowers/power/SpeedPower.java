@@ -18,9 +18,33 @@ import net.minecraft.util.math.BlockPos;
 import com.yourname.loopypowers.sound.ModSounds;
 import org.joml.Vector3f;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 // HANDLES ALL ATTRIBUTES OF SPEED POWER
 
-public class SpeedPower implements Power { // SPEED
+public class SpeedPower implements Power {
+
+    /* ============================================================
+       STATE STORAGE (OPTIMIZED)
+       ============================================================ */
+
+    private static final Map<UUID, SpeedState> ACTIVE_STATES = new HashMap<>();
+
+    private static class SpeedState {
+        int burstCdTicks = 0;
+        int rushTicks = 0;
+        int rushLoopCd = 0;
+        int overdriveTicks = 0;
+        int overdriveLoopCd = 0;
+        int overdriveSlowTicks = 0;
+        int blockDmgCd = 0;
+    }
+
+    private static SpeedState getState(ServerPlayerEntity player) {
+        return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new SpeedState());
+    }
 
     /* ============================================================
        CONSTANTS
@@ -39,11 +63,11 @@ public class SpeedPower implements Power { // SPEED
     private static final double DASH_MAX_DOWN               = -0.8;
     private static final double DASH_MAX_UP                 = 0.8;
     private static final double DASH_GROUND_MIN_Y           = 0.18;
-    private static final int    DASH_PARTICLE_COUNT         = 22;
+    private static final int    DASH_PARTICLE_COUNT         = 12;
 
     // SECONDARY
     private static final int    RUSH_DURATION_TICKS         = 100;     // 5 seconds
-    private static final float  RUSH_DAMAGE                 = 6.0f;    // 3 hearts
+    private static final float  RUSH_DAMAGE                 = 12.5f;
     private static final double RUSH_KNOCKBACK_HORIZONTAL   = 1.4;
     private static final double RUSH_KNOCKBACK_VERTICAL     = 0.55;
     private static final double RUSH_KNOCKBACK_SCAN_RADIUS  = 4.5;
@@ -54,7 +78,7 @@ public class SpeedPower implements Power { // SPEED
     private static final int    OVERDRIVE_DURATION_TICKS    = 200;     // 10 seconds
     private static final double OVERDRIVE_MIN_SPEED         = 1.4;
     private static final double OVERDRIVE_FORWARD_PUSH      = 0.38;
-    private static final double OVERDRIVE_ENTITY_DAMAGE     = 8.0f;
+    private static final double OVERDRIVE_ENTITY_DAMAGE     = 19.5f;
     private static final double OVERDRIVE_ENTITY_KNOCKBACK  = 1.8;
     private static final double OVERDRIVE_ENTITY_KNOCKBACK_Y = 0.5;
     private static final double OVERDRIVE_COLLISION_SLOW_X  = 0.15;
@@ -70,25 +94,15 @@ public class SpeedPower implements Power { // SPEED
 
     // sound
     private static final int RUSH_LOOP_INTERVAL_TICKS      = 25;
+    private static final int OVERDRIVE_LOOP_INTERVAL_TICKS      = 18;
 
-    // particles
-    private static final DustParticleEffect CYAN_BRIGHT  =
-            new DustParticleEffect(new Vector3f(0.15f, 0.85f, 1.00f), 1.3f);
-    private static final DustParticleEffect CYAN_PALE    =
-            new DustParticleEffect(new Vector3f(0.70f, 0.95f, 1.00f), 1.0f);
+    // particles (Refactored to White)
+    private static final DustParticleEffect WHITE_BRIGHT  =
+            new DustParticleEffect(new Vector3f(1.00f, 1.00f, 1.00f), 1.3f);
+    private static final DustParticleEffect WHITE_PALE    =
+            new DustParticleEffect(new Vector3f(0.85f, 0.85f, 0.85f), 1.0f);
     private static final DustParticleEffect WHITE_STREAK =
-            new DustParticleEffect(new Vector3f(0.95f, 0.98f, 1.00f), 0.8f);
-
-    // constants
-    private static final String RUSH_TAG              = "speed_rush";
-    private static final String RUSH_TICKS_PREFIX     = "speed_rush_ticks_";
-    private static final String RUSH_LOOP_CD          = "speed_rush_loop_cd_";
-    private static final String OVERDRIVE_TAG         = "overdrive";
-    private static final String OVERDRIVE_TICKS_PREFIX = "overdrive_ticks_";
-    private static final String OVERDRIVE_LOOP_CD     = "overdrive_loop_cd_";
-    private static final String OVERDRIVE_SLOW_PREFIX = "overdrive_slow_";
-    private static final String BLOCK_DMG_CD_PREFIX   = "overdrive_block_dmg_";
-    private static final String BURST_CD_PREFIX       = "speed_burst_cd_";
+            new DustParticleEffect(new Vector3f(0.95f, 0.95f, 0.95f), 0.8f);
 
     /* ============================================================
        PASSIVE
@@ -96,6 +110,9 @@ public class SpeedPower implements Power { // SPEED
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("speed_") || tag.startsWith("overdrive_"));
+        ACTIVE_STATES.put(player.getUuid(), new SpeedState());
+
         // passive
         player.addStatusEffect(
                 new StatusEffectInstance(StatusEffects.SPEED, 40, PASSIVE_SPEED_AMPLIFIER, true, false)
@@ -103,23 +120,56 @@ public class SpeedPower implements Power { // SPEED
     }
 
     @Override
-    public void onTick(ServerPlayerEntity player) {
-        tickPassiveSpeed(player);
-        tickLowHealthBurst(player);
-        tickBurstCooldown(player);
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("speed_") || tag.startsWith("overdrive_"));
+        ACTIVE_STATES.remove(player.getUuid());
 
-        if (player.getCommandTags().contains(RUSH_TAG)) {
+        // Strip lingering buffs
+        player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.HASTE);
+        player.removeStatusEffect(StatusEffects.JUMP_BOOST);
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
+
+    @Override
+    public void onTick(ServerPlayerEntity player) {
+        SpeedState state = getState(player);
+
+        // Tick internal cooldowns
+        if (state.burstCdTicks > 0) state.burstCdTicks--;
+        if (state.blockDmgCd > 0) state.blockDmgCd--;
+        if (state.overdriveSlowTicks > 0) state.overdriveSlowTicks--;
+        if (state.rushLoopCd > 0) state.rushLoopCd--;
+        if (state.overdriveLoopCd > 0) state.overdriveLoopCd--;
+
+        tickPassiveSpeed(player);
+        tickLowHealthBurst(player, state);
+
+        if (state.rushTicks > 0) {
+            state.rushTicks--;
             tickRushEffects(player);
-            tickCountdown(player, RUSH_TICKS_PREFIX, RUSH_TAG, RUSH_LOOP_CD);
+
+            // Loop sound
+            if (state.rushLoopCd <= 0) {
+                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.0f);
+                state.rushLoopCd = RUSH_LOOP_INTERVAL_TICKS;
+            }
         }
 
-        if (player.getCommandTags().contains(OVERDRIVE_TAG)) {
-            tickOverdrive(player);
-            tickSlowLock(player);
-            tickBlockDamageCooldown(player);
-            tickLoopSound(player, RUSH_LOOP_CD, RUSH_LOOP_INTERVAL_TICKS,    ModSounds.RUSHLOOP,  0.55f, 1.0f);
-            //tickLoopSound(player, OVERDRIVE_LOOP_CD, OVERDRIVE_LOOP_INTERVAL_TICKS, ModSounds.ELECTRICITY, 0.65f, 1.0f);
-            tickCountdown(player, OVERDRIVE_TICKS_PREFIX, OVERDRIVE_TAG, OVERDRIVE_LOOP_CD);
+        if (state.overdriveTicks > 0) {
+            state.overdriveTicks--;
+            tickOverdrive(player, state);
+
+            // Ultimate Loop Sound
+            if (state.overdriveLoopCd <= 0) {
+                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.3f);
+                state.overdriveLoopCd = OVERDRIVE_LOOP_INTERVAL_TICKS;
+            }
         }
     }
 
@@ -128,8 +178,8 @@ public class SpeedPower implements Power { // SPEED
        ============================================================ */
 
     @Override
-    public void activatePrimary(ServerPlayerEntity player) { // Dash ability method
-        Vec3d look = player.getRotationVec(1.0F); // gets player facing
+    public void activatePrimary(ServerPlayerEntity player) {
+        Vec3d look = player.getRotationVec(1.0F);
 
         double y = MathHelper.clamp(
                 look.y * DASH_VERTICAL_STRENGTH,
@@ -139,13 +189,12 @@ public class SpeedPower implements Power { // SPEED
         double x = look.x * DASH_HORIZONTAL_STRENGTH;
         double z = look.z * DASH_HORIZONTAL_STRENGTH;
 
-        // should allow player to climb things like slabs without issues
         if (player.isOnGround()) {
             y = Math.max(y, DASH_GROUND_MIN_Y);
         }
 
         player.addVelocity(x, y, z);
-        player.velocityModified = true; // tells server velocity modified
+        player.velocityModified = true;
 
         spawnDashParticles(player, look);
 
@@ -165,10 +214,10 @@ public class SpeedPower implements Power { // SPEED
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        player.getCommandTags().add(RUSH_TAG);
-        player.getCommandTags().add(RUSH_TICKS_PREFIX + RUSH_DURATION_TICKS);
+        SpeedState state = getState(player);
+        state.rushTicks = RUSH_DURATION_TICKS;
+        state.rushLoopCd = 0;
 
-        // Apply flat velocity burst in the look direction instead of a speed potion effect
         Vec3d look = player.getRotationVec(1.0F);
         player.setVelocity(
                 look.x * RUSH_VELOCITY_BONUS,
@@ -190,7 +239,6 @@ public class SpeedPower implements Power { // SPEED
 
                     DamageSource rushSrc = ModDamageTypes.rush(player.getWorld(), player);
 
-                    // IF check prevents multi-hits and ignores i-framed entities
                     if (victim.damage(rushSrc, RUSH_DAMAGE)) {
                         double dx = victim.getX() - player.getX();
                         double dz = victim.getZ() - player.getZ();
@@ -220,11 +268,8 @@ public class SpeedPower implements Power { // SPEED
         player.getServerWorld().playSound(
                 null, player.getBlockPos(),
                 ModSounds.RUSHSTART,
-                player.getSoundCategory(), 1.0f, 1.0f
+                player.getSoundCategory(), 0.8f, 1.0f
         );
-
-        // 0 cd so the loop plays immediately on the next tick
-        setSingleTimerTag(player, RUSH_LOOP_CD, 0);
     }
 
     /* ============================================================
@@ -233,10 +278,10 @@ public class SpeedPower implements Power { // SPEED
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        player.getCommandTags().add(OVERDRIVE_TAG);
-        player.getCommandTags().add(OVERDRIVE_TICKS_PREFIX + OVERDRIVE_DURATION_TICKS);
+        SpeedState state = getState(player);
+        state.overdriveTicks = OVERDRIVE_DURATION_TICKS;
+        state.overdriveLoopCd = 0;
 
-        // Launch the player forward with direct velocity on activation
         Vec3d look = player.getRotationVec(1.0F);
         player.setVelocity(
                 look.x * (OVERDRIVE_MIN_SPEED * 1.8),
@@ -260,9 +305,7 @@ public class SpeedPower implements Power { // SPEED
        TICK HELPERS
        ============================================================ */
 
-    /** Keeps passive swiftness topped up every tick. */
     private void tickPassiveSpeed(ServerPlayerEntity player) {
-        // dodge passive if passive off
         if (!PassiveManager.isEnabled(player)) return;
 
         StatusEffectInstance speed = player.getStatusEffect(StatusEffects.SPEED);
@@ -273,10 +316,8 @@ public class SpeedPower implements Power { // SPEED
         }
     }
 
-    /** Triggers a short burst of extreme speed when the player's health drops below the threshold. */
-    private void tickLowHealthBurst(ServerPlayerEntity player) {
-        // do nothing if burst is still on cooldown
-        if (hasBurstCooldown(player)) return;
+    private void tickLowHealthBurst(ServerPlayerEntity player, SpeedState state) {
+        if (state.burstCdTicks > 0) return;
 
         if (player.getHealth() <= PASSIVE_LOW_HEALTH_THRESHOLD) {
             player.addStatusEffect(
@@ -284,14 +325,12 @@ public class SpeedPower implements Power { // SPEED
                             PASSIVE_BURST_AMPLIFIER, true, false)
             );
 
-            // start cooldown
-            setSingleTimerTag(player, BURST_CD_PREFIX, PASSIVE_BURST_COOLDOWN_TICKS);
+            state.burstCdTicks = PASSIVE_BURST_COOLDOWN_TICKS;
 
-            // Small cyan flash at the feet — adrenaline kicking in
             player.getServerWorld().spawnParticles(
-                    CYAN_BRIGHT,
+                    WHITE_BRIGHT,
                     player.getX(), player.getY() + 0.5, player.getZ(),
-                    12, 0.3, 0.4, 0.3, 0.06
+                    8, 0.3, 0.4, 0.3, 0.06
             );
             player.getServerWorld().spawnParticles(
                     ParticleTypes.SWEEP_ATTACK,
@@ -302,14 +341,7 @@ public class SpeedPower implements Power { // SPEED
         }
     }
 
-    /** Ticks down the low-health burst cooldown tag. */
-    private void tickBurstCooldown(ServerPlayerEntity player) {
-        tickSingleTimer(player, BURST_CD_PREFIX);
-    }
-
-    /** Tick effects active during the Rush ability — cloud trail and velocity maintenance. */
     private void tickRushEffects(ServerPlayerEntity player) {
-        // Maintain constant horizontal velocity so the player doesn't decelerate mid-rush
         Vec3d vel   = player.getVelocity();
         Vec3d horiz = new Vec3d(vel.x, 0, vel.z);
         if (horiz.length() < RUSH_VELOCITY_BONUS * 0.6) {
@@ -318,64 +350,48 @@ public class SpeedPower implements Power { // SPEED
             player.velocityModified = true;
         }
 
-        // Trail cloud
         player.getServerWorld().spawnParticles(
                 ParticleTypes.CLOUD,
                 player.getX(), player.getY() + 0.05, player.getZ(),
                 3, 0.15, 0.05, 0.15, 0.005
         );
-        // sound loop call
-        /* tickLoopSound(player, RUSH_LOOP_CD, RUSH_LOOP_INTERVAL_TICKS, ModSounds.RUSHLOOP, 0.55f, 1.0f); */
     }
 
-    /** All per-tick effects for the Overdrive ultimate. */
-    public static void tickOverdrive(ServerPlayerEntity player) {
+    public static void tickOverdrive(ServerPlayerEntity player, SpeedState state) {
+        forceForward(player, state);
+        breakBlocks(player, state);
 
-        // push forward
-        forceForward(player);
-        breakBlocks(player);
-
-        // effects
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.JUMP_BOOST, 20, OVERDRIVE_JUMP_AMPLIFIER, true, false));
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.HASTE, 20, OVERDRIVE_HASTE_AMPLIFIER, true, false));
 
-        // make water walk
-        if (player.getCommandTags().contains(OVERDRIVE_TAG) && player.isTouchingWater()) {
+        if (player.isTouchingWater()) {
             Vec3d vel = player.getVelocity();
-
-            // Hard clamp vertical movement so you don't sink
             if (vel.y < 0) {
-                player.setVelocity(vel.x, 0.08, vel.z); // slight upward bias
+                player.setVelocity(vel.x, 0.08, vel.z);
                 player.velocityModified = true;
             }
-
-            // force grounded
             player.setOnGround(true);
         }
 
-        // Entity collisions
         player.getServerWorld()
                 .getOtherEntities(player, player.getBoundingBox().expand(1.2),
                         e -> e instanceof LivingEntity)
                 .forEach(entity -> {
                     DamageSource overdriveSrc = ModDamageTypes.overdrive(player.getWorld(), player);
 
-                    // protects against multi-hit chicanary
                     if (entity.damage(overdriveSrc, (float) OVERDRIVE_ENTITY_DAMAGE)) {
 
-                        // EASTER EGG -------------------
+                        // EASTER EGG
                         if (!entity.isAlive() && entity instanceof ServerPlayerEntity) {
                             if (player.getRandom().nextInt(A_TRAIN_CHANCE) == 0) {
-                                // string in chat
                                 net.minecraft.text.Text message = net.minecraft.text.Text.literal(
                                         "<" + player.getName().getString() + "> I can't stop. I can't stop. I can't stop. I can't stop."
                                 );
                                 player.getServer().getPlayerManager().broadcast(message, false);
                             }
                         }
-                        // -----------------------------------------------
 
                         Vec3d dir = entity.getPos().subtract(player.getPos()).normalize();
                         entity.addVelocity(
@@ -385,7 +401,7 @@ public class SpeedPower implements Power { // SPEED
                         );
                         entity.velocityModified = true;
 
-                        applyCollisionSlow(player);
+                        applyCollisionSlow(player, state);
 
                         player.getServerWorld().spawnParticles(
                                 ParticleTypes.EXPLOSION_EMITTER,
@@ -411,26 +427,23 @@ public class SpeedPower implements Power { // SPEED
         double oy = player.getY() + 0.8;
         double oz = player.getZ();
 
-        // cyan particles
         player.getServerWorld().spawnParticles(
-                CYAN_BRIGHT, ox, oy, oz,
+                WHITE_BRIGHT, ox, oy, oz,
                 DASH_PARTICLE_COUNT, 0.3, 0.25, 0.3, 0.06
         );
 
-        // direction based on look vector
-        for (int i = 1; i <= 8; i++) {
-            double d   = i * 0.35;
-            double vel = 0.04 + i * 0.008;
+        for (int i = 1; i <= 4; i++) {
+            double d   = i * 0.70;
+            double vel = 0.04 + i * 0.016;
             player.getServerWorld().spawnParticles(
-                    (i % 2 == 0) ? CYAN_BRIGHT : WHITE_STREAK,
+                    (i % 2 == 0) ? WHITE_BRIGHT : WHITE_STREAK,
                     ox - look.x * d, oy - look.y * d * 0.5, oz - look.z * d,
                     1, -look.x * vel, 0.01, -look.z * vel, 0.0
             );
         }
 
-        // white
-        for (int i = 0; i < 10; i++) {
-            double angle = i * Math.PI * 2.0 / 10;
+        for (int i = 0; i < 6; i++) {
+            double angle = i * Math.PI * 2.0 / 6;
             player.getServerWorld().spawnParticles(
                     WHITE_STREAK,
                     ox + Math.cos(angle) * 0.4, oy, oz + Math.sin(angle) * 0.4,
@@ -438,7 +451,6 @@ public class SpeedPower implements Power { // SPEED
             );
         }
 
-        // Sweep arcs on the ground
         player.getServerWorld().spawnParticles(
                 ParticleTypes.SWEEP_ATTACK,
                 ox, player.getY() + 0.3, oz,
@@ -451,29 +463,26 @@ public class SpeedPower implements Power { // SPEED
         double oy = player.getY() + 1.0;
         double oz = player.getZ();
 
-        // Ground-level shockwave ring
-        int ringPoints = 20;
+        int ringPoints = 12;
         for (int i = 0; i < ringPoints; i++) {
             double angle = i * Math.PI * 2.0 / ringPoints;
             double speed = 0.22;
             player.getServerWorld().spawnParticles(
-                    CYAN_BRIGHT,
+                    WHITE_BRIGHT,
                     ox + Math.cos(angle) * 0.5, player.getY() + 0.1, oz + Math.sin(angle) * 0.5,
                     1, Math.cos(angle) * speed, 0.01, Math.sin(angle) * speed, 0.0
             );
         }
 
-        // blue
         player.getServerWorld().spawnParticles(
-                CYAN_BRIGHT, ox, oy, oz,
-                20, 0.5, 0.5, 0.5, 0.10
+                WHITE_BRIGHT, ox, oy, oz,
+                10, 0.5, 0.5, 0.5, 0.10
         );
         player.getServerWorld().spawnParticles(
-                CYAN_PALE, ox, oy, oz,
-                12, 0.6, 0.6, 0.6, 0.08
+                WHITE_PALE, ox, oy, oz,
+                6, 0.6, 0.6, 0.6, 0.08
         );
 
-        // explosions
         player.getServerWorld().spawnParticles(
                 ParticleTypes.EXPLOSION_EMITTER,
                 ox, oy, oz, 3, 0.6, 0.2, 0.6, 0.1
@@ -489,13 +498,12 @@ public class SpeedPower implements Power { // SPEED
         double oy = player.getY() + 1.0;
         double oz = player.getZ();
 
-        // fx in all directions
-        for (int d = 0; d < 24; d++) {
-            double theta = d * Math.PI * 2.0 / 24;
-            double phi   = Math.PI / 4;  // ~45-degree upward angle
+        for (int d = 0; d < 12; d++) {
+            double theta = d * Math.PI * 2.0 / 12;
+            double phi   = Math.PI / 4;
             double speed = 0.20;
             player.getServerWorld().spawnParticles(
-                    CYAN_BRIGHT, ox, oy, oz,
+                    WHITE_BRIGHT, ox, oy, oz,
                     1,
                     Math.cos(theta) * Math.cos(phi) * speed,
                     Math.sin(phi) * speed,
@@ -504,9 +512,8 @@ public class SpeedPower implements Power { // SPEED
             );
         }
 
-        // Outward ground ring
-        for (int i = 0; i < 16; i++) {
-            double angle = i * Math.PI * 2.0 / 16;
+        for (int i = 0; i < 10; i++) {
+            double angle = i * Math.PI * 2.0 / 10;
             player.getServerWorld().spawnParticles(
                     WHITE_STREAK,
                     ox + Math.cos(angle) * 0.4, player.getY() + 0.1, oz + Math.sin(angle) * 0.4,
@@ -516,7 +523,7 @@ public class SpeedPower implements Power { // SPEED
 
         player.getServerWorld().spawnParticles(
                 ParticleTypes.FIREWORK,
-                ox, oy, oz, 18, 0.5, 0.6, 0.5, 0.08
+                ox, oy, oz, 8, 0.5, 0.6, 0.5, 0.08
         );
         player.getServerWorld().spawnParticles(
                 ParticleTypes.FLASH,
@@ -535,47 +542,44 @@ public class SpeedPower implements Power { // SPEED
         double oy  = player.getY() + 0.8;
         double oz  = player.getZ();
 
-        // backwards kick
         Vec3d back = vel.normalize().negate();
-        for (int i = 0; i < 6; i++) {
-            double d       = 0.5 + i * 0.55;
-            double spread  = 0.10 + i * 0.04;
-            double speed   = 0.06 + i * 0.012;
+        for (int i = 0; i < 3; i++) {
+            double d       = 0.5 + i * 1.1;
+            double spread  = 0.10 + i * 0.08;
+            double speed   = 0.06 + i * 0.024;
             player.getServerWorld().spawnParticles(
-                    (i % 2 == 0) ? CYAN_BRIGHT : CYAN_PALE,
+                    (i % 2 == 0) ? WHITE_BRIGHT : WHITE_PALE,
                     ox + back.x * d, oy + back.y * d * 0.3, oz + back.z * d,
-                    2, back.x * speed + spread, 0.03, back.z * speed + spread, 0.0
+                    1, back.x * speed + spread, 0.03, back.z * speed + spread, 0.0
             );
         }
 
-        // Large cloud puffs
         player.getServerWorld().spawnParticles(
                 ParticleTypes.CLOUD,
                 ox + back.x * 1.5, player.getY() + 0.5, oz + back.z * 1.5,
-                8, 0.25, 0.20, 0.25, 0.04
+                3, 0.25, 0.20, 0.25, 0.04
         );
         player.getServerWorld().spawnParticles(
                 ParticleTypes.SMOKE,
                 ox + back.x * 1.0, player.getY() + 0.7, oz + back.z * 1.0,
-                5, 0.15, 0.15, 0.15, 0.03
+                2, 0.15, 0.15, 0.15, 0.03
         );
 
-        // extra stuff
         player.getServerWorld().spawnParticles(
                 ParticleTypes.END_ROD,
                 ox, oy, oz,
-                14, 0.3, 0.6, 0.3, 0.06
+                4, 0.3, 0.6, 0.3, 0.06
         );
         player.getServerWorld().spawnParticles(
                 ParticleTypes.FIREWORK,
                 ox, oy, oz,
-                5, 0.35, 0.55, 0.25, 0.05
+                2, 0.35, 0.55, 0.25, 0.05
         );
 
-        if ((int)(player.getWorld().getTime() % 3) == 0) {
+        if ((int)(player.getWorld().getTime() % 4) == 0) {
             Vec3d right = new Vec3d(-vel.z, 0, vel.x).normalize();
-            for (int i = 0; i < 8; i++) {
-                double angle = i * Math.PI * 2.0 / 8;
+            for (int i = 0; i < 4; i++) {
+                double angle = i * Math.PI * 2.0 / 4;
                 double rx    = right.x * Math.cos(angle) * 0.6;
                 double rz    = right.z * Math.cos(angle) * 0.6;
                 player.getServerWorld().spawnParticles(
@@ -591,8 +595,7 @@ public class SpeedPower implements Power { // SPEED
        OVERDRIVE BEHAVIOUR HELPERS
        ============================================================ */
 
-    private static void applyCollisionSlow(ServerPlayerEntity player) {
-        // Slows player
+    private static void applyCollisionSlow(ServerPlayerEntity player, SpeedState state) {
         Vec3d vel = player.getVelocity();
         player.setVelocity(
                 vel.x * OVERDRIVE_COLLISION_SLOW_X,
@@ -601,27 +604,22 @@ public class SpeedPower implements Power { // SPEED
         );
         player.velocityModified = true;
 
-        // Impact stun, number is tick duration of slow
-        player.getCommandTags().add(OVERDRIVE_SLOW_PREFIX + OVERDRIVE_SLOW_TICKS);
+        state.overdriveSlowTicks = OVERDRIVE_SLOW_TICKS;
 
-        // Temporary slowness
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 5, 2, true, false
         ));
 
-        // Sound
         player.getServerWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_PLAYER_SMALL_FALL,
                 player.getSoundCategory(), 0.8f, 0.7f
         );
 
-        // Camera shake
         CameraShake.shakeNearby(player, 5, 15, 0.35f);
     }
 
-    private static void applyCollisionSlowBlock(ServerPlayerEntity player) {
-        // Slows player
+    private static void applyCollisionSlowBlock(ServerPlayerEntity player, SpeedState state) {
         Vec3d vel = player.getVelocity();
         player.setVelocity(
                 vel.x * OVERDRIVE_COLLISION_SLOW_X,
@@ -630,36 +628,23 @@ public class SpeedPower implements Power { // SPEED
         );
         player.velocityModified = true;
 
-        // Impact stun, number is tick duration of slow
-        player.getCommandTags().add(OVERDRIVE_SLOW_PREFIX + OVERDRIVE_SLOW_TICKS);
+        state.overdriveSlowTicks = OVERDRIVE_SLOW_TICKS;
 
-        // Temporary slowness
         player.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 8, 2, true, false
         ));
 
-        // Sound
         player.getServerWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_ZOMBIE_BREAK_WOODEN_DOOR,
                 player.getSoundCategory(), 0.8f, 0.7f
         );
 
-        // Camera shake
         CameraShake.shakeNearby(player, 6, 17, 0.45f);
     }
 
-    private static void tickSlowLock(ServerPlayerEntity player) {
-        tickSingleTimer(player, OVERDRIVE_SLOW_PREFIX);
-    }
-
-    private static void tickBlockDamageCooldown(ServerPlayerEntity player) {
-        tickSingleTimer(player, BLOCK_DMG_CD_PREFIX);
-    }
-
-    private static void breakBlocks(ServerPlayerEntity player) {
-        // Stops tunneling by blocking method
-        if (isCollisionLocked(player)) return;
+    private static void breakBlocks(ServerPlayerEntity player, SpeedState state) {
+        if (state.overdriveSlowTicks > 0) return;
 
         var world   = player.getWorld();
         BlockPos base = player.getBlockPos();
@@ -669,51 +654,46 @@ public class SpeedPower implements Power { // SPEED
                 base.add(-1, 0, -1),
                 base.add(1, 2, 1)
         )) {
-            var state = world.getBlockState(pos);
-            if (state.isAir() || state.isIn(BlockTags.FIRE)) continue;
+            var blockState = world.getBlockState(pos);
+            if (blockState.isAir() || blockState.isIn(BlockTags.FIRE)) continue;
 
-            float hardness = state.getHardness(world, pos);
+            float hardness = blockState.getHardness(world, pos);
 
-            // Unbreakables
             if (hardness < 0) {
                 if (!impactedThisTick) {
-                    handleBlockImpact(player, 2.0f); // stronger shake for unbreakable
+                    handleBlockImpact(player, state, 2.0f);
                     impactedThisTick = true;
                 }
                 continue;
             }
 
-            // Weak blocks — destroy silently
-            if (state.isReplaceable()
-                    || state.isIn(BlockTags.LEAVES)
-                    || state.isIn(BlockTags.FLOWERS)
-                    || state.isIn(BlockTags.SMALL_FLOWERS)
-                    || state.isIn(BlockTags.TALL_FLOWERS)) {
+            if (blockState.isReplaceable()
+                    || blockState.isIn(BlockTags.LEAVES)
+                    || blockState.isIn(BlockTags.FLOWERS)
+                    || blockState.isIn(BlockTags.SMALL_FLOWERS)
+                    || blockState.isIn(BlockTags.TALL_FLOWERS)) {
                 world.breakBlock(pos, false);
                 continue;
             }
 
-            // Hard blocks that slow on impact
-            if (hardness <= OVERDRIVE_BLOCK_HARDNESS_MAX && !state.isReplaceable()) {
+            if (hardness <= OVERDRIVE_BLOCK_HARDNESS_MAX && !blockState.isReplaceable()) {
                 world.breakBlock(pos, true, player);
 
                 if (!impactedThisTick) {
-                    handleBlockImpact(player, 1.4f); // normal impact shake
+                    handleBlockImpact(player, state, 1.4f);
                     impactedThisTick = true;
                 }
             }
         }
     }
 
-    private static void handleBlockImpact(ServerPlayerEntity player, float shakeStrength) {
-        // Ensures this only occurs when collided
+    private static void handleBlockImpact(ServerPlayerEntity player, SpeedState state, float shakeStrength) {
         if (!player.horizontalCollision) return;
 
-        // Stops if collided recently
-        if (isCollisionLocked(player)) return;
+        if (state.overdriveSlowTicks > 0) return;
 
-        applyCollisionSlowBlock(player);
-        applyCollisionSelfDamage(player, OVERDRIVE_SELF_DAMAGE);
+        applyCollisionSlowBlock(player, state);
+        applyCollisionSelfDamage(player, state, OVERDRIVE_SELF_DAMAGE);
 
         CameraShake.shakeNearby(player, 12.0, 8, shakeStrength);
 
@@ -729,17 +709,15 @@ public class SpeedPower implements Power { // SPEED
         );
     }
 
-    private static void forceForward(ServerPlayerEntity player) {
+    private static void forceForward(ServerPlayerEntity player, SpeedState state) {
         Vec3d look   = player.getRotationVec(1.0F);
         Vec3d vel    = player.getVelocity();
         Vec3d horiz  = new Vec3d(vel.x, 0, vel.z);
 
         if (horiz.length() >= OVERDRIVE_MIN_SPEED) return;
 
-        // Scales push down if the player is in a collision-slow state
-        int    slowTicks  = getSlowTicks(player);
-        double slowFactor = (slowTicks > 0)
-                ? MathHelper.clamp(slowTicks / 15.0, 0.15, 1.0)
+        double slowFactor = (state.overdriveSlowTicks > 0)
+                ? MathHelper.clamp(state.overdriveSlowTicks / 15.0, 0.15, 1.0)
                 : 1.0;
 
         Vec3d push = new Vec3d(look.x, 0, look.z)
@@ -750,129 +728,18 @@ public class SpeedPower implements Power { // SPEED
         player.velocityModified = true;
     }
 
-    private static void applyCollisionSelfDamage(ServerPlayerEntity player, float amount) {
-        // Prevent taking damage every tick while inside the same wall
-        for (String tag : player.getCommandTags()) {
-            if (tag.startsWith(BLOCK_DMG_CD_PREFIX)) return;
-        }
+    private static void applyCollisionSelfDamage(ServerPlayerEntity player, SpeedState state, float amount) {
+        if (state.blockDmgCd > 0) return;
 
-        // Custom damage type applied for painting walls with your own lifeblood
         player.damage(ModDamageTypes.wallCollision(player.getWorld()), amount);
 
-        // Damage cooldown
-        player.getCommandTags().add(BLOCK_DMG_CD_PREFIX + "10");
+        state.blockDmgCd = 10;
 
         player.getServerWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_PLAYER_HURT,
                 player.getSoundCategory(), 0.8f, 1.0f
         );
-    }
-
-    /* ============================================================
-       GENERAL TAG/TIMER HELPERS
-       ============================================================ */
-
-    private static void tickCountdown(ServerPlayerEntity player,
-                                      String ticksPrefix,
-                                      String abilityTag,
-                                      String loopCdPrefix) {
-        for (String tag : player.getCommandTags()) {
-            if (!tag.startsWith(ticksPrefix)) continue;
-
-            int ticks = Integer.parseInt(tag.substring(ticksPrefix.length())) - 1;
-            player.getCommandTags().remove(tag);
-
-            if (ticks > 0) {
-                player.getCommandTags().add(ticksPrefix + ticks);
-            } else {
-                // Effect ends
-                player.getCommandTags().remove(abilityTag);
-                removeTagPrefix(player, loopCdPrefix);
-            }
-            break;
-        }
-    }
-
-    private static boolean hasBurstCooldown(ServerPlayerEntity player) {
-        for (String tag : player.getCommandTags()) {
-            if (tag.startsWith(BURST_CD_PREFIX)) return true;
-        }
-        return false;
-    }
-
-    private static boolean isCollisionLocked(ServerPlayerEntity player) {
-        for (String tag : player.getCommandTags()) {
-            if (tag.startsWith(OVERDRIVE_SLOW_PREFIX)) return true;
-        }
-        return false;
-    }
-
-    private static int getSlowTicks(ServerPlayerEntity player) {
-        for (String tag : player.getCommandTags()) {
-            if (tag.startsWith(OVERDRIVE_SLOW_PREFIX)) {
-                return Integer.parseInt(tag.substring(OVERDRIVE_SLOW_PREFIX.length()));
-            }
-        }
-        return 0;
-    }
-
-    private static void tickLoopSound(
-            ServerPlayerEntity player,
-            String cdPrefix,
-            int intervalTicks,
-            net.minecraft.sound.SoundEvent sound,
-            float volume,
-            float pitch
-    ) {
-        // Tick down cooldown
-        int left = tickSingleTimer(player, cdPrefix);
-
-        // If no tag existed treat as 0
-        if (left == -1) left = 0;
-
-        if (left <= 0) {
-            player.getServerWorld().playSound(
-                    null, player.getBlockPos(),
-                    sound, player.getSoundCategory(),
-                    volume, pitch
-            );
-            setSingleTimerTag(player, cdPrefix, intervalTicks);
-        }
-    }
-
-    private static void removeTagPrefix(ServerPlayerEntity p, String prefix) {
-        var it = p.getCommandTags().iterator();
-        while (it.hasNext()) {
-            if (it.next().startsWith(prefix)) { it.remove(); return; }
-        }
-    }
-
-    private static void setSingleTimerTag(ServerPlayerEntity p, String prefix, int ticks) {
-        removeTagPrefix(p, prefix);
-        p.getCommandTags().add(prefix + ticks);
-    }
-
-    /** Decrements a single-timer tag; returns remaining ticks, or -1 if no tag was found. */
-    private static int tickSingleTimer(ServerPlayerEntity p, String prefix) {
-        var it = p.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (!tag.startsWith(prefix)) continue;
-
-            int ticks;
-            try {
-                ticks = Integer.parseInt(tag.substring(prefix.length())) - 1;
-            } catch (NumberFormatException e) {
-                it.remove();
-                return -1;
-            }
-
-            it.remove();
-            if (ticks > 0) p.getCommandTags().add(prefix + ticks);
-            return ticks;
-        }
-        return -1;
     }
 
     /* ============================================================
@@ -894,7 +761,7 @@ public class SpeedPower implements Power { // SPEED
     public String getPrimaryName() { return "Dash"; }
 
     @Override
-    public long getPrimaryCooldownMs() { return 5_000; } // 5 seconds
+    public long getPrimaryCooldownMs() { return 6_000; }
 
     @Override
     public String getPrimaryDescription() {
@@ -906,7 +773,7 @@ public class SpeedPower implements Power { // SPEED
     public String getSecondaryName() { return "Rush"; }
 
     @Override
-    public long getSecondaryCooldownMs() { return 5_000; } // 18 seconds
+    public long getSecondaryCooldownMs() { return 18_000; }
 
     @Override
     public String getSecondaryDescription() {
@@ -915,10 +782,10 @@ public class SpeedPower implements Power { // SPEED
     }
 
     @Override
-    public String getUltimateName() { return "Overdrive"; }
+    public String getUltimateName() { return "Overclock"; }
 
     @Override
-    public long getUltimateCooldownMs() { return 10_000; } // 120 seconds
+    public long getUltimateCooldownMs() { return 400_000; }
 
     @Override
     public String getUltimateDescription() {

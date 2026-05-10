@@ -8,6 +8,7 @@ import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.RenderPackets;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -16,6 +17,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
@@ -23,28 +25,33 @@ import java.util.List;
 import java.util.UUID;
 import java.util.Map;
 import java.util.HashMap;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.block.BlockState;
 
 public class SoundPower implements Power {
 
     /* ============================================================
-       TAGS / CONSTANTS
+       STATE STORAGE (OPTIMIZED)
        ============================================================ */
 
-    private static final String RES_POINTS     = "sd_res_points_";
-    private static final String RES_TRAIL_STEP = "sd_res_trail_step_";
-    private static final String RES_SCAN_STEP  = "sd_res_scan_step_";
-    private static final String RESONATED      = "sd_resonated_";
-    private static final String DAMPENED       = "sd_dampened_";
-    private static final String HB_CASTER_STEP = "sd_hb_caster_step_";
-    private static final String HB_TARGET_STEP = "sd_hb_target_step_";
-    private static final String ULT_WINDUP     = "sd_ult_windup_";
+    private static final Map<UUID, SoundCasterState> CASTER_STATES = new HashMap<>();
+    private static final Map<UUID, SoundVictimState> VICTIM_STATES = new HashMap<>();
 
-    // server-only passive state
-    private static final Map<UUID, Integer> RES_SCORE = new HashMap<>();
-    private static final Map<UUID, BassDropState> BD_STATES = new HashMap<>();
-    private static final Map<UUID, UltState> ULT_STATES = new HashMap<>();
+    private static class SoundCasterState {
+        int trailStep = 0;
+        int scanStep = 0;
+        int hbStep = 0;
+        int ultWindup = 0;
+        boolean ultPendingFire = false;
+        BassDropState bdState = null;
+    }
+
+    private static class SoundVictimState {
+        int score = 0;
+        int resonatedTicks = 0;
+        int dampenedTicks = 0;
+        int hbStep = 0;
+        long lastSeenTick = 0;
+        long lastTickTime = 0;
+    }
 
     private static final class BassDropState {
         int nextPulse;
@@ -56,27 +63,29 @@ public class SoundPower implements Power {
         int blastVizStep = -1;
     }
 
-    private static final class UltState {}
+    private static SoundCasterState getCasterState(ServerPlayerEntity player) {
+        return CASTER_STATES.computeIfAbsent(player.getUuid(), k -> new SoundCasterState());
+    }
 
-    // ── Passive tuning ────────────────────────────────────────────────────────
+    private static SoundVictimState getVictimState(LivingEntity victim) {
+        return VICTIM_STATES.computeIfAbsent(victim.getUuid(), k -> new SoundVictimState());
+    }
 
-    // how far we check for stuff
+    /* ============================================================
+       CONSTANTS & TUNING
+       ============================================================ */
+
+    // Passive
     private static final double RES_RADIUS         = 14.0;
-    // how fast we scan
     private static final int    RES_SCAN_INTERVAL  = 4;
     private static final int    RES_TRAIL_INTERVAL = 2;
-    // instant find if they get this close
     private static final double RES_INSTANT_RADIUS = 3.0;
-    // how long the glow lasts
     private static final int    RESONATED_TICKS    = 80;
-    // points needed to pop
     private static final int    RES_THRESHOLD      = 15;
-    // points lost if they sit still
     private static final int    RES_DECAY_PER_SCAN = 1;
-    // max trails to show at once
     private static final int    MAX_TRAIL_TARGETS  = 14;
+    private static final float    BURST_BONUS_DAMAGE  = 9.5f;
 
-    // points for doing stuff
     private static final int PTS_SLOW_MOVE = 1;
     private static final int PTS_FAST_MOVE = 2;
     private static final int PTS_SPRINT    = 3;
@@ -85,32 +94,21 @@ public class SoundPower implements Power {
     private static final int PTS_HURT      = 2;
     private static final int PTS_WATER     = 1;
 
-    // ── Primary tuning ────────────────────────────────────────────────────────
-
-    // where the bolt spawns from your face
+    // Primary
     private static final double BOLT_SPAWN_OFFSET  = 0.6;
-    // how fast it goes
     private static final double BOLT_SPEED         = 1.7;
 
-    // ── Secondary tuning ─────────────────────────────────────────────────────
-
-    // number of booms
+    // Secondary
     private static final int    BD_PULSE_COUNT       = 6;
-    // time between pulses
-    private static final int    BD_PULSE_GAP_TICKS   = 3;
+    private static final int    BD_PULSE_GAP_TICKS   = 4;
     private static final int    BD_FINAL_DELAY_TICKS = 2;
-    // area it pulls from
     private static final double BD_PULL_RADIUS       = 10.0;
-    // area it blows up
     private static final double BD_FINAL_RADIUS      = 7.0;
-    // how hard it pulls
-    private static final float  BD_PULL_STRENGTH     = 0.22f;
+    private static final float  BD_PULL_STRENGTH     = 0.24f;
     private static final float  BD_PULL_UP           = 0.02f;
-    // final burst push
     private static final float  BD_FINAL_KB          = 1.00f;
     private static final float  BD_FINAL_UP          = 0.30f;
-    private static final float  BD_FINAL_DAMAGE      = 7.0f;
-    // how long they get stunned for
+    private static final float  BD_FINAL_DAMAGE      = 15.5f;
     private static final int    BD_FINAL_STUN_TICKS  = 40;
     private static final int    BD_REMOTE_STUN_TICKS = 30;
 
@@ -119,25 +117,17 @@ public class SoundPower implements Power {
     private static final int PULL_POINTS     = 90;
     private static final int BLAST_POINTS    = 120;
 
-    // ── Ultimate tuning ───────────────────────────────────────────────────────
-
-    // time before it fires
+    // Ultimate
     private static final int    ULT_WINDUP_TICKS      = 22;
-    // how far the beam goes
     private static final double ULT_RANGE             = 50.0;
-    // thickness of the beam
     private static final double ULT_BEAM_RADIUS       = 1.35;
-    private static final float  ULT_DAMAGE            = 17.0f;
-    // knockback
+    private static final float  ULT_DAMAGE            = 20.5f;
     private static final float  ULT_KB                = 2.5f;
     private static final float  ULT_UP                = 1.2f;
     private static final int    ULT_TEAR_STEPS        = 36;
-    // chance to break a block
     private static final float  ULT_TEAR_CHANCE       = 0.45f;
-    // chance to actually drop the block items
     private static final float  ULT_DROP_CHANCE       = 0.15f;
     private static final double ULT_PARTICLE_STEP     = 0.55;
-    // max blocks it can rip up
     private static final int    ULT_MAX_BLOCKS_BROKEN = 150;
     private static final int    ULT_SURFACE_SEARCH    = 4;
 
@@ -146,24 +136,66 @@ public class SoundPower implements Power {
        ============================================================ */
 
     @Override
-    public void onAssign(ServerPlayerEntity player) {}
+    public void onAssign(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("sd_")); // Clean legacy
+        CASTER_STATES.put(player.getUuid(), new SoundCasterState());
+    }
 
     @Override
-    public void onRemove(ServerPlayerEntity player) {}
+    public void onRemove(ServerPlayerEntity player) {
+        player.getCommandTags().removeIf(tag -> tag.startsWith("sd_"));
+        CASTER_STATES.remove(player.getUuid());
+
+        player.removeStatusEffect(StatusEffects.SLOWNESS);
+
+        if (player.getServer() != null) {
+            for (ServerWorld w : player.getServer().getWorlds()) {
+                // Remove mid-air Sonic Bolts owned by this player
+                w.getEntitiesByClass(SonicBoltEntity.class, player.getBoundingBox().expand(150), e -> player.equals(e.getOwner())).forEach(Entity::discard);
+
+                // Strip GLOWING and STUN from entities that the player resonated
+                for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
+                    SoundVictimState state = VICTIM_STATES.get(e.getUuid());
+                    if (state != null && state.resonatedTicks > 0) {
+                        state.resonatedTicks = 0;
+                        e.removeStatusEffect(StatusEffects.GLOWING);
+                        e.removeStatusEffect(ModEffects.STUN);
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onDeath(ServerPlayerEntity player) {
+        onRemove(player);
+    }
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        tickSingleTimer(player, RES_TRAIL_STEP);
-        tickSingleTimer(player, RES_SCAN_STEP);
-        tickSingleTimer(player, RES_POINTS);
-        tickSingleTimer(player, HB_CASTER_STEP);
+        SoundCasterState caster = getCasterState(player);
+
+        if (caster.trailStep > 0) caster.trailStep--;
+        if (caster.scanStep > 0) caster.scanStep--;
+        if (caster.hbStep > 0) caster.hbStep--;
 
         if (PassiveManager.isEnabled(player)) {
-            tickResonancePassive(player);
+            tickResonancePassive(player, caster);
         }
 
-        tickBassDrop(player);
-        tickUltimate(player);
+        if (caster.bdState != null) {
+            tickBassDrop(player, caster);
+        }
+
+        if (caster.ultWindup > 0) {
+            tickUltimate(player, caster);
+        }
+
+        // Clean up global victims map occasionally to prevent memory leaks
+        if (player.age % 100 == 0) {
+            long now = player.getServerWorld().getTime();
+            VICTIM_STATES.values().removeIf(v -> (now - v.lastSeenTick) > 100 && v.score <= 0 && v.resonatedTicks <= 0);
+        }
     }
 
     @Override
@@ -172,21 +204,27 @@ public class SoundPower implements Power {
     public static void applyAbilityHit(ServerPlayerEntity caster, LivingEntity target, float baseDamage, boolean allowBurst) {
         target.damage(ModDamageTypes.sound(target.getWorld(), caster), baseDamage);
 
-        if (!allowBurst || !hasTagPrefix(target, RESONATED)) return;
+        if (!allowBurst) return;
 
-        removeTagPrefix(target, RESONATED);
+        SoundVictimState vState = VICTIM_STATES.get(target.getUuid());
+        if (vState == null || vState.resonatedTicks <= 0) return;
+
+        vState.resonatedTicks = 0;
         target.removeStatusEffect(StatusEffects.GLOWING);
 
-        float burstDamageBonus = 4.0f;
-        target.damage(ModDamageTypes.sound(target.getWorld(), caster), burstDamageBonus);
+        target.damage(ModDamageTypes.sound(target.getWorld(), caster), BURST_BONUS_DAMAGE);
 
         // resets velocity before stunning so they stop moving
         target.setVelocity(0, Math.min(target.getVelocity().y, 0.0), 0);
         target.velocityModified = true;
 
-        // Apply STUN Effect
+        // Apply stun
         target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, 35, 0, false, false, true));
-        setSingleTimerTag(target, DAMPENED, 45);
+        vState.dampenedTicks = 45;
+
+        if (target instanceof ServerPlayerEntity targetPlayer) {
+            CameraShake.shakeNearby(targetPlayer, 3, 15, 0.08f);
+        }
 
         ServerWorld sw = (ServerWorld) target.getWorld();
         sw.spawnParticles(ParticleTypes.SONIC_BOOM, target.getX(), target.getY() + target.getHeight() * 0.6, target.getZ(), 1, 0, 0, 0, 0);
@@ -198,19 +236,15 @@ public class SoundPower implements Power {
        PASSIVE
        ============================================================ */
 
-    private void tickResonancePassive(ServerPlayerEntity player) {
-        if (!PassiveManager.isEnabled(player)) return;
-
+    private void tickResonancePassive(ServerPlayerEntity player, SoundCasterState caster) {
         ServerWorld w = player.getServerWorld();
+        long nowTick = w.getTime();
 
         Box box = new Box(player.getPos(), player.getPos()).expand(RES_RADIUS, 6.0, RES_RADIUS);
-        List<LivingEntity> nearby = w.getEntitiesByClass(LivingEntity.class, box,
-                e -> e.isAlive() && e != player);
+        List<LivingEntity> nearby = w.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != player);
 
-        int trailLeft = tickSingleTimer(player, RES_TRAIL_STEP);
-        if (trailLeft <= 0) {
-            setSingleTimerTag(player, RES_TRAIL_STEP, RES_TRAIL_INTERVAL);
-
+        if (caster.trailStep <= 0) {
+            caster.trailStep = RES_TRAIL_INTERVAL;
             int sent = 0;
             for (LivingEntity e : nearby) {
                 if (sent >= MAX_TRAIL_TARGETS) break;
@@ -219,46 +253,40 @@ public class SoundPower implements Power {
             }
         }
 
-        int scanLeft = tickSingleTimer(player, RES_SCAN_STEP);
-        if (scanLeft > 0) return;
-        setSingleTimerTag(player, RES_SCAN_STEP, RES_SCAN_INTERVAL);
-
-        Map<UUID, Boolean> seen = new HashMap<>();
+        if (caster.scanStep > 0) return;
+        caster.scanStep = RES_SCAN_INTERVAL;
 
         for (LivingEntity e : nearby) {
-            UUID id = e.getUuid();
-            seen.put(id, true);
+            SoundVictimState vState = getVictimState(e);
+            vState.lastSeenTick = nowTick;
 
-            tickSingleTimer(e, RESONATED);
-            tickSingleTimer(e, DAMPENED);
-            tickSingleTimer(e, HB_TARGET_STEP);
+            // Decouple ticking from the 4-tick scan loop to ensure accurate countdowns
+            if (vState.lastTickTime != nowTick) {
+                long delta = nowTick - vState.lastTickTime;
+                if (delta > 20) delta = 20; // prevent massive jumps
+                vState.lastTickTime = nowTick;
 
-            int cur = RES_SCORE.getOrDefault(id, 0);
-            cur = Math.max(0, cur - RES_DECAY_PER_SCAN);
-
-            cur += computeConspicuousPoints(e);
-            RES_SCORE.put(id, cur);
-
-            if (player.squaredDistanceTo(e) <= (RES_INSTANT_RADIUS * RES_INSTANT_RADIUS)) {
-                cur = RES_THRESHOLD;
+                if (vState.resonatedTicks > 0) vState.resonatedTicks -= delta;
+                if (vState.dampenedTicks > 0) vState.dampenedTicks -= delta;
+                if (vState.hbStep > 0) vState.hbStep -= delta;
             }
 
-            RES_SCORE.put(id, cur);
+            vState.score = Math.max(0, vState.score - RES_DECAY_PER_SCAN);
+            vState.score += computeConspicuousPoints(e);
 
-            if (cur < RES_THRESHOLD) {
-                float frac = cur / (float) RES_THRESHOLD;
-                boolean alreadyResonated = hasTagPrefix(e, RESONATED);
+            if (player.squaredDistanceTo(e) <= (RES_INSTANT_RADIUS * RES_INSTANT_RADIUS)) {
+                vState.score = RES_THRESHOLD;
+            }
 
-                if (!alreadyResonated && frac >= 0.70f) {
-                    int casterHb = tickSingleTimer(player, HB_CASTER_STEP);
-                    int targetHb = tickSingleTimer(e, HB_TARGET_STEP);
-
-                    if (casterHb <= 0 && targetHb <= 0) {
+            if (vState.score < RES_THRESHOLD) {
+                float frac = vState.score / (float) RES_THRESHOLD;
+                if (vState.resonatedTicks <= 0 && frac >= 0.70f) {
+                    if (caster.hbStep <= 0 && vState.hbStep <= 0) {
                         float t = MathHelper.clamp((frac - 0.70f) / 0.30f, 0.0f, 1.0f);
                         int interval = (int) MathHelper.lerp(16.0f, 5.0f, t);
 
-                        setSingleTimerTag(player, HB_CASTER_STEP, Math.max(3, interval - 2));
-                        setSingleTimerTag(e, HB_TARGET_STEP, interval);
+                        caster.hbStep = Math.max(3, interval - 2);
+                        vState.hbStep = interval;
 
                         float vol = 0.25f + 0.35f * t;
                         float pitch = 0.85f + 0.25f * t;
@@ -279,10 +307,10 @@ public class SoundPower implements Power {
                 }
             }
 
-            if (cur >= RES_THRESHOLD) {
-                boolean already = hasTagPrefix(e, RESONATED);
+            if (vState.score >= RES_THRESHOLD) {
+                boolean already = vState.resonatedTicks > 0;
 
-                setSingleTimerTag(e, RESONATED, RESONATED_TICKS);
+                vState.resonatedTicks = RESONATED_TICKS;
                 e.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, RESONATED_TICKS + 60, 0, true, true));
 
                 if (!already) {
@@ -301,12 +329,6 @@ public class SoundPower implements Power {
                     }
                 }
             }
-        }
-
-        var it = RES_SCORE.keySet().iterator();
-        while (it.hasNext()) {
-            UUID id = it.next();
-            if (!seen.containsKey(id)) it.remove();
         }
     }
 
@@ -352,23 +374,21 @@ public class SoundPower implements Power {
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
-        UUID casterId = player.getUuid();
+        SoundCasterState caster = getCasterState(player);
 
         BassDropState s = new BassDropState();
         s.nextPulse = BD_PULSE_COUNT;
         s.nextPulseIn = 0;
         s.finalPending = false;
 
-        BD_STATES.put(casterId, s);
+        caster.bdState = s;
 
         w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_SCULK_CATALYST_BLOOM, player.getSoundCategory(), 0.7f, 1.4f);
         w.spawnParticles(ParticleTypes.SONIC_BOOM, player.getX(), player.getY() + 1.0, player.getZ(), 1, 0, 0, 0, 0);
     }
 
-    private static void tickBassDrop(ServerPlayerEntity caster) {
-        BassDropState s = BD_STATES.get(caster.getUuid());
-        if (s == null) return;
-
+    private static void tickBassDrop(ServerPlayerEntity caster, SoundCasterState state) {
+        BassDropState s = state.bdState;
         ServerWorld w = caster.getServerWorld();
 
         animateBassSpheres(w, caster, s);
@@ -377,7 +397,7 @@ public class SoundPower implements Power {
             s.nextPulseIn--;
 
             if (s.nextPulseIn <= 0 && s.nextPulse > 0) {
-                doBassPullPulse(w, caster);
+                doBassPullPulse(w, caster, s);
                 s.nextPulse--;
                 s.nextPulseIn = BD_PULSE_GAP_TICKS;
 
@@ -392,11 +412,11 @@ public class SoundPower implements Power {
         s.finalIn--;
         if (s.finalIn > 0) return;
 
-        doBassFinalBurst(w, caster, s.scanned);
-        BD_STATES.remove(caster.getUuid());
+        doBassFinalBurst(w, caster, state, s.scanned);
+        state.bdState = null;
     }
 
-    private static void doBassFinalBurst(ServerWorld w, ServerPlayerEntity caster, java.util.Set<UUID> scanned) {
+    private static void doBassFinalBurst(ServerWorld w, ServerPlayerEntity caster, SoundCasterState state, java.util.Set<UUID> scanned) {
         Vec3d cPos = caster.getPos();
 
         Box box = new Box(cPos, cPos).expand(BD_FINAL_RADIUS, 6.0, BD_FINAL_RADIUS);
@@ -409,8 +429,7 @@ public class SoundPower implements Power {
         spawnExpandingSphere(w, cPos, 1.0, BD_FINAL_RADIUS, 10, 150, ParticleTypes.SCULK_CHARGE_POP);
         spawnSphereShell(w, cPos, BD_FINAL_RADIUS * 0.85, 18, ParticleTypes.SCULK_SOUL, 0.9);
 
-        BassDropState s = BD_STATES.get(caster.getUuid());
-        if (s != null) s.blastVizStep = 0;
+        if (state.bdState != null) state.bdState.blastVizStep = 0;
 
         for (LivingEntity t : nearby) {
             applyBassBurstHit(caster, t, BD_FINAL_DAMAGE, BD_FINAL_KB, BD_FINAL_UP, BD_FINAL_STUN_TICKS);
@@ -435,9 +454,10 @@ public class SoundPower implements Power {
             }
             applyBassBurstHit(caster, t, 0.0f, BD_FINAL_KB, BD_FINAL_UP, BD_REMOTE_STUN_TICKS);
         }
+        CameraShake.shakeNearby(caster, 5,15, 0.04f);
     }
 
-    private static void doBassPullPulse(ServerWorld w, ServerPlayerEntity caster) {
+    private static void doBassPullPulse(ServerWorld w, ServerPlayerEntity caster, BassDropState s) {
         Vec3d cPos = caster.getPos();
 
         Box box = new Box(cPos, cPos).expand(BD_PULL_RADIUS, 6.0, BD_PULL_RADIUS);
@@ -448,8 +468,7 @@ public class SoundPower implements Power {
         spawnContractingSphere(w, cPos, BD_PULL_RADIUS, 5.2, 10, 120, ParticleTypes.SCULK_CHARGE_POP);
         spawnSphereShell(w, cPos, BD_PULL_RADIUS * 0.65, 12, ParticleTypes.SCULK_SOUL, 0.9);
 
-        BassDropState s = BD_STATES.get(caster.getUuid());
-        if (s != null) s.pullVizStep = 0;
+        s.pullVizStep = 0;
 
         for (LivingEntity t : targets) {
             Vec3d toCaster = cPos.subtract(t.getPos());
@@ -461,6 +480,7 @@ public class SoundPower implements Power {
             t.velocityModified = true;
 
             w.spawnParticles(ParticleTypes.SCULK_CHARGE_POP, t.getX(), t.getY() + t.getHeight() * 0.55, t.getZ(), 2, 0.12, 0.10, 0.12, 0.01);
+            s.scanned.add(t.getUuid());
         }
     }
 
@@ -476,12 +496,13 @@ public class SoundPower implements Power {
         target.addVelocity(dir.x * kb, up, dir.z * kb);
         target.velocityModified = true;
 
-        // Apply STUN Effect
-        if (hasTagPrefix(target, RESONATED)) {
-            removeTagPrefix(target, RESONATED);
+        // Apply STUN Effect if resonated
+        SoundVictimState vState = VICTIM_STATES.get(target.getUuid());
+        if (vState != null && vState.resonatedTicks > 0) {
+            vState.resonatedTicks = 0;
             target.removeStatusEffect(StatusEffects.GLOWING);
             target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, stunTicks, 0, false, false, true));
-            setSingleTimerTag(target, DAMPENED, Math.max(20, stunTicks));
+            vState.dampenedTicks = Math.max(20, stunTicks);
 
             if (target instanceof ServerPlayerEntity spTarget) {
                 spTarget.playSound(ModSounds.EARRING, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);
@@ -585,17 +606,19 @@ public class SoundPower implements Power {
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
-        ULT_STATES.put(player.getUuid(), new UltState());
-        setSingleTimerTag(player, ULT_WINDUP, ULT_WINDUP_TICKS);
+        SoundCasterState caster = getCasterState(player);
+
+        caster.ultWindup = ULT_WINDUP_TICKS;
+        caster.ultPendingFire = true;
 
         w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_WARDEN_SONIC_CHARGE, player.getSoundCategory(), 1.0f, 1.0f);
         w.spawnParticles(ParticleTypes.SONIC_BOOM, player.getX(), player.getY() + 1.0, player.getZ(), 1, 0, 0, 0, 0);
         CameraShake.shake(player, 8, 0.9f);
     }
 
-    private static void tickUltimate(ServerPlayerEntity player) {
-        int left = tickSingleTimer(player, ULT_WINDUP);
-        if (left < 0) return;
+    private static void tickUltimate(ServerPlayerEntity player, SoundCasterState state) {
+        if (state.ultWindup <= 0) return;
+        state.ultWindup--;
 
         Vec3d v = player.getVelocity();
         player.setVelocity(0.0, Math.min(v.y, 0.0), 0.0);
@@ -606,15 +629,15 @@ public class SoundPower implements Power {
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 8, 10, true, false));
 
         if (player.getWorld() instanceof ServerWorld w) {
-            if (left % 4 == 0) {
+            if (state.ultWindup % 4 == 0) {
                 w.spawnParticles(ParticleTypes.SCULK_CHARGE_POP, player.getX(), player.getY() + 1.0, player.getZ(), 6, 0.25, 0.35, 0.25, 0.01);
             }
         }
 
-        if (left > 0) return;
+        if (state.ultWindup > 0) return;
 
-        UltState stored = ULT_STATES.remove(player.getUuid());
-        if (stored == null) return;
+        if (!state.ultPendingFire) return;
+        state.ultPendingFire = false;
 
         fireUltimateBeam(player);
     }
@@ -637,7 +660,8 @@ public class SoundPower implements Power {
         for (LivingEntity target : hits) {
             if (!segmentIntersectsExpandedAabb(start, end, target.getBoundingBox().expand(ULT_BEAM_RADIUS))) continue;
 
-            if (hasTagPrefix(target, RESONATED)) {
+            SoundVictimState vState = VICTIM_STATES.get(target.getUuid());
+            if (vState != null && vState.resonatedTicks > 0) {
                 applyAbilityHit(caster, target, 0.0f, true);
             }
 
@@ -699,7 +723,7 @@ public class SoundPower implements Power {
             if (collides && boomCooldown <= 0) {
                 if (lastBoom == null || lastBoom.getManhattanDistance(beamPos) >= 2) {
                     w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, beamPos.getX() + 0.5, beamPos.getY() + 0.5, beamPos.getZ() + 0.5, 1, 0, 0, 0, 0);
-                    w.playSound(null, beamPos, SoundEvents.ENTITY_GENERIC_EXPLODE, casterSoundCategoryFallback(w), 0.9f, 1.2f);
+                    w.playSound(null, beamPos, SoundEvents.ENTITY_GENERIC_EXPLODE, net.minecraft.sound.SoundCategory.PLAYERS, 0.9f, 1.2f);
                     broken += breakBlastCapped(w, beamPos, 2, (ULT_MAX_BLOCKS_BROKEN - broken));
                     lastBoom = beamPos;
                     boomCooldown = 3;
@@ -751,9 +775,9 @@ public class SoundPower implements Power {
     @Override public String getSecondaryName() { return "Bass Drop"; }
     @Override public String getUltimateName()  { return "Sonic Shriek"; }
 
-    @Override public long getPrimaryCooldownMs()   { return 2_000; }
-    @Override public long getSecondaryCooldownMs() { return 5_000; }
-    @Override public long getUltimateCooldownMs()  { return 12_000; }
+    @Override public long getPrimaryCooldownMs()   { return 7_000; }
+    @Override public long getSecondaryCooldownMs() { return 26_000; }
+    @Override public long getUltimateCooldownMs()  { return 290_000; }
 
     @Override
     public String getOverviewDescription() {
@@ -790,10 +814,6 @@ public class SoundPower implements Power {
     /* ============================================================
        HELPERS
        ============================================================ */
-
-    private static net.minecraft.sound.SoundCategory casterSoundCategoryFallback(ServerWorld w) {
-        return net.minecraft.sound.SoundCategory.PLAYERS;
-    }
 
     private static int breakBlastCapped(ServerWorld w, BlockPos center, int radius, int budgetLeft) {
         if (budgetLeft <= 0) return 0;
@@ -842,82 +862,5 @@ public class SoundPower implements Power {
             p = p.add(step);
         }
         return false;
-    }
-
-    private static boolean hasTagPrefix(Entity e, String prefix) {
-        for (String tag : e.getCommandTags()) if (tag.startsWith(prefix)) return true;
-        return false;
-    }
-
-    private static void removeTagPrefix(ServerPlayerEntity p, String prefix) {
-        var it = p.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) {
-                it.remove();
-                return;
-            }
-        }
-    }
-
-    private static void removeTagPrefix(Entity e, String prefix) {
-        var it = e.getCommandTags().iterator();
-        while (it.hasNext()) {
-            String tag = it.next();
-            if (tag.startsWith(prefix)) {
-                it.remove();
-                return;
-            }
-        }
-    }
-
-    private static void setSingleTimerTag(ServerPlayerEntity p, String prefix, int ticks) {
-        removeTagPrefix(p, prefix);
-        p.getCommandTags().add(prefix + ticks);
-    }
-
-    private static void setSingleTimerTag(Entity e, String prefix, int ticks) {
-        removeTagPrefix(e, prefix);
-        e.getCommandTags().add(prefix + ticks);
-    }
-
-    private static int tickSingleTimer(ServerPlayerEntity p, String prefix) {
-        String found = null;
-        for (String tag : p.getCommandTags()) {
-            if (tag.startsWith(prefix)) { found = tag; break; }
-        }
-        if (found == null) return -1;
-
-        p.getCommandTags().remove(found);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(found.substring(prefix.length())) - 1;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-
-        if (ticks > 0) p.getCommandTags().add(prefix + ticks);
-        return ticks;
-    }
-
-    private static int tickSingleTimer(Entity e, String prefix) {
-        String found = null;
-        for (String tag : e.getCommandTags()) {
-            if (tag.startsWith(prefix)) { found = tag; break; }
-        }
-        if (found == null) return -1;
-
-        e.getCommandTags().remove(found);
-
-        int ticks;
-        try {
-            ticks = Integer.parseInt(found.substring(prefix.length())) - 1;
-        } catch (NumberFormatException ex) {
-            return -1;
-        }
-
-        if (ticks > 0) e.getCommandTags().add(prefix + ticks);
-        return ticks;
     }
 }

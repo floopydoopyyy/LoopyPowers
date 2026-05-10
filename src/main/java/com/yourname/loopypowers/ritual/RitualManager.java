@@ -1,7 +1,8 @@
 package com.yourname.loopypowers.ritual;
 
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.server.world.ServerWorld;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -48,16 +49,26 @@ public class RitualManager {
         return ACTIVE.containsKey(player.getUuid());
     }
 
-    public static void tick(ServerWorld world) {
+    // once per server
+    public static void tick(MinecraftServer server) {
         Iterator<Map.Entry<UUID, Ritual>> it = ACTIVE.entrySet().iterator();
 
         while (it.hasNext()) {
             Map.Entry<UUID, Ritual> entry = it.next();
+            UUID playerId = entry.getKey();
             Ritual ritual = entry.getValue();
 
-            boolean done = ritual.tick(world);
+            // Find the exact player on the server
+            ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerId);
 
-            if (done) {
+            if (player != null) {
+                // Tick the ritual exactly once, using the player's current dimension
+                boolean done = ritual.tick(player.getServerWorld());
+                if (done) {
+                    it.remove();
+                }
+            } else {
+                // player gone, cancel and remove the ritual
                 it.remove();
             }
         }
