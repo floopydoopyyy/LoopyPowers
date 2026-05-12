@@ -3,13 +3,13 @@
 	"id": "loopypowers",
 	"version": "${version}",
 	"name": "loopypowers",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "This mod adds survival based super powers to the game.",
 	"authors": [
-		"Me!"
+		"loopy"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/floopydoopyyy/LoopyPowers",
+		"sources": "https://github.com/floopydoopyyy/LoopyPowers"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/loopypowers/icon.png",
@@ -24,7 +24,7 @@
 	},
 	"depends": {
 		"fabricloader": ">=0.18.4",
-		"minecraft": "~1.20.1",
+		"minecraft": "~1.20.4",
 		"java": ">=17",
 		"fabric-api": "*"
 	},

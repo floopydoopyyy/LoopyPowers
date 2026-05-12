@@ -4,12 +4,10 @@ import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.RenderPackets;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.AttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectCategory;
-import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -51,11 +49,11 @@ public class StunEffect extends StatusEffect {
     }
 
     @Override
-    public void onApplied(LivingEntity entity, AttributeContainer attributes, int amplifier) {
-        super.onApplied(entity, attributes, amplifier);
+    public void onApplied(LivingEntity entity, int amplifier) {
+        super.onApplied(entity, amplifier);
 
         // Play the ringing sound exactly when effect applied
-        if (!entity.getWorld().isClient && entity instanceof ServerPlayerEntity player) {
+        if (!entity.getWorld().isClient() && entity instanceof ServerPlayerEntity player) {
             player.playSound(ModSounds.EARRING, SoundCategory.PLAYERS, 1.5f, 1.0f);
         }
     }
@@ -67,7 +65,7 @@ public class StunEffect extends StatusEffect {
 
     @Override
     public void applyUpdateEffect(LivingEntity entity, int amplifier) {
-        if (entity.getWorld().isClient) return;
+        if (entity.getWorld().isClient()) return;
 
         // --- VISUAL INDICATOR: SWIRLING STARS ---
         if (entity.getWorld() instanceof ServerWorld world) {

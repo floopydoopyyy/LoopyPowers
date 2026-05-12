@@ -9,11 +9,13 @@ import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
+import net.minecraft.util.math.intprovider.UniformIntProvider;
 
 public class CelestialOreBlock extends ExperienceDroppingBlock {
 
     public CelestialOreBlock(Settings settings) {
-        super(settings);
+        // specified amount
+        super(UniformIntProvider.create(3, 7), settings);
     }
 
     @Override

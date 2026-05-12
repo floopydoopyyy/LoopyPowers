@@ -6,11 +6,13 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.World;
+import net.minecraft.util.math.intprovider.UniformIntProvider;
 
 public class DeepslateCelestialOreBlock extends ExperienceDroppingBlock {
 
     public DeepslateCelestialOreBlock(Settings settings) {
-        super(settings);
+        // blablabla
+        super(UniformIntProvider.create(3, 7), settings);
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.yourname.loopypowers.manager;
 import com.yourname.loopypowers.Loopypowers;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import java.io.IOException;
@@ -13,7 +14,7 @@ import java.util.UUID;
  * Handles reading and writing per-player power data to disk.
  *
  * Files are stored at:
- *   <run_directory>/loopypowers/playerdata/<uuid>.dat
+ * <run_directory>/loopypowers/playerdata/<uuid>.dat
  *
  * The actual data layout is owned by PowerManager.saveToNbt / loadFromNbt.
  * This class only knows about the file system side.
@@ -51,7 +52,8 @@ public class PlayerDataStore {
 
         try {
             Files.createDirectories(file.getParent());
-            NbtIo.writeCompressed(nbt, file.toFile());
+            // accept path directly.
+            NbtIo.writeCompressed(nbt, file);
         } catch (IOException e) {
             Loopypowers.LOGGER.error(
                     "[Loopypowers] Failed to save player data for {} ({}): {}",
@@ -72,7 +74,8 @@ public class PlayerDataStore {
         if (!Files.exists(file)) return; // should be first time player — nothing to load
 
         try {
-            NbtCompound nbt = NbtIo.readCompressed(file.toFile());
+            // 1.20.4 FIX: Pass the Path directly, and provide an NbtSizeTracker
+            NbtCompound nbt = NbtIo.readCompressed(file, NbtSizeTracker.ofUnlimitedBytes());
             if (nbt != null) {
                 PowerManager.loadFromNbt(player, nbt);
             }

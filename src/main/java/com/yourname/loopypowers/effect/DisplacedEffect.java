@@ -1,7 +1,6 @@
 package com.yourname.loopypowers.effect;
 
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.AttributeContainer;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectCategory;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -73,9 +72,15 @@ public class DisplacedEffect extends StatusEffect {
         entity.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.RESISTANCE, 5, 255, true, false, false));
 
-        // disable mob ai
+        // disable mob ai safely per tick instead of hard-disabling it
         if (entity instanceof MobEntity mob) {
-            mob.setAiDisabled(true);
+            mob.getNavigation().stop();
+            mob.getMoveControl().strafeTo(0.0f, 0.0f);
+            mob.setTarget(null);
+
+            // Lock look direction
+            entity.setYaw(entity.prevYaw);
+            entity.setPitch(entity.prevPitch);
         }
 
         // fx
@@ -92,16 +97,6 @@ public class DisplacedEffect extends StatusEffect {
 
         if (world.random.nextFloat() < 0.4f) {
             world.spawnParticles(darkBlue, x, y, z, 2, 0.3, 0.4, 0.3, 0.015);
-        }
-    }
-
-    @Override
-    public void onRemoved(LivingEntity entity, AttributeContainer attributes, int amplifier) {
-        super.onRemoved(entity, attributes, amplifier);
-
-        // Restore AI when the effect naturally expires or is cleansed
-        if (entity instanceof MobEntity mob) {
-            mob.setAiDisabled(false);
         }
     }
 }
