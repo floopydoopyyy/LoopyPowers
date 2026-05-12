@@ -157,7 +157,10 @@ public class StrengthPower implements Power {
     public boolean onAttack(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
         if (!PassiveManager.isEnabled(attacker)) return true;
 
-        // ONE PUNCH EASTER EGG (Moved from Loopypowers.java)
+        // GUARD CLAUSE - should've remembered this on release lol
+        if (amount >= 9999f) return true;
+
+        // ONE PUNCH EASTER EGG
         if (source.getSource() == attacker && attacker.getMainHandStack().isEmpty()) {
             boolean isUnarmoredPlayer = (target instanceof ServerPlayerEntity) && (target.getArmor() == 0);
             if (onePunchDebugEnabled || (isUnarmoredPlayer && attacker.getWorld().random.nextFloat() < ONE_PUNCH_CHANCE)) {

@@ -44,7 +44,7 @@ public class BloodPower implements Power {
     // -- PRIMARY --
     public static final double WHIP_RANGE = 17.0;           // travel distance
     public static final float WHIP_SELF_DAMAGE = 2.0f;      // self damage on cast
-    public static final float WHIP_BLEED_DAMAGE = 12.0f;     // total bleed on hit
+    public static final float WHIP_BLEED_DAMAGE = 8.0f;     // total bleed on hit
     public static final int WHIP_BLEED_DURATION = 60;       // total duration
     public static final int WHIP_BLEED_INTERVAL = 15;       // bleed tick speed
     public static final double WHIP_YANK_XZ = 1.3;          // horizontal pull strength

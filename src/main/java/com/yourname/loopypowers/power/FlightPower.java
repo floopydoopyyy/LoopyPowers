@@ -50,6 +50,9 @@ public class FlightPower implements Power {
         int boomWindup = 0;
         int boomDash = 0;
         float boomYaw = 0;
+
+        // easter egg timer
+        int funnyTimer = 600;
     }
 
     private static FlightState getState(ServerPlayerEntity player) {
@@ -131,6 +134,14 @@ public class FlightPower implements Power {
     @Override
     public void onTick(ServerPlayerEntity player) {
         FlightState state = getState(player);
+
+        // EGG
+        if (state.funnyTimer > 0) {
+            state.funnyTimer--;
+        } else if (!player.getCommandTags().contains("fl_hecanfly_done")) {
+            // lock egg
+            player.getCommandTags().add("fl_hecanfly_done");
+        }
 
         // timers
         if (state.stallTicks > 0) state.stallTicks--;
@@ -214,11 +225,14 @@ public class FlightPower implements Power {
         // force flight to start
         getState(player).glideRequest = true;
 
-        // --- THE MEME ---
+        // FUNNY EGG
         if (player.isFallFlying() && !player.getCommandTags().contains("fl_hecanfly_done")) {
-            player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
-            // Mark it so it never plays again for this player until they lose the power
-            player.getCommandTags().add("fl_hecanfly_done");
+            // % chance to play when used
+            if (RNG.nextFloat() < 0.25f) {
+                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
+                // mark em
+                player.getCommandTags().add("fl_hecanfly_done");
+            }
         }
 
         // direction

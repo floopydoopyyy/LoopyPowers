@@ -89,6 +89,7 @@ public class PowerManager {
         if (!silent) {
             player.sendMessage(Text.literal("§eYou gained the power: §6" + power.getName()), false);
             player.sendMessage(Text.literal("§eType '/power help overview' for ability explanations."));
+            player.sendMessage(Text.literal("§eGo into keybinds to view/modify ability buttons."));
         }
     }
 
