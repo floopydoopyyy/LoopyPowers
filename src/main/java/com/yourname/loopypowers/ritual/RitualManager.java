@@ -63,7 +63,7 @@ public class RitualManager {
 
             if (player != null) {
                 // Tick the ritual exactly once, using the player's current dimension
-                boolean done = ritual.tick(player.getServerWorld());
+                boolean done = ritual.tick(player.getWorld());
                 if (done) {
                     it.remove();
                 }

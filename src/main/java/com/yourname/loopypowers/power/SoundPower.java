@@ -193,7 +193,7 @@ public class SoundPower implements Power {
 
         // Clean up global victims map occasionally to prevent memory leaks
         if (player.age % 100 == 0) {
-            long now = player.getServerWorld().getTime();
+            long now = player.getWorld().getTime();
             VICTIM_STATES.values().removeIf(v -> (now - v.lastSeenTick) > 100 && v.score <= 0 && v.resonatedTicks <= 0);
         }
     }
@@ -237,7 +237,7 @@ public class SoundPower implements Power {
        ============================================================ */
 
     private void tickResonancePassive(ServerPlayerEntity player, SoundCasterState caster) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         long nowTick = w.getTime();
 
         Box box = new Box(player.getPos(), player.getPos()).expand(RES_RADIUS, 6.0, RES_RADIUS);
@@ -353,7 +353,7 @@ public class SoundPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         SonicBoltEntity bolt = new SonicBoltEntity(ModEntities.SONIC_BOLT, w);
         bolt.setOwner(player);
 
@@ -373,7 +373,7 @@ public class SoundPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         SoundCasterState caster = getCasterState(player);
 
         BassDropState s = new BassDropState();
@@ -389,7 +389,7 @@ public class SoundPower implements Power {
 
     private static void tickBassDrop(ServerPlayerEntity caster, SoundCasterState state) {
         BassDropState s = state.bdState;
-        ServerWorld w = caster.getServerWorld();
+        ServerWorld w = caster.getWorld();
 
         animateBassSpheres(w, caster, s);
 
@@ -605,7 +605,7 @@ public class SoundPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         SoundCasterState caster = getCasterState(player);
 
         caster.ultWindup = ULT_WINDUP_TICKS;
@@ -628,10 +628,9 @@ public class SoundPower implements Power {
 
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, 8, 10, true, false));
 
-        if (player.getWorld() instanceof ServerWorld w) {
+        ServerWorld w = player.getWorld();
             if (state.ultWindup % 4 == 0) {
                 w.spawnParticles(ParticleTypes.SCULK_CHARGE_POP, player.getX(), player.getY() + 1.0, player.getZ(), 6, 0.25, 0.35, 0.25, 0.01);
-            }
         }
 
         if (state.ultWindup > 0) return;
@@ -643,7 +642,7 @@ public class SoundPower implements Power {
     }
 
     private static void fireUltimateBeam(ServerPlayerEntity caster) {
-        ServerWorld w = caster.getServerWorld();
+        ServerWorld w = caster.getWorld();
 
         Vec3d start = caster.getEyePos();
         Vec3d dir = caster.getRotationVec(1.0f).normalize();

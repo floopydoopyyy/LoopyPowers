@@ -87,7 +87,7 @@ public class FortunePower implements Power {
     public void onTick(ServerPlayerEntity player) {
         FortuneState state = getState(player);
         tickLuck(player, state);
-        tickDuelsWorld(player.getServerWorld());
+        tickDuelsWorld(player.getWorld());
     }
 
     @Override
@@ -146,7 +146,7 @@ public class FortunePower implements Power {
         // dodge passive if passive off
         if (!PassiveManager.isEnabled(attacker)) return;
 
-        ServerWorld w = attacker.getServerWorld();
+        ServerWorld w = attacker.getWorld();
 
         float t = state.luck / (float) LUCK_MAX;
         float chance = PROC_BASE + (PROC_BONUS_AT_MAX * t);
@@ -260,7 +260,7 @@ public class FortunePower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         // self damage
         player.damage(ModDamageTypes.bet(w), PRIM_SELF_DAMAGE); // bet damage
@@ -388,7 +388,7 @@ public class FortunePower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         // If already dueling, recast cancels it
         if (isInDuel(player)) {
@@ -470,7 +470,7 @@ public class FortunePower implements Power {
         breakDuel(caster.getUuid());
         breakDuel(target.getUuid());
 
-        ServerWorld w = caster.getServerWorld();
+        ServerWorld w = caster.getWorld();
         DuelInstance d = new DuelInstance(w.getRegistryKey(), caster.getUuid(), target.getUuid(), DUEL_DURATION_TICKS);
 
         // index by both members
@@ -757,7 +757,7 @@ public class FortunePower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         var server = player.getServer();
         if (server == null) return;
 

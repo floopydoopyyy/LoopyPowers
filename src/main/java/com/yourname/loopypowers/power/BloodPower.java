@@ -166,7 +166,8 @@ public class BloodPower implements Power {
         b.totalDmgLeft = totalBleed;
 
         // particles
-        if (attacker.getWorld() instanceof ServerWorld w) {
+        if (attacker.getWorld() instanceof ServerWorld) {
+            ServerWorld w = (ServerWorld) attacker.getWorld();
             w.spawnParticles(ParticleTypes.DAMAGE_INDICATOR,
                     target.getX(), target.getY() + 1.0, target.getZ(),
                     4, 0.25, 0.35, 0.25, 0.02);
@@ -246,7 +247,7 @@ public class BloodPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
 
         player.damage(ModDamageTypes.bloodself(world, player), WHIP_SELF_DAMAGE);
 
@@ -380,7 +381,7 @@ public class BloodPower implements Power {
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
 
         com.yourname.loopypowers.entity.BloodClotEntity clot =
                 new com.yourname.loopypowers.entity.BloodClotEntity(com.yourname.loopypowers.entity.ModEntities.BLOOD_CLOT, world);
@@ -437,7 +438,8 @@ public class BloodPower implements Power {
 
         target.addStatusEffect(new StatusEffectInstance(ModEffects.BLEED, durationTicks, 0, true, false));
 
-        if (attacker.getWorld() instanceof ServerWorld w) {
+        if (attacker.getWorld() instanceof ServerWorld) {
+            ServerWorld w = (ServerWorld) attacker.getWorld();
             w.spawnParticles(ParticleTypes.DAMAGE_INDICATOR,
                     target.getX(), target.getY() + 1.0, target.getZ(),
                     3, 0.20, 0.25, 0.20, 0.01);
@@ -462,7 +464,8 @@ public class BloodPower implements Power {
         // lifesteal
         attacker.heal(totalPopDamage * POP_HEAL_MULT);
 
-        if (attacker.getWorld() instanceof ServerWorld w) {
+        if (attacker.getWorld() instanceof ServerWorld) {
+            ServerWorld w = (ServerWorld) attacker.getWorld();
             w.playSound(null, target.getBlockPos(), SoundEvents.ENTITY_ZOMBIE_ATTACK_IRON_DOOR, attacker.getSoundCategory(), 1.0f, 1.2f);
 
             // red burst
@@ -502,7 +505,7 @@ public class BloodPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
 
         if (isBound(player)) {
             breakBind(player);
@@ -593,7 +596,8 @@ public class BloodPower implements Power {
             return true;
         }
 
-        if (source.getAttacker() == null && victim.getWorld() instanceof ServerWorld sw) {
+        if (source.getAttacker() == null && victim.getWorld() instanceof ServerWorld) {
+            ServerWorld sw = (ServerWorld) victim.getWorld();
             long now = sw.getTime();
 
             float pending = PENDING_ENV_DAMAGE.getOrDefault(victim.getUuid(), 0.0f) + amount;
@@ -624,7 +628,8 @@ public class BloodPower implements Power {
             DamageSource bindSrc = ModDamageTypes.bind(target.getWorld(), victim);
             if (shared > 0.0f) target.damage(bindSrc, shared);
 
-            if (victim.getWorld() instanceof ServerWorld sw) {
+            if (victim.getWorld() instanceof ServerWorld) {
+                ServerWorld sw = (ServerWorld) victim.getWorld();
                 long now = sw.getTime();
                 long last = LAST_BIND_HIT_FX.getOrDefault(victim.getUuid(), Long.MIN_VALUE);
 
@@ -687,7 +692,8 @@ public class BloodPower implements Power {
 
             double max = BIND_MAX_RANGE * BIND_MAX_RANGE;
             if (caster.squaredDistanceTo(target) > max) {
-                caster.getServerWorld().playSound(null, caster.getBlockPos(),
+                ServerWorld casterWorld = (ServerWorld) caster.getWorld();
+                casterWorld.playSound(null, caster.getBlockPos(),
                         SoundEvents.BLOCK_CHAIN_BREAK,
                         caster.getSoundCategory(),
                         0.9f, 1.0f
@@ -702,18 +708,19 @@ public class BloodPower implements Power {
             float strain = (float) MathHelper.clamp((dist - 10.0) / (BIND_MAX_RANGE - 10.0), 0.0, 1.0);
 
             if (strain > 0.55f) {
+                ServerWorld casterWorld = (ServerWorld) caster.getWorld();
                 if ((b.ticksLeft % 2) == 0) {
-                    caster.getServerWorld().spawnParticles(ParticleTypes.CRIT,
+                    casterWorld.spawnParticles(ParticleTypes.CRIT,
                             caster.getX(), caster.getY() + 1.0, caster.getZ(),
                             1, 0.15, 0.15, 0.15, 0.0);
 
-                    caster.getServerWorld().spawnParticles(ParticleTypes.CRIT,
+                    casterWorld.spawnParticles(ParticleTypes.CRIT,
                             target.getX(), target.getY() + 1.0, target.getZ(),
                             1, 0.15, 0.15, 0.15, 0.0);
                 }
 
                 if ((b.ticksLeft % 10) == 0) {
-                    caster.getServerWorld().playSound(null, caster.getBlockPos(),
+                    casterWorld.playSound(null, caster.getBlockPos(),
                             SoundEvents.BLOCK_CHAIN_HIT,
                             caster.getSoundCategory(),
                             0.35f,
@@ -722,12 +729,14 @@ public class BloodPower implements Power {
             }
 
             if ((b.ticksLeft % 2) == 0) {
-                spawnBindAura(caster.getServerWorld(), caster, strain);
-                spawnBindAura(caster.getServerWorld(), target, strain);
+                ServerWorld casterWorld = (ServerWorld) caster.getWorld();
+                spawnBindAura(casterWorld, caster, strain);
+                spawnBindAura(casterWorld, target, strain);
             }
 
             if ((b.ticksLeft % 2) == 0) {
-                spawnTetherParticles(caster.getServerWorld(), caster, target);
+                ServerWorld casterWorld = (ServerWorld) caster.getWorld();
+                spawnTetherParticles(casterWorld, caster, target);
             }
         }
     }

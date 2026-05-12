@@ -11,6 +11,7 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.util.math.Vec3d;
@@ -156,7 +157,7 @@ public class SpeedPower implements Power {
 
             // Loop sound
             if (state.rushLoopCd <= 0) {
-                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.0f);
+                player.getWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.0f);
                 state.rushLoopCd = RUSH_LOOP_INTERVAL_TICKS;
             }
         }
@@ -167,7 +168,7 @@ public class SpeedPower implements Power {
 
             // Ultimate Loop Sound
             if (state.overdriveLoopCd <= 0) {
-                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.3f);
+                player.getWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.3f);
                 state.overdriveLoopCd = OVERDRIVE_LOOP_INTERVAL_TICKS;
             }
         }
@@ -198,7 +199,7 @@ public class SpeedPower implements Power {
 
         spawnDashParticles(player, look);
 
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null,
                 player.getBlockPos(),
                 ModSounds.DASH,
@@ -231,7 +232,7 @@ public class SpeedPower implements Power {
         );
 
         // Pushback + damage
-        player.getServerWorld()
+        player.getWorld()
                 .getOtherEntities(player, player.getBoundingBox().expand(RUSH_KNOCKBACK_SCAN_RADIUS),
                         e -> e instanceof LivingEntity)
                 .forEach(e -> {
@@ -260,12 +261,12 @@ public class SpeedPower implements Power {
         spawnRushCastParticles(player);
 
         // sounds
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(), 1.0f, 1.1f
         );
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null, player.getBlockPos(),
                 ModSounds.RUSHSTART,
                 player.getSoundCategory(), 0.8f, 1.0f
@@ -294,7 +295,7 @@ public class SpeedPower implements Power {
 
         player.playSound(SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER, 0.6f, 1.8f);
         player.playSound(ModSounds.OVERDRIVESTART, 0.6f, 1.8f);
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(), 1.0f, 0.6f
@@ -327,12 +328,12 @@ public class SpeedPower implements Power {
 
             state.burstCdTicks = PASSIVE_BURST_COOLDOWN_TICKS;
 
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     WHITE_BRIGHT,
                     player.getX(), player.getY() + 0.5, player.getZ(),
                     8, 0.3, 0.4, 0.3, 0.06
             );
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     ParticleTypes.SWEEP_ATTACK,
                     player.getX(), player.getY() + 0.5, player.getZ(),
                     3, 0.4, 0.2, 0.4, 0
@@ -350,7 +351,7 @@ public class SpeedPower implements Power {
             player.velocityModified = true;
         }
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.CLOUD,
                 player.getX(), player.getY() + 0.05, player.getZ(),
                 3, 0.15, 0.05, 0.15, 0.005
@@ -375,7 +376,7 @@ public class SpeedPower implements Power {
             player.setOnGround(true);
         }
 
-        player.getServerWorld()
+        player.getWorld()
                 .getOtherEntities(player, player.getBoundingBox().expand(1.2),
                         e -> e instanceof LivingEntity)
                 .forEach(entity -> {
@@ -386,7 +387,7 @@ public class SpeedPower implements Power {
                         // EASTER EGG
                         if (!entity.isAlive() && entity instanceof ServerPlayerEntity) {
                             if (player.getRandom().nextInt(A_TRAIN_CHANCE) == 0) {
-                                net.minecraft.text.Text message = net.minecraft.text.Text.literal(
+                                Text message = Text.literal(
                                         "<" + player.getName().getString() + "> I can't stop. I can't stop. I can't stop. I can't stop."
                                 );
                                 player.getServer().getPlayerManager().broadcast(message, false);
@@ -403,12 +404,12 @@ public class SpeedPower implements Power {
 
                         applyCollisionSlow(player, state);
 
-                        player.getServerWorld().spawnParticles(
+                        player.getWorld().spawnParticles(
                                 ParticleTypes.EXPLOSION_EMITTER,
                                 player.getX(), player.getY() + 1, player.getZ(),
                                 4, 0.6, 0.2, 0.6, 0.1
                         );
-                        player.getServerWorld().playSound(
+                        player.getWorld().playSound(
                                 null, player.getBlockPos(),
                                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                                 player.getSoundCategory(), 1.0f, 0.8f
@@ -427,7 +428,7 @@ public class SpeedPower implements Power {
         double oy = player.getY() + 0.8;
         double oz = player.getZ();
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 WHITE_BRIGHT, ox, oy, oz,
                 DASH_PARTICLE_COUNT, 0.3, 0.25, 0.3, 0.06
         );
@@ -435,7 +436,7 @@ public class SpeedPower implements Power {
         for (int i = 1; i <= 4; i++) {
             double d   = i * 0.70;
             double vel = 0.04 + i * 0.016;
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     (i % 2 == 0) ? WHITE_BRIGHT : WHITE_STREAK,
                     ox - look.x * d, oy - look.y * d * 0.5, oz - look.z * d,
                     1, -look.x * vel, 0.01, -look.z * vel, 0.0
@@ -444,14 +445,14 @@ public class SpeedPower implements Power {
 
         for (int i = 0; i < 6; i++) {
             double angle = i * Math.PI * 2.0 / 6;
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     WHITE_STREAK,
                     ox + Math.cos(angle) * 0.4, oy, oz + Math.sin(angle) * 0.4,
                     1, Math.cos(angle) * 0.10, 0.015, Math.sin(angle) * 0.10, 0.0
             );
         }
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.SWEEP_ATTACK,
                 ox, player.getY() + 0.3, oz,
                 3, 0.5, 0.15, 0.5, 0
@@ -467,27 +468,27 @@ public class SpeedPower implements Power {
         for (int i = 0; i < ringPoints; i++) {
             double angle = i * Math.PI * 2.0 / ringPoints;
             double speed = 0.22;
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     WHITE_BRIGHT,
                     ox + Math.cos(angle) * 0.5, player.getY() + 0.1, oz + Math.sin(angle) * 0.5,
                     1, Math.cos(angle) * speed, 0.01, Math.sin(angle) * speed, 0.0
             );
         }
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 WHITE_BRIGHT, ox, oy, oz,
                 10, 0.5, 0.5, 0.5, 0.10
         );
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 WHITE_PALE, ox, oy, oz,
                 6, 0.6, 0.6, 0.6, 0.08
         );
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.EXPLOSION_EMITTER,
                 ox, oy, oz, 3, 0.6, 0.2, 0.6, 0.1
         );
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.SWEEP_ATTACK,
                 ox, player.getY() + 0.5, oz, 4, 0.6, 0.25, 0.6, 0
         );
@@ -502,7 +503,7 @@ public class SpeedPower implements Power {
             double theta = d * Math.PI * 2.0 / 12;
             double phi   = Math.PI / 4;
             double speed = 0.20;
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     WHITE_BRIGHT, ox, oy, oz,
                     1,
                     Math.cos(theta) * Math.cos(phi) * speed,
@@ -514,22 +515,22 @@ public class SpeedPower implements Power {
 
         for (int i = 0; i < 10; i++) {
             double angle = i * Math.PI * 2.0 / 10;
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     WHITE_STREAK,
                     ox + Math.cos(angle) * 0.4, player.getY() + 0.1, oz + Math.sin(angle) * 0.4,
                     1, Math.cos(angle) * 0.28, 0.01, Math.sin(angle) * 0.28, 0.0
             );
         }
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.FIREWORK,
                 ox, oy, oz, 8, 0.5, 0.6, 0.5, 0.08
         );
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.FLASH,
                 ox, oy, oz, 1, 0.4, 0.2, 0.4, 0
         );
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.SWEEP_ATTACK,
                 ox, oy, oz, 5, 0.7, 0.3, 0.7, 0
         );
@@ -547,30 +548,30 @@ public class SpeedPower implements Power {
             double d       = 0.5 + i * 1.1;
             double spread  = 0.10 + i * 0.08;
             double speed   = 0.06 + i * 0.024;
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     (i % 2 == 0) ? WHITE_BRIGHT : WHITE_PALE,
                     ox + back.x * d, oy + back.y * d * 0.3, oz + back.z * d,
                     1, back.x * speed + spread, 0.03, back.z * speed + spread, 0.0
             );
         }
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.CLOUD,
                 ox + back.x * 1.5, player.getY() + 0.5, oz + back.z * 1.5,
                 3, 0.25, 0.20, 0.25, 0.04
         );
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.SMOKE,
                 ox + back.x * 1.0, player.getY() + 0.7, oz + back.z * 1.0,
                 2, 0.15, 0.15, 0.15, 0.03
         );
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.END_ROD,
                 ox, oy, oz,
                 4, 0.3, 0.6, 0.3, 0.06
         );
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.FIREWORK,
                 ox, oy, oz,
                 2, 0.35, 0.55, 0.25, 0.05
@@ -582,7 +583,7 @@ public class SpeedPower implements Power {
                 double angle = i * Math.PI * 2.0 / 4;
                 double rx    = right.x * Math.cos(angle) * 0.6;
                 double rz    = right.z * Math.cos(angle) * 0.6;
-                player.getServerWorld().spawnParticles(
+                player.getWorld().spawnParticles(
                         WHITE_STREAK,
                         ox + rx, oy, oz + rz,
                         1, back.x * 0.12 + rx * 0.06, 0.015, back.z * 0.12 + rz * 0.06, 0.0
@@ -610,7 +611,7 @@ public class SpeedPower implements Power {
                 StatusEffects.SLOWNESS, 5, 2, true, false
         ));
 
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_PLAYER_SMALL_FALL,
                 player.getSoundCategory(), 0.8f, 0.7f
@@ -634,7 +635,7 @@ public class SpeedPower implements Power {
                 StatusEffects.SLOWNESS, 8, 2, true, false
         ));
 
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_ZOMBIE_BREAK_WOODEN_DOOR,
                 player.getSoundCategory(), 0.8f, 0.7f
@@ -697,12 +698,12 @@ public class SpeedPower implements Power {
 
         CameraShake.shakeNearby(player, 12.0, 8, shakeStrength);
 
-        player.getServerWorld().spawnParticles(
+        player.getWorld().spawnParticles(
                 ParticleTypes.EXPLOSION_EMITTER,
                 player.getX(), player.getY() + 1, player.getZ(),
                 3, 0.15, 0.10, 0.15, 0.02
         );
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_DRAGON_FIREBALL_EXPLODE,
                 player.getSoundCategory(), 0.8f, 0.85f
@@ -735,7 +736,7 @@ public class SpeedPower implements Power {
 
         state.blockDmgCd = 10;
 
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_PLAYER_HURT,
                 player.getSoundCategory(), 0.8f, 1.0f

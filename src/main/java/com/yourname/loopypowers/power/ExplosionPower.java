@@ -177,9 +177,8 @@ public class ExplosionPower implements Power {
         // Force early ultimate detonation if hit hard while airborne in ult
         if (!victim.isOnGround() && state.ultActiveTicks > 0) {
             if (source.getAttacker() instanceof LivingEntity && amount >= 3.0f) {
-                if (victim.getWorld() instanceof ServerWorld sw) {
+                ServerWorld sw = victim.getWorld();
                     forceEarlyDetonation(victim, state, sw);
-                }
             }
         }
 
@@ -200,7 +199,7 @@ public class ExplosionPower implements Power {
         ExplosionState state = getState(player);
         state.ignitingTicks = IGNITE_FUSE_TICKS;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_TNT_PRIMED,
                 player.getSoundCategory(),
@@ -215,7 +214,7 @@ public class ExplosionPower implements Power {
 
     private static void tickIgnition(ServerPlayerEntity player, ExplosionState state) {
         state.ignitingTicks--;
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 10, IGNITE_SPEED_AMP, true, false));
 
@@ -293,7 +292,7 @@ public class ExplosionPower implements Power {
             state.blastRechargeTicks = BLAST_RECHARGE_TICKS;
         }
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         Vec3d look = player.getRotationVec(1.0f).normalize();
         Vec3d origin = player.getEyePos()
@@ -403,7 +402,7 @@ public class ExplosionPower implements Power {
             state.ultWaitingLand = true;
         }
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_TNT_PRIMED,
                 player.getSoundCategory(),
@@ -412,7 +411,7 @@ public class ExplosionPower implements Power {
     }
 
     private static void tickUltimate(ServerPlayerEntity player, ExplosionState state) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         state.ultActiveTicks--;
 
         tickUltAmbientFx(player, w);
@@ -524,7 +523,7 @@ public class ExplosionPower implements Power {
     }
 
     private static void doUltPop(ServerPlayerEntity player, ExplosionState state, boolean finisher, int popIndex) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         Vec3d pre = player.getVelocity();
 

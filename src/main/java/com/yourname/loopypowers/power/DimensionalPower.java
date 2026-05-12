@@ -138,7 +138,7 @@ public class DimensionalPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         DimensionalState state = getState(player);
 
         handlePassive(player, state, world);
@@ -217,7 +217,7 @@ public class DimensionalPower implements Power {
     private void startPassivePhase(ServerPlayerEntity player, DimensionalState state) {
         state.phaseTicks = PASSIVE_PHASE_TICKS;
 
-        player.getServerWorld().playSound(null, player.getBlockPos(),
+        player.getWorld().playSound(null, player.getBlockPos(),
                 ModSounds.FLICKER,
                 player.getSoundCategory(), 0.5f, 1.2f);
     }
@@ -390,7 +390,7 @@ public class DimensionalPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         DimensionalState state = getState(player);
 
         // clear passive
@@ -671,7 +671,7 @@ public class DimensionalPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         // direction
         Vec3d look = player.getRotationVec(1.0f);
@@ -803,7 +803,7 @@ public class DimensionalPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         Vec3d look   = player.getRotationVec(1.0f);
         Vec3d origin = player.getPos().add(look.x * 3.0, 0, look.z * 3.0);
@@ -912,7 +912,7 @@ public class DimensionalPower implements Power {
 
         state.ticksRemaining--;
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         long time = world.getTime();
 
         // WALLS

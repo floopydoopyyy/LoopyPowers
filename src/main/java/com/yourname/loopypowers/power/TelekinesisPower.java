@@ -331,7 +331,7 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         TKCasterState caster = getCasterState(player);
 
         boolean isSwinging = player.handSwinging;
@@ -380,11 +380,18 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
-        // dodge passive if passive off
         if (!PassiveManager.isEnabled(attacker)) return;
 
+        // get server and world
+        var server = attacker.getServer();
+        if (server == null) return;
+
+        var overworld = server.getOverworld();
+        if (overworld == null) return; // safety check
+
         TKCasterState caster = getCasterState(attacker);
-        caster.lastSwingTime = attacker.getServerWorld().getTime();
+        //
+        caster.lastSwingTime = overworld.getTime();
 
         Vec3d look = attacker.getRotationVec(1.0f);
         target.addVelocity(look.x * PASSIVE_KB_MULT, PASSIVE_KB_VERTICAL, look.z * PASSIVE_KB_MULT);
@@ -392,7 +399,7 @@ public class TelekinesisPower implements Power {
 
         markForImpactTracking(target, target.getVelocity(), attacker.getUuid());
 
-        ServerWorld world = attacker.getServerWorld();
+        ServerWorld world = (ServerWorld) attacker.getWorld();
         spawnImpactRing(world, target.getPos(), 10, 0.3);
         world.spawnParticles(TK_LIGHT_PINK, target.getX(), target.getBodyY(0.7), target.getZ(), 4, 0.2, 0.3, 0.2, 0.03);
     }
@@ -463,7 +470,7 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         Vec3d origin = player.getEyePos();
         Vec3d look   = player.getRotationVec(1.0f);
 
@@ -501,7 +508,7 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         Vec3d origin = player.getEyePos();
         Vec3d look   = player.getRotationVec(1.0f);
         Vec3d end    = origin.add(look.multiply(THROW_SCAN_RANGE));
@@ -580,7 +587,7 @@ public class TelekinesisPower implements Power {
         caster.readyThrowTicks = 0;
 
         Vec3d look = player.getRotationVec(1.0f);
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         Vec3d throwVel = new Vec3d(
                 look.x * THROW_SPEED_H,
@@ -627,7 +634,7 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         TKCasterState caster = getCasterState(player);
 
         if (caster.debrisField != null) {
@@ -757,7 +764,7 @@ public class TelekinesisPower implements Power {
         if (field == null || field.ticksRemaining <= 0) return;
 
         handleDebrisRegen(player, caster, field);
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         field.ticksRemaining--;
 
         if (field.ticksRemaining <= 0) {
@@ -864,7 +871,7 @@ public class TelekinesisPower implements Power {
         if (field == null) return;
         if (caster.debrisThrowCd > 0) return;
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         if (field.orbitAngles.size() < DEBRIS_THROW_COUNT) {
             world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_STONE_HIT, player.getSoundCategory(), 0.6f, 0.5f);
             return;
@@ -917,7 +924,7 @@ public class TelekinesisPower implements Power {
     private void tickThrownBlocks(ServerPlayerEntity player, TKCasterState caster) {
         if (caster.thrownBlocks.isEmpty()) return;
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         Set<UUID> toExplode = new HashSet<>();
 
         for (Map.Entry<UUID, Vec3d> entry : caster.thrownBlocks.entrySet()) {
@@ -980,7 +987,7 @@ public class TelekinesisPower implements Power {
     }
 
     private void handleDebrisRegen(ServerPlayerEntity player, TKCasterState caster, DebrisField field) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         long time = world.getTime();
 
         long idleTime = time - caster.lastSwingTime;

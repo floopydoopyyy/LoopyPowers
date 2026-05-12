@@ -417,7 +417,7 @@ public class LifeRitual implements Ritual {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = world.random.nextDouble() * 2.5;
                 double h     = 2.0 + world.random.nextDouble() * (CANOPY_HEIGHT - 3.0);
-                world.spawnParticles(ParticleTypes.CHERRY_LEAVES,
+                world.spawnParticles(ParticleTypes.FALLING_CHERRY_LEAVES,
                         pos.x + Math.cos(angle) * r,
                         pos.y + h,
                         pos.z + Math.sin(angle) * r,
@@ -525,7 +525,7 @@ public class LifeRitual implements Ritual {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = 0.8 + world.random.nextDouble() * 2.2;
                 double h     = 1.0 + world.random.nextDouble() * (CANOPY_HEIGHT - 2.0);
-                world.spawnParticles(ParticleTypes.CHERRY_LEAVES,
+                world.spawnParticles(ParticleTypes.FALLING_CHERRY_LEAVES,
                         pos.x + Math.cos(angle) * r,
                         pos.y + h,
                         pos.z + Math.sin(angle) * r,
@@ -669,7 +669,7 @@ public class LifeRitual implements Ritual {
             for (int i = 0; i < 6; i++) {
                 double angle = world.random.nextDouble() * Math.PI * 2;
                 double r     = world.random.nextDouble() * 3.0;
-                world.spawnParticles(ParticleTypes.CHERRY_LEAVES,
+                world.spawnParticles(ParticleTypes.FALLING_CHERRY_LEAVES,
                         pos.x + Math.cos(angle) * r,
                         pos.y + 0.3 + world.random.nextDouble() * 3.5,
                         pos.z + Math.sin(angle) * r,
@@ -744,7 +744,7 @@ public class LifeRitual implements Ritual {
         world.spawnParticles(LIGHT_GREEN,   pos.x, pos.y + 1.0, pos.z, 18, 0.9, 0.8, 0.9, 0.07);
         world.spawnParticles(PINK,  pos.x, pos.y + 1.0, pos.z, 16, 0.8, 0.7, 0.8, 0.07);
         world.spawnParticles(GOLD,    pos.x, pos.y + 1.2, pos.z, 12, 0.6, 0.5, 0.6, 0.06);
-        world.spawnParticles(ParticleTypes.CHERRY_LEAVES, pos.x, pos.y + 1.0, pos.z,
+        world.spawnParticles(ParticleTypes.FALLING_CHERRY_LEAVES, pos.x, pos.y + 1.0, pos.z,
                 20, 1.2, 1.0, 1.2, 0.06);
         world.spawnParticles(ParticleTypes.SPORE_BLOSSOM_AIR, pos.x, pos.y + 0.5, pos.z,
                 10, 0.8, 0.6, 0.8, 0.04);

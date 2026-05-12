@@ -121,7 +121,7 @@ public class LightningPower implements Power {
         if (tier >= 4 && !state.chargeReady) {
             state.chargeReady = true;
 
-            ServerWorld w = player.getServerWorld();
+            ServerWorld w = player.getWorld();
 
             // sound
             w.playSound(null, player.getBlockPos(),
@@ -192,7 +192,7 @@ public class LightningPower implements Power {
         // dodge if passive off
         if (!PassiveManager.isEnabled(attacker)) return; // this is for you dylan
 
-        ServerWorld world = attacker.getServerWorld();
+        ServerWorld world = attacker.getWorld();
 
         // these appear no matter the tier
         world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
@@ -393,7 +393,7 @@ public class LightningPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         Vec3d origin  = player.getEyePos();
         Vec3d forward = player.getRotationVec(1.0f).normalize();
@@ -539,7 +539,7 @@ public class LightningPower implements Power {
     // SECONDARY
     @Override
     public void activateSecondary(ServerPlayerEntity player) { // finally something simple
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         //visual lightning
         spawnCosmeticLightning(world, player.getPos());
@@ -558,7 +558,7 @@ public class LightningPower implements Power {
     }
 
     private void tickSuperchargeAura(ServerPlayerEntity player, LightningState state) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         if (state.superchargeTicks % SUPERCHARGE_AURA_INTERVAL != 0) return;
 
@@ -672,7 +672,7 @@ public class LightningPower implements Power {
         state.stormTicks = STORM_DURATION_TICKS;
         state.stormStepTicks = STORM_PULSE_TICKS;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER,
                 player.getSoundCategory(), 1.2f, 0.8f);
@@ -723,7 +723,7 @@ public class LightningPower implements Power {
     }
 
     private void tickMaelstrom(ServerPlayerEntity player, LightningState state) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         Vec3d center = player.getPos(); // follows player
 
         state.stormTicks--;

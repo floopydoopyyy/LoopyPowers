@@ -164,7 +164,7 @@ public class StrengthPower implements Power {
         if (source.getSource() == attacker && attacker.getMainHandStack().isEmpty()) {
             boolean isUnarmoredPlayer = (target instanceof ServerPlayerEntity) && (target.getArmor() == 0);
             if (onePunchDebugEnabled || (isUnarmoredPlayer && attacker.getWorld().random.nextFloat() < ONE_PUNCH_CHANCE)) {
-                ServerWorld w = attacker.getServerWorld();
+                ServerWorld w = attacker.getWorld();
 
                 w.playSound(null, attacker.getBlockPos(), ModSounds.ONEPUNCH, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
 
@@ -207,7 +207,7 @@ public class StrengthPower implements Power {
         StrengthState state = getState(attacker);
         if (state.rageTicks <= 0) return;
 
-        ServerWorld w = attacker.getServerWorld();
+        ServerWorld w = attacker.getWorld();
 
         Vec3d d = target.getPos().subtract(attacker.getPos());
         Vec3d horiz = new Vec3d(d.x, 0.0, d.z);
@@ -254,7 +254,7 @@ public class StrengthPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         Vec3d pos = player.getPos();
 
         boolean casterGrounded = isNearGround(player, w);
@@ -623,7 +623,7 @@ public class StrengthPower implements Power {
         state.rushHitLock = 0;
         state.rushCancelLock = RUSH_CANCEL_COOLDOWN_TICKS;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         w.playSound(null, player.getBlockPos(),
                 ModSounds.LUNGESTART,
@@ -652,7 +652,7 @@ public class StrengthPower implements Power {
             state.rushTicks = 0;
             enableRushStepUp(player, false);
 
-            ServerWorld w = player.getServerWorld();
+            ServerWorld w = player.getWorld();
             w.playSound(null, player.getBlockPos(), ModSounds.BULLRUSH, player.getSoundCategory(), 0.6f, 0.9f);
             w.spawnParticles(ParticleTypes.CLOUD, player.getX(), player.getY() + 0.2, player.getZ(), 10, 0.25, 0.10, 0.25, 0.02);
             return;
@@ -697,12 +697,12 @@ public class StrengthPower implements Power {
         }
 
         // WALL CHECKS
-        BlockHitResult wallHit = findRushWallHit(player.getServerWorld(), player, dir);
+        BlockHitResult wallHit = findRushWallHit(player.getWorld(), player, dir);
         if (wallHit != null) {
             state.rushTicks = 0;
             enableRushStepUp(player, false);
 
-            doRushCrash(player, player.getServerWorld(), wallHit);
+            doRushCrash(player, player.getWorld(), wallHit);
             return;
         }
 
@@ -712,7 +712,7 @@ public class StrengthPower implements Power {
         Vec3d horiz = new Vec3d(dir.x, 0.0, dir.z);
         if (horiz.lengthSquared() < 1.0e-6) horiz = new Vec3d(0, 0, 1);
 
-        boolean stepped = tryRushStepUp(player, player.getServerWorld(), horiz);
+        boolean stepped = tryRushStepUp(player, player.getWorld(), horiz);
 
         Vec3d push = horiz.normalize().multiply(RUSH_SPEED);
 
@@ -730,7 +730,7 @@ public class StrengthPower implements Power {
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
         // fx
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         if (w.random.nextFloat() < 0.85f) {
             BlockPos under = player.getBlockPos().down();
@@ -983,7 +983,7 @@ public class StrengthPower implements Power {
         state.rageAuraStep = 0;
         state.rageHbStep = 0;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         w.playSound(null, player.getBlockPos(),
                 ModSounds.RAGE,
@@ -1007,7 +1007,7 @@ public class StrengthPower implements Power {
             new DustParticleEffect(new Vector3f(1.0f, 0.0f, 0.0f), 1.35f);
 
     private static void tickRageFX(ServerPlayerEntity player, StrengthState state) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         if (state.rageFxBurst >= 0) {
             spawnRagePulse(w, player);

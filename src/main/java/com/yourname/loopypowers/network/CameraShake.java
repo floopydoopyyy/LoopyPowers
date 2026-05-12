@@ -3,6 +3,7 @@ package com.yourname.loopypowers.network;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 
 public final class CameraShake {
     private CameraShake() {}
@@ -15,7 +16,8 @@ public final class CameraShake {
      * @param strength Small number e.g. 0.4f - 1.2f (keep mild)
      */
     public static void shakeNearby(ServerPlayerEntity source, double radius, int ticks, float strength) {
-        var world = source.getServerWorld();
+        // 1.19.4 mapping fix here:
+        ServerWorld world = (ServerWorld) source.getWorld();
         var origin = source.getPos();
         double r2 = radius * radius;
 

@@ -134,7 +134,7 @@ public class CosmicPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         UUID playerId = player.getUuid();
 
         // 1. Get ONLY the targets owned by this specific player
@@ -444,7 +444,7 @@ public class CosmicPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
 
         Vec3d origin = player.getEyePos();
         Vec3d look   = player.getRotationVec(1.0f);
@@ -541,7 +541,7 @@ public class CosmicPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
 
         player.setVelocity(0, 1.2, 0);
         player.velocityModified = true;
@@ -557,7 +557,7 @@ public class CosmicPower implements Power {
     }
 
     private void handleShootingStar(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
         spawnStarTrailParticles(world, player);
 
         Vec3d velocity = player.getVelocity();
@@ -628,7 +628,7 @@ public class CosmicPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
 
         Vec3d lookDir = player.getRotationVec(1.0f).normalize();
         Vec3d spawnPos = player.getEyePos().add(lookDir.multiply(3.0));

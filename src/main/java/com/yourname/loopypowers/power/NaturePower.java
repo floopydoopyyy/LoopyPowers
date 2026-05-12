@@ -163,7 +163,7 @@ public class NaturePower implements Power {
     private static final int PASSIVE_REGEN_TICKS = 40;   // how long given for
 
     private static void tickPhotosynthesis(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         // refresh rhythm
         if (player.age % PASSIVE_REFRESH_TICKS != 0) return;
@@ -229,7 +229,7 @@ public class NaturePower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         NatureState state = getState(player);
 
         // Spawn in front of player
@@ -254,7 +254,7 @@ public class NaturePower implements Power {
     private static void tickExpandingGas(ServerPlayerEntity player, NatureState state) {
         if (state.gases.isEmpty()) return;
 
-        long now = player.getServerWorld().getTime();
+        long now = player.getWorld().getTime();
 
         Iterator<GasInstance> it = state.gases.iterator();
         while (it.hasNext()) {
@@ -388,7 +388,7 @@ public class NaturePower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         NatureState state = getState(player);
 
         w.playSound(null, player.getBlockPos(), ModSounds.ARENABUILD, net.minecraft.sound.SoundCategory.BLOCKS, 0.8f, 1.0f);
@@ -538,7 +538,7 @@ public class NaturePower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         NatureState state = getState(player);
 
         // cast FX
@@ -674,7 +674,7 @@ public class NaturePower implements Power {
         // buffs for the caster near vined
         if (player.age % VINE_BUFF_REFRESH != 0) return;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         RegistryKey<World> wk = w.getRegistryKey();
 
         boolean nearAny = false;
@@ -703,7 +703,7 @@ public class NaturePower implements Power {
 
     private static void tickVines(ServerPlayerEntity player, NatureState state) {
         if (state.vines.isEmpty()) return;
-        long now = player.getServerWorld().getTime();
+        long now = player.getWorld().getTime();
 
         Iterator<VineBind> it = state.vines.values().iterator();
         while (it.hasNext()) {

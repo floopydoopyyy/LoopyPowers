@@ -166,7 +166,7 @@ public class TeleportPower implements Power {
         state.dodgeCdTicks = PASSIVE_COOLDOWN_TICKS;
 
         // particles
-        var w = player.getServerWorld();
+        var w = player.getWorld();
         w.spawnParticles(ParticleTypes.PORTAL, player.getX(), player.getY()+1, player.getZ(), 40, 0.4, 0.8, 0.4, 0.08);
         // player is removed from people's client to go invisible
         w.playSound(null, player.getBlockPos(), SoundEvents.ITEM_CHORUS_FRUIT_TELEPORT, player.getSoundCategory(), 1.0f, 1.2f);
@@ -244,7 +244,7 @@ public class TeleportPower implements Power {
     }
 
     private static void blinkForward(ServerPlayerEntity player, double maxDistance) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         Vec3d eye = player.getEyePos();
         Vec3d look = player.getRotationVec(1.0f);
@@ -364,7 +364,7 @@ public class TeleportPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        if (!(player.getWorld() instanceof ServerWorld world)) return;
+        ServerWorld world = player.getWorld();
 
         Entity target = getLookedAtEntity(player, SECONDARY_RANGE);
 
@@ -469,7 +469,7 @@ public class TeleportPower implements Power {
         state.frenzyTicks = ULTIMATE_DURATION_TICKS;
         state.frenzyStep = ULTIMATE_ATTACK_STEP_INITIAL;
 
-        player.getServerWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_SCREAM, player.getSoundCategory(), 0.8f, 1.4f);
+        player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_SCREAM, player.getSoundCategory(), 0.8f, 1.4f);
     }
 
     @Override
@@ -479,7 +479,7 @@ public class TeleportPower implements Power {
         state.frenzyTicks--;
         if (state.frenzyTicks <= 0) return;
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
         spawnFrenzyRadius(world, player, ULTIMATE_AURA_RADIUS);
         spawnFrenzyAura(world, player);
 
@@ -601,7 +601,7 @@ public class TeleportPower implements Power {
     // =========================
 
     private static void safeTeleport(ServerPlayerEntity player, double x, double y, double z) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         player.teleport(w, x, y, z, player.getYaw(), player.getPitch());
         player.fallDistance = 0;
     }

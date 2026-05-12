@@ -119,10 +119,10 @@ public class HealingPower implements Power {
             victim.damage(ModDamageTypes.absorb(victim.getWorld()), applied);
 
             float pitch = 0.8f + (intensity * 1.2f);
-            victim.getServerWorld().playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, pitch);
+            victim.getWorld().playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, pitch);
 
             int fxCount = 5 + (int)(intensity * 15);
-            victim.getServerWorld().spawnParticles(
+            victim.getWorld().spawnParticles(
                     ParticleTypes.TOTEM_OF_UNDYING,
                     victim.getX(), victim.getBodyY(0.5), victim.getZ(),
                     fxCount,
@@ -162,7 +162,7 @@ public class HealingPower implements Power {
 
             // Only emit particles if health is actually going up
             if (player.getHealth() < maxHeal) {
-                player.getServerWorld().spawnParticles(
+                player.getWorld().spawnParticles(
                         HEAL_DUST,
                         player.getX(),
                         player.getBodyY(0.5),
@@ -182,7 +182,7 @@ public class HealingPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         int removed = 0; // how many debuffs purged
 
@@ -260,7 +260,7 @@ public class HealingPower implements Power {
                 0.8f, 0.6f);
 
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE,
+                SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME,
                 player.getSoundCategory(),
                 0.6f, 1.2f);
 
@@ -348,7 +348,7 @@ public class HealingPower implements Power {
         if (state.absorbTicks <= 0) return;
 
         state.absorbTicks--;
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         float capped = Math.min(state.absorbStored, BURST_MAX_SCALING);
         float intensity = capped / BURST_MAX_SCALING; // 0.0 to 1.0 scaling
@@ -384,7 +384,7 @@ public class HealingPower implements Power {
     }
 
     private void releaseBurst(ServerPlayerEntity player, HealingState state) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         float stored = state.absorbStored;
         float capped = Math.min(stored, BURST_MAX_SCALING);
@@ -520,7 +520,7 @@ public class HealingPower implements Power {
     }
 
     private void applyAndCleanse(ServerPlayerEntity player, LivingEntity target) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         // fetch active effects safely
         java.util.List<StatusEffectInstance> effects =
@@ -672,7 +672,7 @@ public class HealingPower implements Power {
         if (state.ultTicks <= 0) return;
 
         state.ultTicks--;
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         // constant particles
         w.spawnParticles(

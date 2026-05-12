@@ -189,8 +189,7 @@ public class FirePower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        if (!(player.getWorld() instanceof ServerWorld world)) return;
-
+        ServerWorld world = player.getWorld();
         shootFireball(world, player, PRIMARY_SPEED, PRIMARY_DIRECT_DAMAGE, PRIMARY_EXPLOSION_POWER, PRIMARY_EXPLOSION_DAMAGE);
     }
 
@@ -240,7 +239,7 @@ public class FirePower implements Power {
         state.hoverTicks = SECONDARY_HOVER_TICKS;
 
         // snack time
-        if (player.getServerWorld().random.nextFloat() < COOK_FOOD_CHANCE) {
+        if (player.getWorld().random.nextFloat() < COOK_FOOD_CHANCE) {
             tryCookSnack(player);
         }
 
@@ -259,7 +258,7 @@ public class FirePower implements Power {
             if (cooked != null) {
                 stack.decrement(1);
                 player.getInventory().offerOrDrop(new ItemStack(cooked));
-                player.getServerWorld().playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.PLAYERS, 0.4f, 2.0f);
+                player.getWorld().playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.PLAYERS, 0.4f, 2.0f);
                 break; // only do one
             }
         }
@@ -280,7 +279,7 @@ public class FirePower implements Power {
 
     private void launchExplosion(ServerPlayerEntity player) {
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         DamageSource explosionSource = ModDamageTypes.firePower(world, player);
 
@@ -385,7 +384,7 @@ public class FirePower implements Power {
 
     private void spawnHoverParticles(ServerPlayerEntity player) {
 
-        var world = player.getServerWorld();
+        var world = player.getWorld();
 
         world.spawnParticles(
                 ParticleTypes.FLAME,
@@ -424,7 +423,7 @@ public class FirePower implements Power {
 
         CameraShake.shakeNearby(player, ULT_START_SHAKE_RADIUS, ULT_START_SHAKE_TIME, ULT_START_SHAKE_INTENSITY);
 
-        player.getServerWorld().playSound(
+        player.getWorld().playSound(
                 null,
                 player.getBlockPos(),
                 net.minecraft.sound.SoundEvents.ITEM_TOTEM_USE,
@@ -436,7 +435,7 @@ public class FirePower implements Power {
 
     private void tickUltimateCharge(ServerPlayerEntity player, FireState state) {
 
-        var world = player.getServerWorld();
+        var world = player.getWorld();
 
         state.ultChargeTicks--;
 
@@ -575,7 +574,7 @@ public class FirePower implements Power {
     }
 
     private void detonateUltimate(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         // Ensure the source attributes the player so death messages work
         DamageSource source = ModDamageTypes.fireExplosion(world, player);
@@ -602,7 +601,7 @@ public class FirePower implements Power {
     }
 
     private void applyLOSExplosionDamage(ServerPlayerEntity sourcePlayer, float radius, float maxDamage) {
-        ServerWorld world = sourcePlayer.getServerWorld();
+        ServerWorld world = sourcePlayer.getWorld();
         Vec3d origin = sourcePlayer.getPos();
         Box area = new Box(origin, origin).expand(radius);
 

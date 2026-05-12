@@ -340,13 +340,13 @@ public class PowerCommand {
             return 0;
         }
 
-        src.sendFeedback(() -> Text.literal("§6--- Online Players ---"), false);
+        src.sendFeedback(Text.literal("§6--- Online Players ---"), false);
         for (ServerPlayerEntity p : players) {
             Power power = PowerManager.getPower(p);
             int level = PowerManager.getLevel(p);
             String pName = power != null ? "§a" + power.getName() : "§7NONE";
 
-            src.sendFeedback(() -> Text.literal("§b" + p.getName().getString() + " §f- " + pName + " §8(Lv." + level + ")"), false);
+            src.sendFeedback(Text.literal("§b" + p.getName().getString() + " §f- " + pName + " §8(Lv." + level + ")"), false);
         }
 
         return 1;
@@ -376,7 +376,7 @@ public class PowerCommand {
             p.sendMessage(Text.literal("§dYour power has been shuffled,"), false);
         }
 
-        src.sendFeedback(() -> Text.literal("Shuffled powers for " + targets.size() + " player(s)."), true);
+        src.sendFeedback(Text.literal("Shuffled powers for " + targets.size() + " player(s)."), true);
         return 1;
     }
 
@@ -417,7 +417,7 @@ public class PowerCommand {
                 PowerManager.assignRandomPower(p);
                 p.sendMessage(Text.literal("§bPower set to §eRANDOM"), false);
             }
-            src.sendFeedback(() -> Text.literal("Assigned RANDOM power to " + targets.size() + " player(s)."), false);
+            src.sendFeedback(Text.literal("Assigned RANDOM power to " + targets.size() + " player(s)."), false);
             return;
         }
 
@@ -432,7 +432,7 @@ public class PowerCommand {
             p.sendMessage(Text.literal("§bPower set to §a" + powerName.toUpperCase(Locale.ROOT)), false);
         }
 
-        src.sendFeedback(() -> Text.literal("Set power '" + powerName + "' for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Set power '" + powerName + "' for " + targets.size() + " player(s)."), false);
     }
 
     // ============================================================
@@ -543,7 +543,7 @@ public class PowerCommand {
                 }
             }
 
-            src.sendFeedback(() -> Text.literal(sb.toString()), false);
+            src.sendFeedback(Text.literal(sb.toString()), false);
         }
     }
 
@@ -586,7 +586,7 @@ public class PowerCommand {
             p.sendMessage(Text.literal("§cPower removed."), false);
         }
 
-        src.sendFeedback(() -> Text.literal("Removed power from " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Removed power from " + targets.size() + " player(s)."), false);
     }
 
     // ============================================================
@@ -628,7 +628,7 @@ public class PowerCommand {
             p.sendMessage(Text.literal("§cAll power data cleared."), false);
         }
 
-        src.sendFeedback(() -> Text.literal("Cleared all power data for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Cleared all power data for " + targets.size() + " player(s)."), false);
     }
 
     // ============================================================
@@ -669,7 +669,7 @@ public class PowerCommand {
             p.sendMessage(Text.literal("§bYour power level was set to §e" + level + "§b."), false);
         }
 
-        src.sendFeedback(() -> Text.literal("Set level " + level + " for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Set level " + level + " for " + targets.size() + " player(s)."), false);
     }
 
     // ============================================================
@@ -714,7 +714,7 @@ public class PowerCommand {
         }
 
         int finalChanged = changed;
-        src.sendFeedback(() -> Text.literal("Levelled up " + finalChanged + " player(s)."), false);
+        src.sendFeedback(Text.literal("Levelled up " + finalChanged + " player(s)."), false);
     }
 
     // ============================================================
@@ -760,8 +760,8 @@ public class PowerCommand {
      * Sends a help message for a given power and section type.
      *
      * playerLevel controls lock display in "overview":
-     *   0         → no player context; shows generic "Lv.X required" notes
-     *   1 / 2 / 3 → player's actual level; shows LOCKED on abilities they can't yet use
+     * 0         → no player context; shows generic "Lv.X required" notes
+     * 1 / 2 / 3 → player's actual level; shows LOCKED on abilities they can't yet use
      */
     private static void sendHelp(ServerCommandSource src, String type, Power power, int playerLevel) {
         Text msg;
@@ -811,7 +811,7 @@ public class PowerCommand {
             }
         }
 
-        src.sendFeedback(() -> msg, false);
+        src.sendFeedback(msg, false);
     }
 
     /**
@@ -865,7 +865,7 @@ public class PowerCommand {
             }
         }
         int finalCount = count;
-        src.sendFeedback(() -> Text.literal("Reset power state for " + finalCount + " player(s)."), true);
+        src.sendFeedback(Text.literal("Reset power state for " + finalCount + " player(s)."), true);
     }
 
     // ---------- Debug: forcecooldowns ----------
@@ -895,7 +895,7 @@ public class PowerCommand {
                 p.sendMessage(Text.literal("§eAll abilities forced on cooldown for " + seconds + "s."), false);
             }
         }
-        src.sendFeedback(() -> Text.literal("Forced all abilities on cooldown for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Forced all abilities on cooldown for " + targets.size() + " player(s)."), false);
     }
 
     // ---------- Debug: forcecooldown ----------
@@ -923,7 +923,7 @@ public class PowerCommand {
                 p.sendMessage(Text.literal("§e" + type.name() + " forced on cooldown for " + seconds + "s."), false);
             }
         }
-        src.sendFeedback(() -> Text.literal("Forced " + type.name() + " cooldown for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Forced " + type.name() + " cooldown for " + targets.size() + " player(s)."), false);
     }
 
     // ---------- Debug: cooldownmultiplier ----------
@@ -947,7 +947,7 @@ public class PowerCommand {
             PowerManager.setPlayerCooldownMultiplier(p, mult);
             p.sendMessage(Text.literal("§aYour cooldown multiplier was set to " + mult + "x."), false);
         }
-        src.sendFeedback(() -> Text.literal("Set cooldown multiplier to " + mult + "x for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Set cooldown multiplier to " + mult + "x for " + targets.size() + " player(s)."), false);
     }
 
     private static int debugClearAllCooldownsSelf(CommandContext<ServerCommandSource> ctx) {
@@ -974,7 +974,7 @@ public class PowerCommand {
             PowerManager.clearAllCooldowns(p);
             p.sendMessage(Text.literal("§aAll cooldowns cleared."), false);
         }
-        src.sendFeedback(() -> Text.literal("Cleared ALL cooldowns for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Cleared ALL cooldowns for " + targets.size() + " player(s)."), false);
     }
 
     private static int debugClearAbilityCooldownsSelf(CommandContext<ServerCommandSource> ctx, AbilityTypes typeOrNullAll) {
@@ -1022,7 +1022,7 @@ public class PowerCommand {
         }
 
         int finalChanged = changed;
-        src.sendFeedback(() -> Text.literal("Cleared ability cooldowns for " + finalChanged + " player(s)."), false);
+        src.sendFeedback(Text.literal("Cleared ability cooldowns for " + finalChanged + " player(s)."), false);
     }
 
     // ---------- Debug: save / reload ----------
@@ -1052,7 +1052,7 @@ public class PowerCommand {
             PlayerDataStore.save(p);
             p.sendMessage(Text.literal("§aPower data saved to disc."), false);
         }
-        src.sendFeedback(() -> Text.literal("Saved data for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Saved data for " + targets.size() + " player(s)."), false);
     }
 
     private static int debugReloadSelf(CommandContext<ServerCommandSource> ctx) {
@@ -1081,7 +1081,7 @@ public class PowerCommand {
             PlayerDataStore.load(p);
             p.sendMessage(Text.literal("§aPower data reloaded from disk."), false);
         }
-        src.sendFeedback(() -> Text.literal("Reloaded data for " + targets.size() + " player(s)."), false);
+        src.sendFeedback(Text.literal("Reloaded data for " + targets.size() + " player(s)."), false);
     }
 
     // ---------- Debug: toggle cooldowns ----------
@@ -1094,7 +1094,7 @@ public class PowerCommand {
         PowerManager.setCooldownsDisabled(cooldownsCurrentlyDisabled);
 
         String state = cooldownsCurrentlyDisabled ? "§cDISABLED" : "§aENABLED";
-        ctx.getSource().sendFeedback(() -> Text.literal("Cooldown system is now " + state + "§f."), true);
+        ctx.getSource().sendFeedback(Text.literal("Cooldown system is now " + state + "§f."), true);
         return 1;
     }
 
@@ -1103,7 +1103,7 @@ public class PowerCommand {
     private static int debugToggleOnePunch(CommandContext<ServerCommandSource> ctx) {
         StrengthPower.onePunchDebugEnabled = !StrengthPower.onePunchDebugEnabled;
         String state = StrengthPower.onePunchDebugEnabled ? "§aENABLED" : "§cDISABLED";
-        ctx.getSource().sendFeedback(() -> Text.literal("One Punch mode is now " + state + "§f."), true);
+        ctx.getSource().sendFeedback(Text.literal("One Punch mode is now " + state + "§f."), true);
         return 1;
     }
 

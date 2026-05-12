@@ -72,7 +72,7 @@ public class DarknessPower implements Power {
     @Override
     public void onTick(ServerPlayerEntity player) {
         handleMistForm(player);
-        tickBlackoutsWorld(player.getServerWorld());
+        tickBlackoutsWorld(player.getWorld());
     }
 
     /* ============================================================
@@ -97,7 +97,7 @@ public class DarknessPower implements Power {
         boolean didBackstab = false;
         boolean didExposed = false;
         DamageSource finalSource = source;
-        ServerWorld w = attacker.getServerWorld();
+        ServerWorld w = attacker.getWorld();
 
         // Backstab logic
         if (isBehindTarget(attacker, target)) {
@@ -200,7 +200,7 @@ public class DarknessPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         ShadowStepEntity proj = new ShadowStepEntity(SHADOW_STEP, w);
         proj.setOwner(player);
@@ -233,7 +233,7 @@ public class DarknessPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         RenderPackets.hidePlayerFromOthers(player, MIST_DURATION);
 
@@ -265,7 +265,7 @@ public class DarknessPower implements Power {
         spawnMistTrail(player);
 
         if (ticks % 18 == 0) {
-            player.getServerWorld().playSound(
+            player.getWorld().playSound(
                     null,
                     player.getBlockPos(),
                     com.yourname.loopypowers.sound.ModSounds.MISTLOOP,
@@ -299,7 +299,7 @@ public class DarknessPower implements Power {
             new DustParticleEffect(new Vec3d(0.05, 0.05, 0.05).toVector3f(), 1.4f);
 
     private static void spawnMistTrail(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         w.spawnParticles(
                 DARK_DUST,
@@ -358,7 +358,7 @@ public class DarknessPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         removeBlackoutNow(player.getServer(), player.getUuid());
 

@@ -258,7 +258,7 @@ public class PsychicPower implements Power {
                 && !state.spiked.containsKey(tid)
                 && !state.possessed.containsKey(tid)) return;
 
-        ServerWorld world = attacker.getServerWorld();
+        ServerWorld world = attacker.getWorld();
 
         attacker.heal(LEECH_HEAL);
         spawnLeechParticles(world, attacker, target);
@@ -298,7 +298,7 @@ public class PsychicPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         CompelEntity proj = new CompelEntity(ModEntities.COMPEL_ENTITY, world);
         proj.setOwner(player);
@@ -342,7 +342,7 @@ public class PsychicPower implements Power {
     private static void tickCompel(ServerPlayerEntity player, PsychicState state) {
         // DEBUG: test control by compelling the caster itself towards the nearest entity
         if (player.getCommandTags().contains("psy_debug")) {
-            ServerWorld w = player.getServerWorld();
+            ServerWorld w = player.getWorld();
             LivingEntity nearest = w.getClosestEntity(
                     LivingEntity.class,
                     net.minecraft.entity.ai.TargetPredicate.DEFAULT,
@@ -411,7 +411,7 @@ public class PsychicPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         Vec3d origin = player.getEyePos();
         Vec3d look   = player.getRotationVec(1.0f);
@@ -483,7 +483,7 @@ public class PsychicPower implements Power {
     private static void tickSpike(ServerPlayerEntity player, PsychicState state) {
         if (state.spiked.isEmpty()) return;
 
-        long time = player.getServerWorld().getTime();
+        long time = player.getWorld().getTime();
 
         Iterator<SpikedEntry> it = state.spiked.values().iterator();
         while (it.hasNext()) {
@@ -529,7 +529,7 @@ public class PsychicPower implements Power {
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         PuppetryEntity proj = new PuppetryEntity(ModEntities.PUPPETRY_ENTITY, world);
         proj.setOwner(player);
@@ -577,7 +577,7 @@ public class PsychicPower implements Power {
     private static void tickUltimate(ServerPlayerEntity player, PsychicState state) {
         if (state.possessed.isEmpty()) return;
 
-        ServerWorld playerWorld = player.getServerWorld();
+        ServerWorld playerWorld = player.getWorld();
 
         Iterator<PossessedEntry> it = state.possessed.values().iterator();
         while (it.hasNext()) {

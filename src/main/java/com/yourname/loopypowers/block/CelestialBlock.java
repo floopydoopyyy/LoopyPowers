@@ -8,6 +8,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.random.Random;
@@ -45,7 +46,7 @@ public class CelestialBlock extends Block {
 
     private void spawnCooldownParticles(ServerPlayerEntity player) {
 
-        var world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getWorld();
 
         // throttle (BIG difference)
         if (player.age % 3 != 0) return;

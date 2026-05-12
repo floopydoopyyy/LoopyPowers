@@ -124,8 +124,8 @@ public class IcePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
-        tickFrozenWorld(player.getServerWorld());
-        tickSpikesWorld(player.getServerWorld());
+        tickFrozenWorld(player.getWorld());
+        tickSpikesWorld(player.getWorld());
         tickBeam(player);
         tickUltimate(player);
     }
@@ -210,7 +210,7 @@ public class IcePower implements Power {
         // Force a UI update immediately when hit
         syncFreezeTimer(target, state);
 
-        ServerWorld w = caster.getServerWorld();
+        ServerWorld w = caster.getWorld();
         spawnFreezeStageParticles(w, target, getFreezeStage(state.freezePoints));
     }
 
@@ -220,7 +220,7 @@ public class IcePower implements Power {
 
         if (state.freezePoints < FRZ_STAGE_5) return false; // only when fully frozen
 
-        ServerWorld w = caster.getServerWorld();
+        ServerWorld w = caster.getWorld();
 
         // Bonus damage
         target.damage(ModDamageTypes.iceShatter(w, caster), SHATTER_BONUS_DAMAGE);
@@ -260,7 +260,7 @@ public class IcePower implements Power {
         w.spawnParticles(FRZ_SHIMMER_DUST, p.x, p.y, p.z, 16, 0.22, 0.18, 0.22, 0.00);
 
         w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_GLASS_BREAK, SoundCategory.PLAYERS, 0.9f, 1.15f);
-        w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE, SoundCategory.PLAYERS, 0.9f, 1.55f);
+        w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, SoundCategory.PLAYERS, 0.9f, 1.55f);
     }
 
     private static void clearFreeze(LivingEntity e) {
@@ -514,7 +514,7 @@ public class IcePower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         Vec3d look = player.getRotationVec(1.0f);
 
@@ -958,7 +958,7 @@ public class IcePower implements Power {
 
         state.beamChargeTicks = BEAM_CHARGE_TICKS;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.playSound(null, player.getBlockPos(),
                 ModSounds.ICEBEAMCHARGE,
                 player.getSoundCategory(),
@@ -968,7 +968,7 @@ public class IcePower implements Power {
     }
 
     private static void tickBeam(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         IceCasterState state = getCasterState(player);
 
         // CHARGING
@@ -1350,9 +1350,9 @@ public class IcePower implements Power {
         state.ultActiveTicks = ULT_DURATION_TICKS;
         state.ultPulseTicks = 1;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE,
+                SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME,
                 player.getSoundCategory(),
                 0.9f, 0.75f);
         playBlizzardLoop(w, player);
@@ -1365,7 +1365,7 @@ public class IcePower implements Power {
         if (state.ultActiveTicks <= 0) return;
         state.ultActiveTicks--;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         // 1. Blizzard Global Effects
         spawnBlizzard(w, player);

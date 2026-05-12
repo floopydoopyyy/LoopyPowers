@@ -190,7 +190,7 @@ public class FlightPower implements Power {
         state.soundStep = 0;
 
         // particles
-        ServerWorld w = victim.getServerWorld();
+        ServerWorld w = victim.getWorld();
         w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
                 8, 0.35, 0.35, 0.35, 0.02);
         w.playSound(null, victim.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
@@ -229,7 +229,7 @@ public class FlightPower implements Power {
         if (player.isFallFlying() && !player.getCommandTags().contains("fl_hecanfly_done")) {
             // % chance to play when used
             if (RNG.nextFloat() < 0.25f) {
-                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
+                player.getWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
                 // mark em
                 player.getCommandTags().add("fl_hecanfly_done");
             }
@@ -258,7 +258,7 @@ public class FlightPower implements Power {
 
         getState(player).gustEmpowermentTicks = GUST_EMPOWERMENT_DURATION;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.spawnParticles(ParticleTypes.EXPLOSION,
                 player.getX(), player.getY() + 0.8, player.getZ(),
                 12, 0.25, 0.15, 0.25, 0.02
@@ -295,7 +295,7 @@ public class FlightPower implements Power {
         player.velocityModified = true;
 
         if (state.gustEmpowermentTicks % 3 == 0) {
-            player.getServerWorld().spawnParticles(
+            player.getWorld().spawnParticles(
                     ParticleTypes.FIREWORK,
                     player.getX(), player.getY() + 0.6, player.getZ(),
                     2, 0.10, 0.06, 0.10, 0.005
@@ -316,7 +316,7 @@ public class FlightPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.spawnParticles(
                 ParticleTypes.EXPLOSION,
                 player.getX(), player.getY() + 0.3, player.getZ(),
@@ -374,7 +374,7 @@ public class FlightPower implements Power {
         player.velocityModified = true;
         player.fallDistance = 0;
 
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
         w.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_SONIC_CHARGE,
                 player.getSoundCategory(), 1.5f, 1.0f);
@@ -387,7 +387,7 @@ public class FlightPower implements Power {
     private void tickSonicBoomUltimate(ServerPlayerEntity player, FlightState state) {
         if (player.isCreative() || player.isSpectator()) return;
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getWorld();
 
         // windup
         if (state.boomWindup > 0) {
@@ -519,7 +519,7 @@ public class FlightPower implements Power {
     }
 
     private void tickFlightFx(ServerPlayerEntity player, FlightState state) {
-        ServerWorld w = player.getServerWorld();
+        ServerWorld w = player.getWorld();
 
         state.trailStep--;
         if (state.trailStep <= 0) {
