@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"id": "loopypowers",
-	"version": "${version}",
+	"version": "1.0.1",
 	"name": "loopypowers",
 	"description": "This mod adds survival based super powers to the game.",
 	"authors": [
