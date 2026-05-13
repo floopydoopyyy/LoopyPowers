@@ -8,9 +8,11 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries; // Added for 1.21.1
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
@@ -107,6 +109,7 @@ public class BloodPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         tickBleed(player);
         tickBind(player);
     }
@@ -145,7 +148,8 @@ public class BloodPower implements Power {
             return true;
         }
 
-        target.addStatusEffect(new StatusEffectInstance(ModEffects.BLEED, BLEED_DURATION_TICKS, 0, true, false));
+        // wrap effect in registry entry
+        target.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.BLEED), BLEED_DURATION_TICKS, 0, true, false));
 
         float totalBleed = amount * BLEED_FRACTION;
         int intervals = Math.max(1, BLEED_DURATION_TICKS / BLEED_TICK_INTERVAL);
@@ -153,11 +157,8 @@ public class BloodPower implements Power {
 
         UUID id = target.getUuid();
 
-        BleedInstance b = ACTIVE_BLEEDS.get(id);
-        if (b == null) {
-            b = new BleedInstance();
-            ACTIVE_BLEEDS.put(id, b);
-        }
+        // use compute if absent so it's clean
+        BleedInstance b = ACTIVE_BLEEDS.computeIfAbsent(id, k -> new BleedInstance());
 
         b.attackerUuid = attacker.getUuid();
         b.ticksLeft = BLEED_DURATION_TICKS;
@@ -423,11 +424,8 @@ public class BloodPower implements Power {
 
         UUID id = target.getUuid();
 
-        BleedInstance b = ACTIVE_BLEEDS.get(id);
-        if (b == null) {
-            b = new BleedInstance();
-            ACTIVE_BLEEDS.put(id, b);
-        }
+        // use compute if absent so it's clean
+        BleedInstance b = ACTIVE_BLEEDS.computeIfAbsent(id, k -> new BleedInstance());
 
         b.attackerUuid = (attacker instanceof ServerPlayerEntity sp) ? sp.getUuid() : null;
         b.ticksLeft = durationTicks;
@@ -435,7 +433,8 @@ public class BloodPower implements Power {
         b.perTickDmg = perTick;
         b.totalDmgLeft = totalBleed;
 
-        target.addStatusEffect(new StatusEffectInstance(ModEffects.BLEED, durationTicks, 0, true, false));
+        // wrap effect in registry entry
+        target.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.BLEED), durationTicks, 0, true, false));
 
         if (attacker.getWorld() instanceof ServerWorld w) {
             w.spawnParticles(ParticleTypes.DAMAGE_INDICATOR,
@@ -448,10 +447,14 @@ public class BloodPower implements Power {
     }
 
     public static void popBleed(LivingEntity target, ServerPlayerEntity attacker) {
+        // null check so ide shuts up
+        if (target == null) return;
+
         UUID id = target.getUuid();
         BleedInstance b = ACTIVE_BLEEDS.remove(id);
 
-        target.removeStatusEffect(ModEffects.BLEED);
+        // wrap effect in registry entry
+        target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.BLEED));
 
         if (b == null || b.totalDmgLeft <= 0) return;
 
@@ -737,11 +740,12 @@ public class BloodPower implements Power {
     }
 
     private static void startBind(ServerPlayerEntity caster, LivingEntity target) {
-        BindInstance b = ACTIVE_BINDS.get(caster.getUuid());
-        if (b == null) {
-            b = new BindInstance();
-            ACTIVE_BINDS.put(caster.getUuid(), b);
-        }
+        // null check so ide shuts up
+        if (caster == null || target == null) return;
+
+        // use compute if absent so it's clean
+        BindInstance b = ACTIVE_BINDS.computeIfAbsent(caster.getUuid(), k -> new BindInstance());
+
         b.targetUuid = target.getUuid();
         b.ticksLeft = BIND_DURATION_TICKS;
     }
@@ -779,7 +783,8 @@ public class BloodPower implements Power {
     }
 
     private void spawnTetherParticles(ServerWorld w, LivingEntity a, LivingEntity b) {
-        b.addStatusEffect(new StatusEffectInstance(ModEffects.BLOODBOUND, 5, 0, true, false));
+        // wrap effect in registry entry
+        b.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.BLOODBOUND), 5, 0, true, false));
 
         Vec3d start = a.getPos().add(0, a.getHeight() * 0.6, 0);
         Vec3d end   = b.getPos().add(0, b.getHeight() * 0.6, 0);
@@ -911,42 +916,40 @@ public class BloodPower implements Power {
        DISPLAY
        ============================================================ */
 
-    @Override public String getName() { return "Blood"; }
-    @Override public String getPrimaryName() { return "Hemochord"; }
-    @Override public String getSecondaryName() { return "Coagulate"; }
-    @Override public String getUltimateName() { return "Blood Pact"; }
+    // string translations are tricky but doable
+    @Override public String getName() { return Text.translatable("power.loopypowers.blood.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.blood.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.blood.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.blood.ultimate_name").getString(); }
 
     @Override
     public String getOverviewDescription() {
-        return "Blood is a power that revolves around 1v1s, able to keep people in fights and deal high damage quickly to single targets, but may struggle against groups." +
-                " It is intended to be a more simplistic power that expands upon your close-combat ability.";
+        // json handles the line skips with \n
+        return Text.translatable("power.loopypowers.blood.description.overview").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Sanguine Siphon";
+        return Text.translatable("power.loopypowers.blood.passive_name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "Your melee damage also inflicts a bleed that does additional damage over time, which is based on the damage dealt, meaning stronger weapons result in more bleed. Any bleed damage dealt heals you.";
+        return Text.translatable("power.loopypowers.blood.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Damage yourself to cast a fast-moving whip that embeds into a target, bleeding them and pulling them to you.";
+        return Text.translatable("power.loopypowers.blood.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Shoot a slow moving projectile that can hit a single target, the projectile has two effects dependiing on if the target is bleeding or not:\n" +
-                "Target is not bleeding - Apply slowness, weakness and bleed.\n" +
-                "Target is bleeding - Pop the bleed, multiplying the remaining damage and applying it instantly, this is a burst tool.";
+        return Text.translatable("power.loopypowers.blood.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Shoot out a blood chain. If it hits a target they will now be bound to you. When bound they will take some of the damage you take instead of you. Going too far from each other will break the pact." +
-                "Constant environmental damage is capped (so there will be a point where lava damage stops being applied)";
+        return Text.translatable("power.loopypowers.blood.description.ultimate").getString();
     }
 }

@@ -11,9 +11,11 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.*;
 import net.minecraft.entity.EntityType;
@@ -254,7 +256,7 @@ public class LightningPower implements Power {
 
         // Stun
         if (tier >= 3) {
-            target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, STUN_TICKS, STUN_AMP, true, true));
+            target.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.STUN), STUN_TICKS, STUN_AMP, true, true));
         }
         // chain stuff
         if (tier >= 4) {
@@ -881,41 +883,40 @@ public class LightningPower implements Power {
        DISPLAY
        ============================================================ */
 
-    @Override public String getName()          { return "Lightning"; }
-    @Override public String getPrimaryName()   { return "Thunderclap"; }
-    @Override public String getSecondaryName() { return "Overcharge"; }
-    @Override public String getUltimateName()  { return "Stormcaller"; }
+    @Override public String getName()          { return Text.translatable("power.loopypowers.lightning.name").getString(); }
+    @Override public String getPrimaryName()   { return Text.translatable("power.loopypowers.lightning.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.lightning.secondary_name").getString(); }
+    @Override public String getUltimateName()  { return Text.translatable("power.loopypowers.lightning.ultimate_name").getString(); }
 
-    @Override public long getSecondaryCooldownMs() { return 8_000; } //
-    @Override public long getUltimateCooldownMs()  { return 32_000; } //
-    @Override public long getPrimaryCooldownMs()   { return 365_000;  } //
+    @Override public long getPrimaryCooldownMs()   { return 8_000;  } //
+    @Override public long getSecondaryCooldownMs() { return 32_000; } //
+    @Override public long getUltimateCooldownMs()  { return 450_000; } //
+
 
     @Override
     public String getOverviewDescription() {
-        return "Lightning is intended to be a close range brawler that can do high amounts of damage to groups of enemies quickly, but very little at range. " +
-                "It should also be said that lightning damage produced is edited (so it doesn't do the normal half a heart that normal lightning does)";
+        return Text.translatable("power.loopypowers.lightning.description.overview").getString();
     }
 
-    @Override public String getPassiveName() { return "Static Charge"; }
+    @Override public String getPassiveName() { return Text.translatable("power.loopypowers.lightning.passive_name").getString(); }
 
     @Override
     public String getPassiveDescription() {
-        return "Your fist charges up with bonus damage over time. Increased charge can cause lightning to strike the target or chain lightning and ignition to nearby enemies at higher charges.";
+        return Text.translatable("power.loopypowers.lightning.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Create a directional blast of sparks in front of you that damages and ignites entities in a wide cone. Damage falls off with distance.";
+        return Text.translatable("power.loopypowers.lightning.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Empower yourself with lightning, giving yourself temporary regeneration, strength and speed. This emits particles while active.";
+        return Text.translatable("power.loopypowers.lightning.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Create a storm above you, striking random nearby entities with lightning, igniting them and dealing high damage. The cloud" +
-                " particles indicate the range of the ultimate.";
+        return Text.translatable("power.loopypowers.lightning.description.ultimate").getString();
     }
 }

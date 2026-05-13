@@ -14,7 +14,7 @@ public class BleedEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) { // CHANGED void to boolean
         // only blood fx
         if (!entity.getWorld().isClient() && entity.getWorld().getTime() % 10 == 0) {
             ServerWorld sw = (ServerWorld) entity.getWorld();
@@ -22,6 +22,7 @@ public class BleedEffect extends StatusEffect {
                     entity.getX(), entity.getBodyY(0.5), entity.getZ(),
                     1, 0.2, 0.4, 0.2, 0.01);
         }
+        return true; // ADDED
     }
 
     @Override

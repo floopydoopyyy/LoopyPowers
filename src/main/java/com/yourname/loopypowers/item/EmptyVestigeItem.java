@@ -1,12 +1,11 @@
 package com.yourname.loopypowers.item;
 
-import net.minecraft.client.item.TooltipContext;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.minecraft.world.World;
-import org.jetbrains.annotations.Nullable;
+
 import java.util.List;
 
 public class EmptyVestigeItem extends Item {
@@ -16,11 +15,14 @@ public class EmptyVestigeItem extends Item {
     }
 
     @Override
-    public void appendTooltip(ItemStack stack, @Nullable World world,
-                              List<Text> tooltip, TooltipContext context) {
-
-        tooltip.add(Text.literal("Built to hold something powerful.")
+    public void appendTooltip(ItemStack stack, Item.TooltipContext context, List<Text> tooltip, TooltipType type) {
+        // Gray = flavour text
+        tooltip.add(Text.translatable("item.loopypowers.empty_vestige.tooltip.flavor")
                 .formatted(Formatting.GRAY));
-        super.appendTooltip(stack, world, tooltip, context);
+        // Purple = useful info
+        tooltip.add(Text.translatable("item.loopypowers.empty_vestige.tooltip.info")
+                .formatted(Formatting.LIGHT_PURPLE));
+
+        super.appendTooltip(stack, context, tooltip, type);
     }
 }

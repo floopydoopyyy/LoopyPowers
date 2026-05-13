@@ -6,10 +6,8 @@ import com.yourname.loopypowers.entity.ModEntities;
 import com.yourname.loopypowers.entity.PuppetryEntity;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
-import com.yourname.loopypowers.network.AbilityPackets;
+import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.sound.ModSounds;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -20,11 +18,13 @@ import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
 import net.minecraft.network.packet.s2c.play.PositionFlag;
 import net.minecraft.particle.DustParticleEffect;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
@@ -204,14 +204,14 @@ public class PsychicPower implements Power {
         // OPTIMIZATION: Release controlled entities via exact UUID lookup instead of
         // the old broad entity scan across ALL entities in ALL worlds (150-block radius).
         MinecraftServer server = player.getServer();
-        cleanupEntries(server, state.compelled.values(),  le -> le.removeStatusEffect(ModEffects.COMPELLED));
+        cleanupEntries(server, state.compelled.values(),  le -> le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.COMPELLED)));
         cleanupEntries(server, state.spiked.values(),     le -> {
-            le.removeStatusEffect(ModEffects.STUN);
+            le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.STUN));
             le.removeStatusEffect(StatusEffects.SLOWNESS);
             le.removeStatusEffect(StatusEffects.MINING_FATIGUE);
         });
         cleanupEntries(server, state.possessed.values(),  le -> {
-            le.removeStatusEffect(ModEffects.POSSESSED);
+            le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.POSSESSED));
             le.removeStatusEffect(StatusEffects.MINING_FATIGUE);
         });
     }
@@ -235,6 +235,8 @@ public class PsychicPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         PsychicState state = getState(player);
 
         // Tick the leech internal cooldown (replaces tickTag on player)
@@ -326,7 +328,7 @@ public class PsychicPower implements Power {
                 new CompelEntry(target.getUuid(), target.getWorld().getRegistryKey()));
 
         target.addStatusEffect(new StatusEffectInstance(
-                ModEffects.COMPELLED, COMPEL_DURATION, 0, false, false, true));
+                Registries.STATUS_EFFECT.getEntry(ModEffects.COMPELLED), COMPEL_DURATION, 0, false, false, true));
 
         // Easter egg: compelled player says something stupid in chat
         if (target instanceof ServerPlayerEntity player && player.getServer() != null) {
@@ -373,7 +375,7 @@ public class PsychicPower implements Power {
 
             entry.ticksLeft--;
             if (entry.ticksLeft <= 0) {
-                le.removeStatusEffect(ModEffects.COMPELLED);
+                le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.COMPELLED));
                 it.remove();
                 continue;
             }
@@ -469,7 +471,7 @@ public class PsychicPower implements Power {
                 new SpikedEntry(target.getUuid(), target.getWorld().getRegistryKey()));
 
         target.addStatusEffect(new StatusEffectInstance(
-                ModEffects.STUN, SPIKE_STUN_DURATION, SPIKE_STUN_AMPLIFIER, false, false, true));
+                Registries.STATUS_EFFECT.getEntry(ModEffects.STUN), SPIKE_STUN_DURATION, SPIKE_STUN_AMPLIFIER, false, false, true));
         target.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, SPIKE_STUN_DURATION + SPIKE_SLOW_DURATION, SPIKE_SLOW_AMPLIFIER, false, false, true));
         target.addStatusEffect(new StatusEffectInstance(
@@ -507,10 +509,7 @@ public class PsychicPower implements Power {
     }
 
     public static void shake(ServerPlayerEntity target, int ticks, float strength) {
-        var buf = PacketByteBufs.create();
-        buf.writeInt(ticks);
-        buf.writeFloat(strength);
-        ServerPlayNetworking.send(target, AbilityPackets.CAMERA_SHAKE, buf);
+        CameraShake.shakeNearby(target, 10.0, ticks, strength);
     }
 
     private static void spawnSpikeImpactParticles(ServerWorld world, LivingEntity entity) {
@@ -553,7 +552,7 @@ public class PsychicPower implements Power {
     /**
      * Called by PuppetryEntity when it hits a target.
      * NOTE: PuppetryEntity must be updated to pass the caster as the first argument:
-     *   PsychicPower.applyUltimateControl((ServerPlayerEntity) getOwner(), target)
+     * PsychicPower.applyUltimateControl((ServerPlayerEntity) getOwner(), target)
      */
     public static void applyUltimateControl(ServerPlayerEntity caster, LivingEntity target) {
         PsychicState state = getState(caster);
@@ -562,7 +561,7 @@ public class PsychicPower implements Power {
                 new PossessedEntry(target.getUuid(), target.getWorld().getRegistryKey()));
 
         target.addStatusEffect(new StatusEffectInstance(
-                ModEffects.POSSESSED, ULT_CONTROL_DURATION, 0, false, false, true));
+                Registries.STATUS_EFFECT.getEntry(ModEffects.POSSESSED), ULT_CONTROL_DURATION, 0, false, false, true));
 
         if (target.getWorld() instanceof ServerWorld world) {
             world.playSound(null, target.getBlockPos(),
@@ -590,7 +589,7 @@ public class PsychicPower implements Power {
 
             entry.ticksLeft--;
             if (entry.ticksLeft <= 0) {
-                le.removeStatusEffect(ModEffects.POSSESSED);
+                le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.POSSESSED));
                 it.remove();
                 continue;
             }
@@ -632,14 +631,14 @@ public class PsychicPower implements Power {
         if (entry.attackCd > 0) {
             entry.attackCd--;
             // Still face nearest target even while on cooldown
-            LivingEntity target = findNearestTarget(world, entity, 3.0);
+            LivingEntity target = findNearestTarget(world, entity);
             if (target != null && entity.canSee(target)) {
                 forceLook(entity, target.getEyePos().subtract(entity.getEyePos()).normalize(), ULT_LOOK_STRENGTH);
             }
             return;
         }
 
-        LivingEntity target = findNearestTarget(world, entity, 3.0);
+        LivingEntity target = findNearestTarget(world, entity);
         if (target == null || !entity.canSee(target)) return;
 
         forceLook(entity, target.getEyePos().subtract(entity.getEyePos()).normalize(), ULT_LOOK_STRENGTH);
@@ -653,13 +652,13 @@ public class PsychicPower implements Power {
         }
     }
 
-    private static LivingEntity findNearestTarget(ServerWorld world, LivingEntity attacker, double range) {
+    private static LivingEntity findNearestTarget(ServerWorld world, LivingEntity attacker) {
         LivingEntity closest      = null;
-        double       closestDistSq = range * range;
+        double       closestDistSq = 3.0 * 3.0;
 
         for (LivingEntity e : world.getEntitiesByClass(
                 LivingEntity.class,
-                attacker.getBoundingBox().expand(range),
+                attacker.getBoundingBox().expand(3.0),
                 en -> en.isAlive() && en != attacker && attacker.canSee(en))) {
 
             double dist = attacker.squaredDistanceTo(e);
@@ -817,11 +816,10 @@ public class PsychicPower implements Power {
        META
        ============================================================ */
 
-    @Override public String getName()          { return "Psychic"; }
-    @Override public String getPassiveName()   { return "Mind Sap"; }
-    @Override public String getPrimaryName()   { return "Compel"; }
-    @Override public String getSecondaryName() { return "Spike"; }
-    @Override public String getUltimateName()  { return "Puppetry"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.psychic.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.psychic.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.psychic.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.psychic.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs()   { return 14_000; }
     @Override public long getSecondaryCooldownMs() { return 29_000; }
@@ -829,36 +827,31 @@ public class PsychicPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Psychic is a control-focused power that disrupts enemy movement and actions rather than dealing high damage." +
-                " Your abilities revolve around stunning and taking away player's movement." +
-                " Your passive allows you to use abilities more often if used well.";
+        return Text.translatable("power.loopypowers.psychic.description.overview").getString();
+    }
+
+    @Override
+    public String getPassiveName() {
+        return Text.translatable("power.loopypowers.psychic.passive_name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "Hitting enemies affected by any of your abilities heal you slightly and reduce all your cooldowns." +
-                " This has a short internal cooldown, so spam hits aren't as effective.";
+        return Text.translatable("power.loopypowers.psychic.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Fire a projectile that compels an enemy to walk towards you, this projectile moves towards your cursor." +
-                " Affected targets are forced to look and walk towards you, this had a range limit and will not walk towards you if not close enough." +
-                " They are also inflicted with slowness and mining fatigue and will stop when too close." +
-                " The projectile has a lifespan and will break if no one is hit within that time.";
+        return Text.translatable("power.loopypowers.psychic.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Fire a piercing hitscan beam that stuns nearby enemies briefly, effecting them with a stronger slowness initially, and then a weaker more prolonged slowness." +
-                " The beam can chain to nearby enemies, so you can hit many targets if they're close.";
+        return Text.translatable("power.loopypowers.psychic.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Shoot a large, slow-moving projectile that moves towards your cursor. This is similar to compel but with a larger size and hitbox and a slower speed and shorter lifespan." +
-                " On hit, the entity becomes controlled:" +
-                " Controlled targets are forced to walk and look towards your crosshair and will automatically attack the closest entity (if they are able to attack). This had a range limit and entities will not walk towards the cursor if too far." +
-                " Controlled players will also have constant mining fatigue, making it hider to mine and making them hit slower, forced attacks when controlled will not account for this.";
+        return Text.translatable("power.loopypowers.psychic.description.ultimate").getString();
     }
 }

@@ -16,8 +16,10 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
@@ -138,7 +140,10 @@ public class FirePower implements Power {
         ACTIVE_STATES.remove(player.getUuid());
 
         player.removeStatusEffect(StatusEffects.FIRE_RESISTANCE);
-        player.removeStatusEffect(ModEffects.BRACED);
+
+        // Dynamically fetching RegistryEntry for custom effect
+        player.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.BRACED));
+
         player.removeStatusEffect(StatusEffects.RESISTANCE);
         player.removeStatusEffect(StatusEffects.SLOWNESS);
     }
@@ -150,6 +155,8 @@ public class FirePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         FireState state = getState(player);
 
         // PASSIVES
@@ -259,7 +266,9 @@ public class FirePower implements Power {
             if (cooked != null) {
                 stack.decrement(1);
                 player.getInventory().offerOrDrop(new ItemStack(cooked));
-                player.getServerWorld().playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.PLAYERS, 0.4f, 2.0f);
+
+                // Fixed playSound coordinates
+                player.getServerWorld().playSound(null, player.getX(), player.getY(), player.getZ(), net.minecraft.sound.SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.PLAYERS, 0.4f, 2.0f);
                 break; // only do one
             }
         }
@@ -311,9 +320,9 @@ public class FirePower implements Power {
 
         player.fallDistance = 0;
 
-        // stop fall damage
+        // stop fall damage using fetched RegistryEntry
         player.addStatusEffect(new StatusEffectInstance(
-                ModEffects.BRACED,
+                Registries.STATUS_EFFECT.getEntry(ModEffects.BRACED),
                 SECONDARY_NO_FALL_TICKS,
                 0,
                 true,
@@ -424,9 +433,12 @@ public class FirePower implements Power {
 
         CameraShake.shakeNearby(player, ULT_START_SHAKE_RADIUS, ULT_START_SHAKE_TIME, ULT_START_SHAKE_INTENSITY);
 
+        // Fixed playSound coordinates
         player.getServerWorld().playSound(
                 null,
-                player.getBlockPos(),
+                player.getX(),
+                player.getY(),
+                player.getZ(),
                 net.minecraft.sound.SoundEvents.ITEM_TOTEM_USE,
                 player.getSoundCategory(),
                 1.0f,
@@ -513,9 +525,12 @@ public class FirePower implements Power {
         pullEntitiesToward(player, world, progress);
 
         if (ticksRemaining % 20 == 0) {
+            // Fixed playSound coordinates
             world.playSound(
                     null,
-                    player.getBlockPos(),
+                    player.getX(),
+                    player.getY(),
+                    player.getZ(),
                     net.minecraft.sound.SoundEvents.BLOCK_FIRE_AMBIENT,
                     player.getSoundCategory(),
                     1.5f,
@@ -597,8 +612,9 @@ public class FirePower implements Power {
 
         CameraShake.shakeNearby(player, ULT_DETONATE_SHAKE_DURATION, ULT_DETONATE_SHAKE_AMPLITUDE, ULT_DETONATE_SHAKE_INTENSITY);
 
-        world.playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.ENTITY_DRAGON_FIREBALL_EXPLODE, player.getSoundCategory(), 3.5f, 0.6f);
-        world.playSound(null, player.getBlockPos(), net.minecraft.sound.SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 4.0f, 0.5f);
+        // Fixed playSound coordinates
+        world.playSound(null, player.getX(), player.getY(), player.getZ(), net.minecraft.sound.SoundEvents.ENTITY_DRAGON_FIREBALL_EXPLODE, player.getSoundCategory(), 3.5f, 0.6f);
+        world.playSound(null, player.getX(), player.getY(), player.getZ(), net.minecraft.sound.SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 4.0f, 0.5f);
     }
 
     private void applyLOSExplosionDamage(ServerPlayerEntity sourcePlayer, float radius, float maxDamage) {
@@ -659,55 +675,52 @@ public class FirePower implements Power {
     }
 
     @Override
+    public String getName() {
+        return Text.translatable("power.loopypowers.fire.name").getString();
+    }
+
+    @Override
     public String getPrimaryName() {
-        return "Fireball";
+        return Text.translatable("power.loopypowers.fire.primary_name").getString();
     }
 
     @Override
     public String getSecondaryName() {
-        return "Eruption";
+        return Text.translatable("power.loopypowers.fire.secondary_name").getString();
     }
 
     @Override
     public String getUltimateName() {
-        return "Supernova";
-    }
-
-    @Override
-    public String getName() {
-        return "Fire";
-    }
-
-    @Override
-    public String getOverviewDescription() {
-        return "Fire is mainly effective at range due to the fireball ability, which the secondary compliments. It also still has some utility up close, since " +
-                "your hits inflict fire and you do not take fire damage. These abilities are destructive though so be careful.";
+        return Text.translatable("power.loopypowers.fire.ultimate_name").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Hot-blooded";
+        return Text.translatable("power.loopypowers.fire.passive_name").getString();
+    }
+
+    @Override
+    public String getOverviewDescription() {
+        return Text.translatable("power.loopypowers.fire.description.overview").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "You have constant fire resistance and your hits will set entities on fire. This does not stack with fire aspect (the stronger fire will be applied)";
+        return Text.translatable("power.loopypowers.fire.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Shoot an explosive fireball in the direction that you are looking. This does extra damage for a direct hit and damages nearby blocks.";
+        return Text.translatable("power.loopypowers.fire.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Make an explosion at your feet and shoot up in the air, you will now be levitating using fire for a few seconds and your fireball cooldown will be refreshed. You will not take fall damage when you " +
-                "land. This is supposed to keep you at range from others. You can cancel the levitation by sneaking. This can also be used for movement during your ultimate.";
+        return Text.translatable("power.loopypowers.fire.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Charge up for an extended period of time, surrounding yourself in particles and slowing down greatly. Nearby enemies will be pulled in slightly. After charge unleash a huge explosion damaging anything nearby. This will not " +
-                "damage you.";
+        return Text.translatable("power.loopypowers.fire.description.ultimate").getString();
     }
 }

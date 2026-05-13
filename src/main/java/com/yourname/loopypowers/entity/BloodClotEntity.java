@@ -4,6 +4,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.data.DataTracker; // ADDED
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.projectile.ProjectileEntity;
@@ -134,9 +135,7 @@ public class BloodClotEntity extends ProjectileEntity {
 
         // don't hit owner
         Entity owner = this.getOwner();
-        if (owner != null && e == owner) return false;
-
-        return true;
+        return owner == null || e != owner;
     }
 
     @Override
@@ -195,7 +194,7 @@ public class BloodClotEntity extends ProjectileEntity {
     }
 
     @Override
-    protected void initDataTracker() {}
+    protected void initDataTracker(DataTracker.Builder builder) {} // 1.21.1 FIXED
 
     @Override
     protected void readCustomDataFromNbt(NbtCompound nbt) {

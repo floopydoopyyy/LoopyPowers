@@ -2,16 +2,15 @@ package com.yourname.loopypowers.item;
 
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.ritual.RitualManager;
-import net.minecraft.client.item.TooltipContext;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import net.minecraft.util.TypedActionResult;
 import net.minecraft.world.World;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -27,16 +26,12 @@ public class PerfectedCoreItem extends Item {
     }
 
     @Override
-    public void appendTooltip(ItemStack stack, @Nullable World world,
-                              List<Text> tooltip, TooltipContext context) {
-
-        tooltip.add(Text.literal("A legendary item capable of completing your connection.")
+    public void appendTooltip(ItemStack stack, Item.TooltipContext context, List<Text> tooltip, TooltipType type) {
+        tooltip.add(Text.translatable("item.loopypowers.perfected_celestial_core.tooltip.desc")
                 .formatted(Formatting.GRAY));
 
-        tooltip.add(Text.literal("Upgrades a power from Level 2 to 3.")
-                .formatted(Formatting.DARK_PURPLE));
-
-        super.appendTooltip(stack, world, tooltip, context);
+        tooltip.add(Text.translatable("item.loopypowers.perfected_celestial_core.tooltip.effect")
+                .formatted(Formatting.LIGHT_PURPLE));
     }
 
     @Override
@@ -54,7 +49,7 @@ public class PerfectedCoreItem extends Item {
         // no power
         if (PowerManager.getPower(player) == null) {
             player.sendMessage(
-                    Text.literal("§cYou are powerless, the item has no effect"),
+                    Text.translatable("message.loopypowers.perfected_core.no_power").formatted(Formatting.RED),
                     true
             );
             return TypedActionResult.fail(stack);
@@ -65,7 +60,7 @@ public class PerfectedCoreItem extends Item {
         // too high
         if (level > 3) {
             player.sendMessage(
-                    Text.literal("§cYou have already maxed out the connection level, the item has no effect."),
+                    Text.translatable("message.loopypowers.perfected_core.level_maxed").formatted(Formatting.RED),
                     true
             );
             return TypedActionResult.fail(stack);
@@ -74,7 +69,7 @@ public class PerfectedCoreItem extends Item {
         // Below 2
         if (level < 2) {
             player.sendMessage(
-                    Text.literal("§cYour connection level is not high enough to use this, the item has no effect."),
+                    Text.translatable("message.loopypowers.perfected_core.level_too_low").formatted(Formatting.RED),
                     true
             );
             return TypedActionResult.fail(stack);
@@ -88,6 +83,6 @@ public class PerfectedCoreItem extends Item {
             stack.decrement(1);
         }
 
-        return TypedActionResult.success(stack, world.isClient());
+        return TypedActionResult.success(stack);
     }
 }

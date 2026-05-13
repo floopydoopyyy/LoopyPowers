@@ -6,11 +6,13 @@ import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -128,6 +130,8 @@ public class StrengthPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         StrengthState state = getState(player);
 
         if (!PassiveManager.isEnabled(player)) return;
@@ -166,7 +170,7 @@ public class StrengthPower implements Power {
             if (onePunchDebugEnabled || (isUnarmoredPlayer && attacker.getWorld().random.nextFloat() < ONE_PUNCH_CHANCE)) {
                 ServerWorld w = attacker.getServerWorld();
 
-                w.playSound(null, attacker.getBlockPos(), ModSounds.ONEPUNCH, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
+                w.playSound(null, attacker.getX(), attacker.getY(), attacker.getZ(), ModSounds.ONEPUNCH, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
 
                 Vec3d dir = attacker.getRotationVec(1.0f).normalize();
                 target.setVelocity(dir.x * 25.0, 4.0, dir.z * 25.0);
@@ -240,7 +244,7 @@ public class StrengthPower implements Power {
 
         w.playSound(
                 null,
-                target.getBlockPos(),
+                target.getX(), target.getY(), target.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 attacker.getSoundCategory(),
                 0.8f,
@@ -292,14 +296,14 @@ public class StrengthPower implements Power {
             groundState = slamGroundState;
         }
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.SLAM,
                 player.getSoundCategory(),
                 casterGrounded ? 1.00f : 0.35f,
                 casterGrounded ? 0.85f : 1.10f
         );
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(),
                 casterGrounded ? 1.00f : 0.35f,
@@ -625,12 +629,12 @@ public class StrengthPower implements Power {
 
         ServerWorld w = player.getServerWorld();
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.LUNGESTART,
                 player.getSoundCategory(),
                 1.2f, 1.0f);
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.BULLRUSH,
                 player.getSoundCategory(),
                 1.5f, 1.0f);
@@ -653,7 +657,7 @@ public class StrengthPower implements Power {
             enableRushStepUp(player, false);
 
             ServerWorld w = player.getServerWorld();
-            w.playSound(null, player.getBlockPos(), ModSounds.BULLRUSH, player.getSoundCategory(), 0.6f, 0.9f);
+            w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.BULLRUSH, player.getSoundCategory(), 0.6f, 0.9f);
             w.spawnParticles(ParticleTypes.CLOUD, player.getX(), player.getY() + 0.2, player.getZ(), 10, 0.25, 0.10, 0.25, 0.02);
             return;
         }
@@ -707,8 +711,6 @@ public class StrengthPower implements Power {
         }
 
         // MOVEMENT
-        Vec3d vel = player.getVelocity();
-
         Vec3d horiz = new Vec3d(dir.x, 0.0, dir.z);
         if (horiz.lengthSquared() < 1.0e-6) horiz = new Vec3d(0, 0, 1);
 
@@ -716,7 +718,7 @@ public class StrengthPower implements Power {
 
         Vec3d push = horiz.normalize().multiply(RUSH_SPEED);
 
-        vel = player.getVelocity();
+        Vec3d vel = player.getVelocity();
 
         double newY;
         if (stepped) {
@@ -799,7 +801,7 @@ public class StrengthPower implements Power {
                             14, 0.25, 0.10, 0.25, 0.04);
                 }
 
-                w.playSound(null, player.getBlockPos(),
+                w.playSound(null, player.getX(), player.getY(), player.getZ(),
                         ModSounds.ENTITYSLAM,
                         player.getSoundCategory(), 0.9f, 0.9f);
 
@@ -851,11 +853,11 @@ public class StrengthPower implements Power {
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
         Vec3d impact = wallHit.getPos();
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.WALLSLAM,
                 player.getSoundCategory(), 1.0f, 1.00f);
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(), 0.8f, 0.85f);
 
@@ -902,8 +904,7 @@ public class StrengthPower implements Power {
 
         player.damage(ModDamageTypes.rushCollision(w, player), RUSH_CRASH_SELF_DAMAGE);
 
-        Vec3d center = impact;
-        Box box = new Box(center, center).expand(RUSH_CRASH_AOE_RADIUS, 2.0, RUSH_CRASH_AOE_RADIUS);
+        Box box = new Box(impact, impact).expand(RUSH_CRASH_AOE_RADIUS, 2.0, RUSH_CRASH_AOE_RADIUS);
 
         List<LivingEntity> victims = w.getEntitiesByClass(
                 LivingEntity.class,
@@ -935,7 +936,10 @@ public class StrengthPower implements Power {
     }
 
     private static void enableRushStepUp(ServerPlayerEntity player, boolean enable) {
-        player.setStepHeight(enable ? 1.05f : 0.6f);
+        var attr = player.getAttributeInstance(EntityAttributes.GENERIC_STEP_HEIGHT);
+        if (attr != null) {
+            attr.setBaseValue(enable ? 1.05 : 0.6);
+        }
     }
 
     private static boolean tryRushStepUp(ServerPlayerEntity player, ServerWorld w, Vec3d horizDir) {
@@ -985,7 +989,7 @@ public class StrengthPower implements Power {
 
         ServerWorld w = player.getServerWorld();
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.RAGE,
                 player.getSoundCategory(), 0.8f, 1.00f);
 
@@ -1037,7 +1041,7 @@ public class StrengthPower implements Power {
             List<ServerPlayerEntity> nearbyPlayers = w.getEntitiesByClass(
                     ServerPlayerEntity.class,
                     box,
-                    p -> p.isAlive()
+                    ServerPlayerEntity::isAlive
             );
 
             for (ServerPlayerEntity p : nearbyPlayers) {
@@ -1101,10 +1105,10 @@ public class StrengthPower implements Power {
        COOLDOWNS / DISPLAY
        ============================================================ */
 
-    @Override public String getName() { return "Strength"; }
-    @Override public String getPrimaryName() { return "Seismic Slam"; }
-    @Override public String getSecondaryName() { return "Titan Charge"; }
-    @Override public String getUltimateName() { return "Primal Rage"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.strength.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.strength.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.strength.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.strength.ultimate_name").getString(); }
 
     @Override
     public long getPrimaryCooldownMs() { return 12_500; }
@@ -1121,38 +1125,31 @@ public class StrengthPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Strength is meant to be a simple, rushdown-type kit that is able to quickly close distances and deal insane damage up close" +
-                " but do very little at range. All abilities are meant to compliment the high damage of the normal hits and these abilities are" +
-                " destructive to the nearby environment.";
+        return Text.translatable("power.loopypowers.strength.description.overview").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Brute Force";
+        return Text.translatable("power.loopypowers.strength.passive_name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "You have constant strength and can break blocks at the mining power and speed of an iron pickaxe when holding nothing." +
-                " You also have a small boost of mining speed when mining anything with a tool.";
+        return Text.translatable("power.loopypowers.strength.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Slam the ground or wall in front of you. This does high damage to entities closer to you and knocks them upwards. This slam will" +
-                "damage any ground/walls in front of you. When there is no terrain around you (e.g. When airborne) slams are significantly less effective.";
+        return Text.translatable("power.loopypowers.strength.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Gain a burst of speed in the direction you are looking, being able to turn at the beginning but being locked to a direction after that. If" +
-                " colliding with an entity, knock them upwards and deal damage. If colliding with a wall, the rush is stopped, the wall is destroyed and you take some" +
-                "self damage. You can stop a rush by sneaking.";
+        return Text.translatable("power.loopypowers.strength.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Empower yourself greatly, gaining extra strength, resistance and speed. During this ultimate your ability cooldowns will also" +
-                " be greatly decreased and your abilities will be reset on use.";
+        return Text.translatable("power.loopypowers.strength.description.ultimate").getString();
     }
 }

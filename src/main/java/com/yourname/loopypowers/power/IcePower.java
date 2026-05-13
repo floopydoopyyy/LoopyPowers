@@ -16,12 +16,14 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.fluid.Fluids;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.state.property.Properties;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -106,7 +108,7 @@ public class IcePower implements Power {
                     if (state != null && state.freezePoints > 0) {
                         state.freezePoints = 0;
                         e.setFrozenTicks(0);
-                        e.removeStatusEffect(ModEffects.DEEPFREEZE);
+                        e.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DEEPFREEZE));
                     }
                 }
 
@@ -124,6 +126,8 @@ public class IcePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         tickFrozenWorld(player.getServerWorld());
         tickSpikesWorld(player.getServerWorld());
         tickBeam(player);
@@ -134,10 +138,7 @@ public class IcePower implements Power {
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
         // dodge if passive off
         if (!PassiveManager.isEnabled(attacker)) return;
-
-        if (!tryShatter(attacker, target)) {
-            applyFreezePoints(attacker, target, FRZ_POINTS_MELEE);
-        }
+        shatterOrFreeze(attacker, target, FRZ_POINTS_MELEE);
     }
 
    /* ============================================================
@@ -160,7 +161,7 @@ public class IcePower implements Power {
     private static final int FRZ_DECAY_POINTS_STEP = 5;   // how many points decay
     // Shatter
     private static final int   FRZ_IMMUNE_TICKS = 100;     // time of ice immunity after shatter
-    private static final float SHATTER_BONUS_DAMAGE = 9.0f; // damage on shatter
+    private static final float SHATTER_BONUS_DAMAGE = 12.0f; // damage on shatter
 
     // How many points abilities add
     private static final int FRZ_POINTS_MELEE = 7;  // melee hits
@@ -185,7 +186,7 @@ public class IcePower implements Power {
     /** Calculates the EXACT time until the target thaws and updates the UI timer. */
     private static void syncFreezeTimer(LivingEntity e, IceVictimState state) {
         if (state.freezePoints <= 0) {
-            e.removeStatusEffect(ModEffects.DEEPFREEZE);
+            e.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DEEPFREEZE));
             return;
         }
 
@@ -194,8 +195,8 @@ public class IcePower implements Power {
         int ticksRemaining = state.freezeDecayTicks + Math.max(0, (steps - 1) * FRZ_DECAY_STEP_TICKS);
 
         // Remove and reapply to force the UI to update the countdown safely
-        e.removeStatusEffect(ModEffects.DEEPFREEZE);
-        e.addStatusEffect(new StatusEffectInstance(ModEffects.DEEPFREEZE, ticksRemaining, 0, false, false, true));
+        e.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DEEPFREEZE));
+        e.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.DEEPFREEZE), ticksRemaining, 0, false, false, true));
     }
 
     private static void applyFreezePoints(ServerPlayerEntity caster, LivingEntity target, int addPoints) {
@@ -214,41 +215,38 @@ public class IcePower implements Power {
         spawnFreezeStageParticles(w, target, getFreezeStage(state.freezePoints));
     }
 
-    private static boolean tryShatter(ServerPlayerEntity caster, LivingEntity target) {
+    private static void shatterOrFreeze(ServerPlayerEntity caster, LivingEntity target, int freezeStacks) {
         IceVictimState state = getVictimState(target);
-        if (state.freezeImmuneTicks > 0) return false;
+        if (state.freezeImmuneTicks > 0) return;
 
-        if (state.freezePoints < FRZ_STAGE_5) return false; // only when fully frozen
+        if (state.freezePoints >= FRZ_STAGE_5) {
+            ServerWorld w = caster.getServerWorld();
 
-        ServerWorld w = caster.getServerWorld();
+            // Bonus damage
+            target.damage(ModDamageTypes.iceShatter(w, caster), SHATTER_BONUS_DAMAGE);
 
-        // Bonus damage
-        target.damage(ModDamageTypes.iceShatter(w, caster), SHATTER_BONUS_DAMAGE);
+            // FX
+            doShatterFX(w, target);
 
-        // FX
-        doShatterFX(w, target);
+            // sound
+            w.playSound(
+                    null, // null
+                    target.getBlockPos(),
+                    ModSounds.SHATTER,
+                    SoundCategory.PLAYERS,
+                    0.5f,   // volume
+                    0.8f    // pitch
+            );
 
-        // sound
-        w.playSound(
-                null, // null
-                target.getBlockPos(),
-                ModSounds.SHATTER,
-                SoundCategory.PLAYERS,
-                0.5f,   // volume
-                0.8f    // pitch
-        );
+            // camerashake
+            CameraShake.shakeNearby(caster, 6, 8, 0.35f);
 
-        // camerashake
-        CameraShake.shakeNearby(caster,
-                6,
-                8,
-                0.35f);
-
-        // Clear freeze + grant immunity
-        clearFreeze(target);
-        state.freezeImmuneTicks = FRZ_IMMUNE_TICKS;
-
-        return true;
+            // Clear freeze + grant immunity
+            clearFreeze(target);
+            state.freezeImmuneTicks = FRZ_IMMUNE_TICKS;
+        } else {
+            applyFreezePoints(caster, target, freezeStacks);
+        }
     }
 
     private static void doShatterFX(ServerWorld w, LivingEntity target) {
@@ -271,7 +269,7 @@ public class IcePower implements Power {
         }
 
         e.setFrozenTicks(0);
-        e.removeStatusEffect(ModEffects.DEEPFREEZE); // clear visual indicator
+        e.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DEEPFREEZE)); // clear visual indicator
     }
 
     private static void tickFrozenWorld(ServerWorld w) {
@@ -307,7 +305,7 @@ public class IcePower implements Power {
             }
 
             // Sync the effect periodically in case they re-logged or the client desyncs
-            if (now % 10 == 0 || !le.hasStatusEffect(ModEffects.DEEPFREEZE)) {
+            if (now % 10 == 0 || !le.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DEEPFREEZE))) {
                 syncFreezeTimer(le, state);
             }
 
@@ -527,7 +525,7 @@ public class IcePower implements Power {
 
         Vec3d maxXZ = new Vec3d(player.getX(), 0.0, player.getZ()).add(dirXZ.multiply(SPIKES_RANGE));
 
-        BlockHitResult bhr = raycastBlock(player, SPIKES_RANGE);
+        BlockHitResult bhr = raycastBlock(player);
 
         Vec3d hitPos;
         int yHint;
@@ -667,7 +665,7 @@ public class IcePower implements Power {
 
         HashSet<Long> used = new HashSet<>();
 
-        BlockPos centerBase = findBestSpikeBase(w, cx, cz, SPIKES_TERRAIN_SEARCH, yHint);
+        BlockPos centerBase = findBestSpikeBase(w, cx, cz, yHint);
         if (centerBase != null) {
             sc.spikes.add(new SpikeBase(centerBase, pickSpikeHeight(rand)));
             used.add((((long) centerBase.getX()) << 32) ^ (centerBase.getZ() & 0xffffffffL));
@@ -684,7 +682,7 @@ public class IcePower implements Power {
             int x = cx + dx;
             int z = cz + dz;
 
-            BlockPos base = findBestSpikeBase(w, x, z, SPIKES_TERRAIN_SEARCH, yHint);
+            BlockPos base = findBestSpikeBase(w, x, z, yHint);
             if (base == null) continue;
 
             long key = (((long) base.getX()) << 32) ^ (base.getZ() & 0xffffffffL);
@@ -706,12 +704,12 @@ public class IcePower implements Power {
         return 1;
     }
 
-    private static BlockPos findBestSpikeBase(ServerWorld w, int x, int z, int searchR, int yHint) {
+    private static BlockPos findBestSpikeBase(ServerWorld w, int x, int z, int yHint) {
         BlockPos best = null;
         int bestD2 = Integer.MAX_VALUE;
 
-        for (int dx = -searchR; dx <= searchR; dx++) {
-            for (int dz = -searchR; dz <= searchR; dz++) {
+        for (int dx = -SPIKES_TERRAIN_SEARCH; dx <= SPIKES_TERRAIN_SEARCH; dx++) {
+            for (int dz = -SPIKES_TERRAIN_SEARCH; dz <= SPIKES_TERRAIN_SEARCH; dz++) {
                 int xx = x + dx;
                 int zz = z + dz;
 
@@ -726,10 +724,6 @@ public class IcePower implements Power {
             }
         }
         return best;
-    }
-
-    private static BlockPos findSurfaceAirAboveSolid(ServerWorld w, int x, int z, int yHint) {
-        return findSurfaceAirAboveSolid(w, x, z, yHint, false);
     }
 
     /**
@@ -915,9 +909,7 @@ public class IcePower implements Power {
             e.velocityModified = true;
             e.fallDistance = 0.0f;
 
-            if (!tryShatter(caster, e)) {
-                applyFreezePoints(caster, e, SPIKES_FREEZE_STACKS);
-            }
+            shatterOrFreeze(caster, e, SPIKES_FREEZE_STACKS);
         }
     }
 
@@ -931,7 +923,7 @@ public class IcePower implements Power {
     private static final int BEAM_FIRE_TICKS   = 125;
 
     private static final double BEAM_RANGE = 34.0;
-    private static final double BEAM_WIDTH = 0.75;
+    private static final double BEAM_RADIUS = 0.75;
 
     private static final int BEAM_APPLY_EVERY = 2;
     private static final int BEAM_STACKS_PER_APPLY = 5;
@@ -1025,7 +1017,7 @@ public class IcePower implements Power {
 
             // freeze water
             if ((player.age % BEAM_WATER_FREEZE_EVERY) == 0) {
-                freezeWaterAlongBeam(w, muzzle, end, BEAM_MAX_WATER_FREEZES_PER_TICK);
+                freezeWaterAlongBeam(w, muzzle, end);
             }
 
             // apply effects
@@ -1086,7 +1078,7 @@ public class IcePower implements Power {
                 8, 0.25, 0.03, 0.25, 0.0);
     }
 
-    private static void freezeWaterAlongBeam(ServerWorld w, Vec3d start, Vec3d end, int max) {
+    private static void freezeWaterAlongBeam(ServerWorld w, Vec3d start, Vec3d end) {
         Vec3d delta = end.subtract(start);
         double len = delta.length();
         if (len < 0.25) return;
@@ -1101,15 +1093,15 @@ public class IcePower implements Power {
         BlockPos.Mutable m = new BlockPos.Mutable();
 
         for (int i = 0; i <= samples; i++) {
-            if (froze >= max) break;
+            if (froze >= BEAM_MAX_WATER_FREEZES_PER_TICK) break;
 
             Vec3d p = start.add(dir.multiply(i * step));
             m.set(MathHelper.floor(p.x), MathHelper.floor(p.y), MathHelper.floor(p.z));
 
             // check the block we are inside + a tiny neighborhood (helps “touching” water)
-            for (int dx = -1; dx <= 1 && froze < max; dx++) {
-                for (int dy = -1; dy <= 1 && froze < max; dy++) {
-                    for (int dz = -1; dz <= 1 && froze < max; dz++) {
+            for (int dx = -1; dx <= 1 && froze < BEAM_MAX_WATER_FREEZES_PER_TICK; dx++) {
+                for (int dy = -1; dy <= 1 && froze < BEAM_MAX_WATER_FREEZES_PER_TICK; dy++) {
+                    for (int dz = -1; dz <= 1 && froze < BEAM_MAX_WATER_FREEZES_PER_TICK; dz++) {
                         BlockPos pos = m.add(dx, dy, dz);
                         BlockState s = w.getBlockState(pos);
 
@@ -1197,12 +1189,12 @@ public class IcePower implements Power {
     }
 
     private static void applyBeamToEntities(ServerWorld w, ServerPlayerEntity caster, Vec3d start, Vec3d end) {
-        Box scan = new Box(start, end).expand(BEAM_WIDTH, BEAM_WIDTH, BEAM_WIDTH);
+        Box scan = new Box(start, end).expand(BEAM_RADIUS, BEAM_RADIUS, BEAM_RADIUS);
 
         List<LivingEntity> hits = w.getEntitiesByClass(LivingEntity.class, scan,
                 e -> e.isAlive() && e != caster);
 
-        double w2 = BEAM_WIDTH * BEAM_WIDTH;
+        double w2 = BEAM_RADIUS * BEAM_RADIUS;
 
         for (LivingEntity e : hits) {
             Vec3d p = e.getPos().add(0, e.getHeight() * 0.5, 0);
@@ -1217,12 +1209,12 @@ public class IcePower implements Power {
     }
 
     private static void applyBeamDamage(ServerWorld w, ServerPlayerEntity caster, Vec3d start, Vec3d end) {
-        Box scan = new Box(start, end).expand(BEAM_WIDTH, BEAM_WIDTH, BEAM_WIDTH);
+        Box scan = new Box(start, end).expand(BEAM_RADIUS, BEAM_RADIUS, BEAM_RADIUS);
 
         List<LivingEntity> hits = w.getEntitiesByClass(LivingEntity.class, scan,
                 e -> e.isAlive() && e != caster);
 
-        double w2 = BEAM_WIDTH * BEAM_WIDTH;
+        double w2 = BEAM_RADIUS * BEAM_RADIUS;
 
         for (LivingEntity e : hits) {
             Vec3d p = e.getPos().add(0, e.getHeight() * 0.5, 0);
@@ -1375,7 +1367,7 @@ public class IcePower implements Power {
 
         // 3. Ground snow accumulation
         if ((player.age % ULT_SNOW_COVER_EVERY) == 0) {
-            spreadSnowCover(w, player, (int)Math.ceil(ULT_BLIZZARD_RADIUS), ULT_SNOW_COVER_ATTEMPTS);
+            spreadSnowCover(w, player);
         }
 
         // 4. Random Snowman Building
@@ -1386,7 +1378,7 @@ public class IcePower implements Power {
 
         // 5. Water freeze around caster
         if ((player.age % ULT_FROST_EVERY) == 0) {
-            freezeWaterAroundCaster(w, player, ULT_FROST_RADIUS, ULT_FROST_MAX_PER_TICK);
+            freezeWaterAroundCaster(w, player);
         }
 
         // 6. Pulse Waves & Loop Sound
@@ -1405,21 +1397,21 @@ public class IcePower implements Power {
         tickUltWavesWorld(w);
     }
 
-    private static void freezeWaterAroundCaster(ServerWorld w, ServerPlayerEntity caster, int radius, int maxPerTick) {
+    private static void freezeWaterAroundCaster(ServerWorld w, ServerPlayerEntity caster) {
         BlockPos center = caster.getBlockPos();
         int froze = 0;
 
         // sample a square, but early-exit
-        for (int dx = -radius; dx <= radius && froze < maxPerTick; dx++) {
-            for (int dz = -radius; dz <= radius && froze < maxPerTick; dz++) {
+        for (int dx = -ULT_FROST_RADIUS; dx <= ULT_FROST_RADIUS && froze < ULT_FROST_MAX_PER_TICK; dx++) {
+            for (int dz = -ULT_FROST_RADIUS; dz <= ULT_FROST_RADIUS && froze < ULT_FROST_MAX_PER_TICK; dz++) {
                 // circular-ish
-                if ((dx * dx + dz * dz) > radius * radius) continue;
+                if ((dx * dx + dz * dz) > ULT_FROST_RADIUS * ULT_FROST_RADIUS) continue;
 
                 BlockPos pos = center.add(dx, 0, dz);
 
                 // Frost Walker targets water at feet level (usually just below)
                 // Try y-1..y+1 to be forgiving on slopes
-                for (int dy = -1; dy <= 1 && froze < maxPerTick; dy++) {
+                for (int dy = -1; dy <= 1 && froze < ULT_FROST_MAX_PER_TICK; dy++) {
                     BlockPos p = pos.add(0, dy, 0);
 
                     BlockState s = w.getBlockState(p);
@@ -1482,11 +1474,11 @@ public class IcePower implements Power {
         }
     }
 
-    private static void spreadSnowCover(ServerWorld w, ServerPlayerEntity caster, int radius, int attempts) {
+    private static void spreadSnowCover(ServerWorld w, ServerPlayerEntity caster) {
         Vec3d c = caster.getPos();
 
-        for (int i = 0; i < attempts; i++) {
-            double r = Math.sqrt(w.random.nextDouble()) * radius;
+        for (int i = 0; i < ULT_SNOW_COVER_ATTEMPTS; i++) {
+            double r = Math.sqrt(w.random.nextDouble()) * ((int)Math.ceil(ULT_BLIZZARD_RADIUS));
             double a = w.random.nextDouble() * (Math.PI * 2.0);
 
             int x = MathHelper.floor(c.x + Math.cos(a) * r);
@@ -1631,9 +1623,7 @@ public class IcePower implements Power {
 
             if (caster != null) {
                 e.damage(ModDamageTypes.iceShockwave(w, caster), ULT_WAVE_DAMAGE);
-                if (!tryShatter(caster, e)) {
-                    applyFreezePoints(caster, e, ULT_WAVE_FREEZE_STACKS);
-                }
+                shatterOrFreeze(caster, e, ULT_WAVE_FREEZE_STACKS);
             }
 
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, ULT_WAVE_SLOW_TICKS, ULT_WAVE_SLOW_AMP, true, false));
@@ -1733,10 +1723,10 @@ public class IcePower implements Power {
        RAYCAST + GEOMETRY
        ============================================================ */
 
-    private static BlockHitResult raycastBlock(ServerPlayerEntity player, double range) {
+    private static BlockHitResult raycastBlock(ServerPlayerEntity player) {
         Vec3d start = player.getEyePos();
         Vec3d look = player.getRotationVec(1.0f).normalize();
-        Vec3d end = start.add(look.multiply(range));
+        Vec3d end = start.add(look.multiply(SPIKES_RANGE));
 
         return player.getWorld().raycast(new RaycastContext(
                 start, end,
@@ -1762,10 +1752,10 @@ public class IcePower implements Power {
        COOLDOWNS / DISPLAY
        ============================================================ */
 
-    @Override public String getName() { return "Ice"; }
-    @Override public String getPrimaryName() { return "Piercing Spikes"; }
-    @Override public String getSecondaryName() { return "Flash Freeze"; }
-    @Override public String getUltimateName() { return "Ice Age"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.ice.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.ice.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.ice.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.ice.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs() { return PRIMARY_COOLDOWN_MS; }
     @Override public long getSecondaryCooldownMs() { return SECONDARY_COOLDOWN_MS; }
@@ -1773,37 +1763,31 @@ public class IcePower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Ice is a close-medium range power that revolves around building up freeze and consuming this freeze for high damage." +
-                "(see the passive for more info) this power's abilities can also effect the environment by freezing water, leaving snow or creating ice spikes.";
+        return Text.translatable("power.loopypowers.ice.description.overview").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Deep Freeze";
+        return Text.translatable("power.loopypowers.ice.passive_name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "Your melee and ability damage inflicts freeze on targets, (displayed by particles). Higher levels can apply increasing slowness and mining fatigue" +
-                "At the highest level, the entity will be completedly frozen and have glowing particles to indicate that they can be shattered. When shattered, the freeze" +
-                "will be consumed, dealing damage and making them immune to freeze briefly after. After a few seconds of not being attacked freeze will decay.";
+        return Text.translatable("power.loopypowers.ice.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Cause a group of ice spikes to form where you are looking. These spikes deal damage and knock enemies upwards. If an enemy is fully frozen they will be shattered and if not a high amount" +
-                "of freeze will be applied. This ability travels to your mouse location before forming, meaning there is a visual delay. Spikes will not destroy and blocks and will freeze nearby water if placed on water.";
+        return Text.translatable("power.loopypowers.ice.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Briefly charge up and shoot out a constant beam of ice, you are slower while you do this. This beam does slight damage, slows and drags enemies downwards as well as" +
-                "applying freeze. This ability will never shatter and cannot pierce blocks. This is intended to be the main freeze builder.";
+        return Text.translatable("power.loopypowers.ice.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Cause a blizzard to form around you, freezing and snowing on your surroundings. There will also be shockwaves produced from your location that will damage," +
-                "apply freeze and shatter anyone fully frozen. These shockwaves are visual and can be jumped over (although snow layers make it harder to see)";
+        return Text.translatable("power.loopypowers.ice.description.ultimate").getString();
     }
 }

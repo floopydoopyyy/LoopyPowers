@@ -4,6 +4,7 @@ import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.DataTracker; // ADDED
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.nbt.NbtCompound;
@@ -213,7 +214,7 @@ public class ShadowStepEntity extends net.minecraft.entity.Entity {
         );
     }
 
-    @Override protected void initDataTracker() {}
+    @Override protected void initDataTracker(DataTracker.Builder builder) {} //
     @Override protected void readCustomDataFromNbt(NbtCompound nbt) {}
     @Override protected void writeCustomDataToNbt(NbtCompound nbt) {}
 }

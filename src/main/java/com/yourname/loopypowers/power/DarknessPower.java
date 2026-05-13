@@ -13,11 +13,13 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries; // Added for 1.21.1
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text; // Added for translations
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
@@ -44,7 +46,7 @@ public class DarknessPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        removeTagPrefix(player, "dk_"); // Clean up old string tags
+        removeDarknessTags(player); // FIXED: Simplified method
         removeBlackoutNow(player.getServer(), player.getUuid());
         ACTIVE_MISTS.remove(player.getUuid());
         player.setNoGravity(false);
@@ -52,7 +54,7 @@ public class DarknessPower implements Power {
 
     @Override
     public void onRemove(ServerPlayerEntity player) {
-        removeTagPrefix(player, "dk_");
+        removeDarknessTags(player); // FIXED: Simplified method
 
         removeBlackoutNow(player.getServer(), player.getUuid());
         ACTIVE_MISTS.remove(player.getUuid());
@@ -71,6 +73,8 @@ public class DarknessPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         handleMistForm(player);
         tickBlackoutsWorld(player.getServerWorld());
     }
@@ -106,15 +110,15 @@ public class DarknessPower implements Power {
             finalSource = ModDamageTypes.darknessBackstab(w, attacker);
         }
 
-        // Exposed effect logic
-        if (target.hasStatusEffect(ModEffects.EXPOSED)) {
+        // 1.21.1 FIXED: Wrapped custom effect in RegistryEntry
+        if (target.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.EXPOSED))) {
             mult *= EXPOSED_DAMAGE_MULT;
             didExposed = true;
             finalSource = ModDamageTypes.darkUlt(w, attacker);
         }
 
-        // No change - let normal damage happen
-        if (Math.abs(mult - 1.0f) < 1.0e-4f && finalSource == source) return true;
+        // FIXED: Simplified IF statement
+        if (!didBackstab && !didExposed) return true;
 
         float newAmount = amount * mult;
 
@@ -458,7 +462,8 @@ public class DarknessPower implements Power {
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 40, 0, true, false));
             e.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, 40, 0, true, false));
-            e.addStatusEffect(new StatusEffectInstance(ModEffects.EXPOSED, 45, 0, true, false)); // visual one
+            // 1.21.1 FIXED: Wrapped custom effect in RegistryEntry
+            e.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.EXPOSED), 45, 0, true, false));
         }
     }
 
@@ -612,12 +617,12 @@ public class DarknessPower implements Power {
        I FORGOT WHAT I KEPT CAPTIONING THESE
        ============================================================ */
 
-    @Override public String getName() { return "Darkness"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.darkness.name").getString(); }
 
-    @Override public String getPassiveName() { return "Blindspot"; }
-    @Override public String getPrimaryName() { return "Shadow Step"; }
-    @Override public String getSecondaryName() { return "Umbral Veil"; }
-    @Override public String getUltimateName() { return "Dark Domain"; }
+    @Override public String getPassiveName() { return Text.translatable("power.loopypowers.darkness.passive_name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.darkness.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.darkness.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.darkness.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs() { return 14_000; }
     @Override public long getSecondaryCooldownMs() { return 25_000; }
@@ -625,42 +630,39 @@ public class DarknessPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Darkness is supposed to be a high damage, melee stealth power, with tools to get in and get out along with high amounts of bonus" +
-                " damage on hit, especially with higher tier weapons.";
+        return Text.translatable("power.loopypowers.darkness.description.overview").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "Deal bonus damage when hitting an entity from behind, this bonus damage uses a multiplier, so it improves with the weapon being used.";
+        return Text.translatable("power.loopypowers.darkness.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Shoot a slow projectile that on hitting an entity briefly blinds them, deals a small chunk of damage and teleports you behind them (should be in a safe place).";
+        return Text.translatable("power.loopypowers.darkness.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Temporarily transform into a cloud of mist, allowing you to fly freely. You will not be able to" +
-                " deal or receive damage in this form and will be immune to all slow effects (apart from blocks like cobwebs)." +
-                " Once finished, you will be invisible for a brief time.";
+        return Text.translatable("power.loopypowers.darkness.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Create a sphere of darkness. All entities in it are blinded and glowing. You do bonus damage to entities in this bubble and it stacks" +
-                " multiplicatively with your backstab passive (so your backstab does even more increased damage, along with the bonus damage).";
+        return Text.translatable("power.loopypowers.darkness.description.ultimate").getString();
     }
 
     /* ============================================================
        TAG HELPERS
        ============================================================ */
 
-    private static void removeTagPrefix(Entity e, String prefix) {
+    // FIXED: Removed unused parameter warning by hardcoding the "dk_" tag
+    private static void removeDarknessTags(Entity e) {
         var it = e.getCommandTags().iterator();
         while (it.hasNext()) {
             String tag = it.next();
-            if (tag.startsWith(prefix)) {
+            if (tag.startsWith("dk_")) {
                 it.remove();
                 return;
             }

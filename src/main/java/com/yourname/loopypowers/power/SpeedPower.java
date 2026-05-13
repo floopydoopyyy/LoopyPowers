@@ -11,6 +11,7 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.util.math.Vec3d;
@@ -138,6 +139,8 @@ public class SpeedPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         SpeedState state = getState(player);
 
         // Tick internal cooldowns
@@ -156,7 +159,7 @@ public class SpeedPower implements Power {
 
             // Loop sound
             if (state.rushLoopCd <= 0) {
-                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.0f);
+                player.getServerWorld().playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.0f);
                 state.rushLoopCd = RUSH_LOOP_INTERVAL_TICKS;
             }
         }
@@ -167,7 +170,7 @@ public class SpeedPower implements Power {
 
             // Ultimate Loop Sound
             if (state.overdriveLoopCd <= 0) {
-                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.3f);
+                player.getServerWorld().playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.RUSHLOOP, player.getSoundCategory(), 0.55f, 1.3f);
                 state.overdriveLoopCd = OVERDRIVE_LOOP_INTERVAL_TICKS;
             }
         }
@@ -200,7 +203,7 @@ public class SpeedPower implements Power {
 
         player.getServerWorld().playSound(
                 null,
-                player.getBlockPos(),
+                player.getX(), player.getY(), player.getZ(),
                 ModSounds.DASH,
                 player.getSoundCategory(),
                 1.0f, 1.0f
@@ -253,7 +256,7 @@ public class SpeedPower implements Power {
                             victim.velocityModified = true;
                         }
 
-                        CameraShake.shakeNearby(player, 8, 5, 0.45f);
+                        CameraShake.shakeNearby(player, 8.0, 5, 0.45f);
                     }
                 });
 
@@ -261,14 +264,14 @@ public class SpeedPower implements Power {
 
         // sounds
         player.getServerWorld().playSound(
-                null, player.getBlockPos(),
+                null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
-                player.getSoundCategory(), 1.0f, 1.1f
+                player.getSoundCategory(), 0.3f, 1.2f
         );
         player.getServerWorld().playSound(
-                null, player.getBlockPos(),
+                null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.RUSHSTART,
-                player.getSoundCategory(), 0.8f, 1.0f
+                player.getSoundCategory(), 0.5f, 1.0f
         );
     }
 
@@ -293,9 +296,9 @@ public class SpeedPower implements Power {
         spawnOverdriveCastParticles(player);
 
         player.playSound(SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER, 0.6f, 1.8f);
-        player.playSound(ModSounds.OVERDRIVESTART, 0.6f, 1.8f);
+        player.playSound(ModSounds.OVERDRIVESTART, 0.2f, 1.5f);
         player.getServerWorld().playSound(
-                null, player.getBlockPos(),
+                null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(), 1.0f, 0.6f
         );
@@ -357,7 +360,7 @@ public class SpeedPower implements Power {
         );
     }
 
-    public static void tickOverdrive(ServerPlayerEntity player, SpeedState state) {
+    private static void tickOverdrive(ServerPlayerEntity player, SpeedState state) {
         forceForward(player, state);
         breakBlocks(player, state);
 
@@ -386,10 +389,12 @@ public class SpeedPower implements Power {
                         // EASTER EGG
                         if (!entity.isAlive() && entity instanceof ServerPlayerEntity) {
                             if (player.getRandom().nextInt(A_TRAIN_CHANCE) == 0) {
-                                net.minecraft.text.Text message = net.minecraft.text.Text.literal(
-                                        "<" + player.getName().getString() + "> I can't stop. I can't stop. I can't stop. I can't stop."
-                                );
-                                player.getServer().getPlayerManager().broadcast(message, false);
+                                if (player.getServer() != null) {
+                                    Text message = Text.literal(
+                                            "<" + player.getName().getString() + "> I can't stop. I can't stop. I can't stop. I can't stop."
+                                    );
+                                    player.getServer().getPlayerManager().broadcast(message, false);
+                                }
                             }
                         }
 
@@ -409,7 +414,7 @@ public class SpeedPower implements Power {
                                 4, 0.6, 0.2, 0.6, 0.1
                         );
                         player.getServerWorld().playSound(
-                                null, player.getBlockPos(),
+                                null, player.getX(), player.getY(), player.getZ(),
                                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                                 player.getSoundCategory(), 1.0f, 0.8f
                         );
@@ -561,7 +566,7 @@ public class SpeedPower implements Power {
         );
         player.getServerWorld().spawnParticles(
                 ParticleTypes.SMOKE,
-                ox + back.x * 1.0, player.getY() + 0.7, oz + back.z * 1.0,
+                ox + back.x, player.getY() + 0.7, oz + back.z,
                 2, 0.15, 0.15, 0.15, 0.03
         );
 
@@ -611,12 +616,12 @@ public class SpeedPower implements Power {
         ));
 
         player.getServerWorld().playSound(
-                null, player.getBlockPos(),
+                null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_PLAYER_SMALL_FALL,
                 player.getSoundCategory(), 0.8f, 0.7f
         );
 
-        CameraShake.shakeNearby(player, 5, 15, 0.35f);
+        CameraShake.shakeNearby(player, 10.0, 5, 15); // Adjust distance if needed
     }
 
     private static void applyCollisionSlowBlock(ServerPlayerEntity player, SpeedState state) {
@@ -635,12 +640,12 @@ public class SpeedPower implements Power {
         ));
 
         player.getServerWorld().playSound(
-                null, player.getBlockPos(),
+                null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_ZOMBIE_BREAK_WOODEN_DOOR,
                 player.getSoundCategory(), 0.8f, 0.7f
         );
 
-        CameraShake.shakeNearby(player, 6, 17, 0.45f);
+        CameraShake.shakeNearby(player, 10.0, 6, 17); // Adjust distance if needed
     }
 
     private static void breakBlocks(ServerPlayerEntity player, SpeedState state) {
@@ -693,7 +698,7 @@ public class SpeedPower implements Power {
         if (state.overdriveSlowTicks > 0) return;
 
         applyCollisionSlowBlock(player, state);
-        applyCollisionSelfDamage(player, state, OVERDRIVE_SELF_DAMAGE);
+        applyCollisionSelfDamage(player, state);
 
         CameraShake.shakeNearby(player, 12.0, 8, shakeStrength);
 
@@ -703,7 +708,7 @@ public class SpeedPower implements Power {
                 3, 0.15, 0.10, 0.15, 0.02
         );
         player.getServerWorld().playSound(
-                null, player.getBlockPos(),
+                null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_DRAGON_FIREBALL_EXPLODE,
                 player.getSoundCategory(), 0.8f, 0.85f
         );
@@ -728,15 +733,15 @@ public class SpeedPower implements Power {
         player.velocityModified = true;
     }
 
-    private static void applyCollisionSelfDamage(ServerPlayerEntity player, SpeedState state, float amount) {
+    private static void applyCollisionSelfDamage(ServerPlayerEntity player, SpeedState state) {
         if (state.blockDmgCd > 0) return;
 
-        player.damage(ModDamageTypes.wallCollision(player.getWorld()), amount);
+        player.damage(ModDamageTypes.wallCollision(player.getWorld()), OVERDRIVE_SELF_DAMAGE);
 
         state.blockDmgCd = 10;
 
         player.getServerWorld().playSound(
-                null, player.getBlockPos(),
+                null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_PLAYER_HURT,
                 player.getSoundCategory(), 0.8f, 1.0f
         );
@@ -747,56 +752,51 @@ public class SpeedPower implements Power {
        ============================================================ */
 
     @Override
-    public String getName() { return "Speed"; }
+    public String getName() { return Text.translatable("power.loopypowers.speed.name").getString(); }
 
     @Override
-    public String getPassiveName() { return "Zippy"; }
+    public String getPassiveName() { return Text.translatable("power.loopypowers.speed.passive_name").getString(); }
 
     @Override
     public String getPassiveDescription() {
-        return "You have permanent speed. This speed increases temporarily when low on health, with a cooldown.";
+        return Text.translatable("power.loopypowers.speed.description.passive").getString();
     }
 
     @Override
-    public String getPrimaryName() { return "Dash"; }
+    public String getPrimaryName() { return Text.translatable("power.loopypowers.speed.primary_name").getString(); }
 
     @Override
     public long getPrimaryCooldownMs() { return 6_000; }
 
     @Override
     public String getPrimaryDescription() {
-        return "Dash in the direction you are looking. This dash prioritises horizontal movement over vertical " +
-                "(meaning that you can't dash that far up).";
+        return Text.translatable("power.loopypowers.speed.description.primary").getString();
     }
 
     @Override
-    public String getSecondaryName() { return "Rush"; }
+    public String getSecondaryName() { return Text.translatable("power.loopypowers.speed.secondary_name").getString(); }
 
     @Override
     public long getSecondaryCooldownMs() { return 18_000; }
 
     @Override
     public String getSecondaryDescription() {
-        return "Blast forward in a burst, damaging and knocking back nearby entities in an explosion on cast. " +
-                "You then have increased speed and are forced to run forward.";
+        return Text.translatable("power.loopypowers.speed.description.secondary").getString();
     }
 
     @Override
-    public String getUltimateName() { return "Overclock"; }
+    public String getUltimateName() { return Text.translatable("power.loopypowers.speed.ultimate_name").getString(); }
 
     @Override
     public long getUltimateCooldownMs() { return 400_000; }
 
     @Override
     public String getUltimateDescription() {
-        return "Become extremely fast and propelled forward constantly. Running into soft blocks will destroy them instantly. " +
-                "Running into more solid blocks will damage and stop movement briefly, but destroy the wall. Colliding with " +
-                "entities will do high damage and knock them away. You can also run on water.";
+        return Text.translatable("power.loopypowers.speed.description.ultimate").getString();
     }
 
     @Override
     public String getOverviewDescription() {
-        return "Speed mainly focuses on mobility (Who would've guessed!) where most abilities will offer limited direct combat utility, but will provide" +
-                " high speed, making you hard to pin down and kill.";
+        return Text.translatable("power.loopypowers.speed.description.overview").getString();
     }
 }

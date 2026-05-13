@@ -1,6 +1,5 @@
 package com.yourname.loopypowers.network;
 
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 
@@ -21,19 +20,13 @@ public final class CameraShake {
 
         for (ServerPlayerEntity p : world.getPlayers()) {
             if (p.squaredDistanceTo(origin) <= r2) {
-                var buf = PacketByteBufs.create();
-                buf.writeInt(ticks);
-                buf.writeFloat(strength);
-                ServerPlayNetworking.send(p, AbilityPackets.CAMERA_SHAKE, buf);
+                ServerPlayNetworking.send(p, new AbilityPackets.CameraShakePayload(ticks, strength));
             }
         }
     }
 
     // shake one player
     public static void shake(ServerPlayerEntity target, int ticks, float strength) {
-        var buf = PacketByteBufs.create();
-        buf.writeInt(ticks);
-        buf.writeFloat(strength);
-        ServerPlayNetworking.send(target, AbilityPackets.CAMERA_SHAKE, buf);
+        ServerPlayNetworking.send(target, new AbilityPackets.CameraShakePayload(ticks, strength));
     }
 }

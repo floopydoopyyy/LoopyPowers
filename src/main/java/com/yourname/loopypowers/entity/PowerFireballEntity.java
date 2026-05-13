@@ -26,12 +26,12 @@ public class PowerFireballEntity extends FireballEntity {
     private Vec3d lastServerPos = null;
     private int stuckTicks = 0;
 
-    public PowerFireballEntity(net.minecraft.entity.EntityType<? extends FireballEntity> type, World world) {
+    public PowerFireballEntity(net.minecraft.entity.EntityType<PowerFireballEntity> type, net.minecraft.world.World world) {
         super(type, world);
     }
 
     public PowerFireballEntity(
-            net.minecraft.entity.EntityType<? extends FireballEntity> type,
+            net.minecraft.entity.EntityType<PowerFireballEntity> type,
             World world,
             LivingEntity owner,
             double vx, double vy, double vz,
@@ -45,11 +45,6 @@ public class PowerFireballEntity extends FireballEntity {
         // no acceleration
         this.setVelocity(vx, vy, vz);
         this.constantVelocity = new Vec3d(vx, vy, vz);
-
-        // disable drift
-        this.powerX = 0.0;
-        this.powerY = 0.0;
-        this.powerZ = 0.0;
     }
 
     @Override

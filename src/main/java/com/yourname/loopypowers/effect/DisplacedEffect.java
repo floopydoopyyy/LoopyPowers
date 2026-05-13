@@ -1,7 +1,6 @@
 package com.yourname.loopypowers.effect;
 
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.AttributeContainer;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectCategory;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -26,8 +25,8 @@ public class DisplacedEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
-        if (entity.getWorld().isClient()) return;
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) { // Changed void to boolean
+        if (entity.getWorld().isClient()) return true; // FIXED missing return value
         ServerWorld world = (ServerWorld) entity.getWorld();
 
         // set velocity to 0
@@ -93,15 +92,7 @@ public class DisplacedEffect extends StatusEffect {
         if (world.random.nextFloat() < 0.4f) {
             world.spawnParticles(darkBlue, x, y, z, 2, 0.3, 0.4, 0.3, 0.015);
         }
-    }
 
-    @Override
-    public void onRemoved(LivingEntity entity, AttributeContainer attributes, int amplifier) {
-        super.onRemoved(entity, attributes, amplifier);
-
-        // Restore AI when the effect naturally expires or is cleansed
-        if (entity instanceof MobEntity mob) {
-            mob.setAiDisabled(false);
-        }
+        return true; // FIXED missing return statement
     }
 }

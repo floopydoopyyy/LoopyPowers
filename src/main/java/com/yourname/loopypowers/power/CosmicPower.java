@@ -13,9 +13,11 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
@@ -73,7 +75,6 @@ public class CosmicPower implements Power {
 
     // ── Ultimate tuning ───────────────────────────────────────────────────────
 
-    private static final double BH_OUTER_RADIUS    = 20.0;
     private static final float  BH_TIMER_REDUCTION = 1.5f;
 
     /* ============================================================
@@ -88,8 +89,9 @@ public class CosmicPower implements Power {
     @Override
     public void onRemove(ServerPlayerEntity player) {
         player.getCommandTags().removeIf(tag -> tag.startsWith("cos_"));
-        player.removeStatusEffect(ModEffects.BRACED);
-        player.removeStatusEffect(ModEffects.FATE);
+
+        player.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.BRACED));
+        player.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
 
         ACTIVE_STARS.remove(player.getUuid());
 
@@ -99,18 +101,7 @@ public class CosmicPower implements Power {
             for (ServerWorld w : player.getServer().getWorlds()) {
                 for (UUID targetId : myTargets.keySet()) {
                     Entity e = w.getEntity(targetId);
-                    if (e instanceof LivingEntity le) le.removeStatusEffect(ModEffects.FATE);
-                }
-            }
-        }
-
-        // Despawn active black holes
-        if (player.getServer() != null) {
-            for (ServerWorld w : player.getServer().getWorlds()) {
-                for (BlackHoleEntity bh : w.getEntitiesByClass(BlackHoleEntity.class, player.getBoundingBox().expand(150), Entity::isAlive)) {
-                    if (player.equals(bh.getOwner())) {
-                        bh.discard();
-                    }
+                    if (e instanceof LivingEntity le) le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
                 }
             }
         }
@@ -134,6 +125,8 @@ public class CosmicPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ServerWorld world = player.getServerWorld();
         UUID playerId = player.getUuid();
 
@@ -181,7 +174,8 @@ public class CosmicPower implements Power {
                     if (fate.detonateTicks <= 0) {
                         fate.storedDamage = 0;
                         fate.immuneTicks = FATE_IMMUNE_TICKS;
-                        target.removeStatusEffect(ModEffects.FATE);
+                        // 1.21.1 FIXED: Wrapped in RegistryEntry
+                        target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
                     }
                     continue;
                 }
@@ -192,7 +186,8 @@ public class CosmicPower implements Power {
                     if (fate.timerTicks <= 0) {
                         fate.detonateTicks = FATE_DETONATE_TICKS;
                         spawnDetonateStartParticles(world, target);
-                        target.removeStatusEffect(ModEffects.FATE);
+                        // 1.21.1 FIXED: Wrapped in RegistryEntry
+                        target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
                     } else {
                         spawnFateAuraParticles(world, target, fate);
                         syncFateEffect(target, fate.timerTicks);
@@ -322,11 +317,13 @@ public class CosmicPower implements Power {
 
     // ── Status-effect sync ────────────────────────────────────────────────────
     private static void syncFateEffect(LivingEntity entity, int timerTicks) {
-        entity.removeStatusEffect(ModEffects.FATE);
+        // 1.21.1 FIXED: Wrapped in RegistryEntry
+        entity.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
         if (timerTicks <= 0) return;
 
+        // 1.21.1 FIXED: Wrapped in RegistryEntry
         entity.addStatusEffect(new StatusEffectInstance(
-                ModEffects.FATE,
+                Registries.STATUS_EFFECT.getEntry(ModEffects.FATE),
                 timerTicks,
                 0,
                 false,
@@ -398,6 +395,8 @@ public class CosmicPower implements Power {
             world.spawnParticles(ParticleTypes.END_ROD,
                     pos.x, pos.y + 1, pos.z, 1, vx, vy, vz, 0.1);
         }
+
+        // FIXED: Reverted back to just SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST
         world.playSound(null, entity.getBlockPos(),
                 SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST,
                 entity.getSoundCategory(), 0.8f, 0.6f);
@@ -433,6 +432,7 @@ public class CosmicPower implements Power {
     }
 
     private static void playFateCapSound(ServerWorld world, LivingEntity entity) {
+        // FIXED: Reverted back to just SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE
         world.playSound(null, entity.getBlockPos(),
                 SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE,
                 entity.getSoundCategory(), 0.8f, 1.8f);
@@ -481,6 +481,7 @@ public class CosmicPower implements Power {
                     hitPos.x, hitPos.y, hitPos.z, 3, 0.2, 0.2, 0.2, 0.02);
         }
 
+        // FIXED: Reverted back to just SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST,
                 player.getSoundCategory(), 0.4f, 1.6f);
@@ -553,7 +554,7 @@ public class CosmicPower implements Power {
                 player.getSoundCategory(), 0.9f, 0.8f);
 
         player.addStatusEffect(new StatusEffectInstance(
-                ModEffects.BRACED, 100, 0, true, false, true));
+                Registries.STATUS_EFFECT.getEntry(ModEffects.BRACED), 100, 0, true, false, true));
     }
 
     private void handleShootingStar(ServerPlayerEntity player) {
@@ -590,8 +591,9 @@ public class CosmicPower implements Power {
         }
 
         spawnSlamParticles(world, slamPos);
+
         world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_GENERIC_EXPLODE,
+                SoundEvents.ENTITY_GENERIC_EXPLODE.value(),
                 player.getSoundCategory(), 1.0f, 0.8f);
 
         player.setVelocity(0, 0, 0);
@@ -639,6 +641,7 @@ public class CosmicPower implements Power {
         bh.setTravelDirection(lookDir);
         world.spawnEntity(bh);
 
+        // FIXED: Reverted back to just SoundEvents.BLOCK_PORTAL_AMBIENT
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.BLOCK_PORTAL_AMBIENT,
                 player.getSoundCategory(), 1.2f, 0.4f);
@@ -657,56 +660,43 @@ public class CosmicPower implements Power {
        META
        ============================================================ */
 
-    @Override public String getName()          { return "Cosmic"; }
-    @Override public String getPassiveName()   { return "Written in the Stars"; }
-    @Override public String getPrimaryName()   { return "Pulsar"; }
-    @Override public String getSecondaryName() { return "Starfall"; }
-    @Override public String getUltimateName()  { return "Event Horizon"; }
-
     @Override public long getPrimaryCooldownMs()   { return 7_000; }
     @Override public long getSecondaryCooldownMs() { return 22_000; }
     @Override public long getUltimateCooldownMs()  { return 250_000; }
 
+    /* ============================================================
+       DISPLAY
+       ============================================================ */
+
+    @Override public String getName() { return Text.translatable("power.loopypowers.cosmic.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.cosmic.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.cosmic.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.cosmic.ultimate_name").getString(); }
+    @Override public String getPassiveName() { return Text.translatable("power.loopypowers.cosmic.passive_name").getString(); }
+
     @Override
     public String getOverviewDescription() {
-        return "Cosmic is a damage based power, the whole gimmick revolves around low damage being done initially, but having huge damage come in bursts later due" +
-                " to the passive. All abilities revolve around this passive in different ways, and understanding how it works and how each ability interacts with it are" +
-                " fundamental for doing well with this power. The explanation for the passive and each ability should help with this.";
+        return Text.translatable("power.loopypowers.cosmic.description.overview").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "This is what your entire power revolves around. Your basic melee hits and some abilities apply a debuff called Fate, there are two elements to this debuff:" +
-                " \n Fate damage: This is the amount of damage Fate currently stores, it increases with the hits you do and is indicated by the amount of dust coming off the" +
-                " effected entity. This has a hard cap, when an entity has reached max damage, hitting it will play a sound and display star particles." +
-                "\n Fate Timer: This is the time until the stored fate damage is quickly applied, it is indicated by the orbiting sun around the entity, with faster orbit speeds" +
-                " meaning it is closer to detonation and extra fire particles will also appear when about to detonate." +
-                " \n When the timer expires, the entity will explode and have the debuff removed, quickly taking all of the damage that was stored over a few seconds." +
-                " They will then be immune to building fate for a long time (if they survive)." +
-                "\n" +
-                "\n But, your melee hits do significantly less damage and the lost damage is stored as Fate, melee hits also increase the countdown timer, giving you more time to build fate.";
+        return Text.translatable("power.loopypowers.cosmic.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Fire a hitscan beam that deals minor direct damage but stores significant Fate damage on the target and extends their timer significantly." +
-                " The beam pierces through entities but not blocks." +
-                " This is a lot more reliable than extending it via melee hits.";
+        return Text.translatable("power.loopypowers.cosmic.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Launch into the air and slam down towards your crosshair." +
-                " The impact applies a small amount of fate damage to nearby enemies but significantly reduces their fate timer by a percentage." +
-                " So this can be used to trigger detonations on groups of enemies.";
+        return Text.translatable("power.loopypowers.cosmic.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Summon a slow-moving black hole a few blocks in front of you." +
-                "\n This black hole travels slowly in the direction you cast it, having a large pull radius that gets stronger the closer entities are to the centre." +
-                "\n Any entities in the centre of the black hole will take constant damage (this does not apply Fate damage) and their Fate timer will be quickly drained down." +
-                "\n Essentially, this is a way to quickly drain fate and explode groups of entities over an area.";
+        return Text.translatable("power.loopypowers.cosmic.description.ultimate").getString();
     }
 
     private LivingEntity getEntityOnBeam(ServerWorld world, ServerPlayerEntity player, Vec3d origin, Vec3d end) {

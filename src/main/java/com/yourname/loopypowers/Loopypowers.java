@@ -123,19 +123,43 @@ public class Loopypowers implements ModInitializer {
         });
     }
 
+    // --- HELPER METHODS for 1.21.1 bullshit ---
+    private static boolean hasCustomEffect(LivingEntity entity, net.minecraft.entity.effect.StatusEffect effect) {
+        for (net.minecraft.entity.effect.StatusEffectInstance instance : entity.getStatusEffects()) {
+            if (instance.getEffectType().value() == effect) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void removeCustomEffect(LivingEntity entity, net.minecraft.entity.effect.StatusEffect effect) {
+        net.minecraft.registry.entry.RegistryEntry<net.minecraft.entity.effect.StatusEffect> toRemove = null;
+        for (net.minecraft.entity.effect.StatusEffectInstance instance : entity.getStatusEffects()) {
+            if (instance.getEffectType().value() == effect) {
+                toRemove = instance.getEffectType();
+                break;
+            }
+        }
+        if (toRemove != null) {
+            entity.removeStatusEffect(toRemove);
+        }
+    }
+    // -----------------------------------------------------------
+
     private void registerDamageHook() {
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((victim, source, amount) -> {
             // -- GLOBAL EVENTS --
             // keep displace immunity at top - to fast fail
-            if (victim.hasStatusEffect(ModEffects.DISPLACED)) return false;
-            if (source.getAttacker() instanceof LivingEntity attacker && attacker.hasStatusEffect(ModEffects.DISPLACED)) {
+            if (hasCustomEffect(victim, ModEffects.DISPLACED)) return false;
+            if (source.getAttacker() instanceof LivingEntity attacker && hasCustomEffect(attacker, ModEffects.DISPLACED)) {
                 return false;
             }
 
             // fall damage immunity (Braced)
             if (source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_FALL)) {
-                if (victim.hasStatusEffect(ModEffects.BRACED)) {
-                    victim.removeStatusEffect(ModEffects.BRACED);
+                if (hasCustomEffect(victim, ModEffects.BRACED)) {
+                    removeCustomEffect(victim, ModEffects.BRACED);
                     if (victim.getWorld() instanceof ServerWorld w) {
                         w.playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_WOOL_FALL, net.minecraft.sound.SoundCategory.PLAYERS, 0.7f, 1.2f);
                         w.spawnParticles(net.minecraft.particle.ParticleTypes.CLOUD, victim.getX(), victim.getY(), victim.getZ(), 20, 0.4, 0.1, 0.4, 0.05);

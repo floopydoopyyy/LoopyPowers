@@ -4,7 +4,9 @@ import com.yourname.loopypowers.effect.ModEffects;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.DataTracker; // ADDED
 import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.registry.Registries; // ADDED
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
@@ -144,12 +146,17 @@ public class DisplaceEntity extends Entity {
 
             hit.add(t.getUuid());
 
-            // apply effect
-            t.addStatusEffect(new StatusEffectInstance(ModEffects.DISPLACED, 120, 0, false, false, false));
+            // i hate 1.21.1
+            t.addStatusEffect(new StatusEffectInstance(
+                    Registries.STATUS_EFFECT.getEntry(ModEffects.DISPLACED),
+                    120, 0, false, false, false
+            ));
         }
     }
 
-    @Override protected void initDataTracker() {}
+    @Override
+    protected void initDataTracker(DataTracker.Builder builder) {} // 1.21.1 FIXED
+
     @Override protected void readCustomDataFromNbt(NbtCompound nbt) {}
     @Override protected void writeCustomDataToNbt(NbtCompound nbt) {}
 }

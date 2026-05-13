@@ -2,16 +2,15 @@ package com.yourname.loopypowers.item;
 
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.ritual.RitualManager;
-import net.minecraft.client.item.TooltipContext;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.tooltip.TooltipType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import net.minecraft.util.TypedActionResult;
 import net.minecraft.world.World;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -26,17 +25,14 @@ public class RefinedCoreItem extends Item {
         return true;
     }
 
+    // 1.21.1 Tooltip Update
     @Override
-    public void appendTooltip(ItemStack stack, @Nullable World world,
-                              List<Text> tooltip, TooltipContext context) {
-
-        tooltip.add(Text.literal("A powerful item capable of strengthening your connection.")
+    public void appendTooltip(ItemStack stack, Item.TooltipContext context, List<Text> tooltip, TooltipType type) {
+        tooltip.add(Text.translatable("item.loopypowers.refined_celestial_core.tooltip.desc")
                 .formatted(Formatting.GRAY));
 
-        tooltip.add(Text.literal("Upgrades a power from Level 1 to 2.")
-                .formatted(Formatting.DARK_PURPLE));
-
-        super.appendTooltip(stack, world, tooltip, context);
+        tooltip.add(Text.translatable("item.loopypowers.refined_celestial_core.tooltip.effect")
+                .formatted(Formatting.LIGHT_PURPLE));
     }
 
     @Override
@@ -54,7 +50,7 @@ public class RefinedCoreItem extends Item {
         // no power
         if (PowerManager.getPower(player) == null) {
             player.sendMessage(
-                    Text.literal("§cYou are powerless, the item has no effect"),
+                    Text.translatable("message.loopypowers.refined_core.no_power").formatted(Formatting.RED),
                     true
             );
             return TypedActionResult.fail(stack);
@@ -65,7 +61,7 @@ public class RefinedCoreItem extends Item {
         // too high
         if (level > 1) {
             player.sendMessage(
-                    Text.literal("§cYour connection Level is already beyond this point, the item has no effect."),
+                    Text.translatable("message.loopypowers.refined_core.level_too_high").formatted(Formatting.RED),
                     true
             );
             return TypedActionResult.fail(stack);
@@ -74,7 +70,7 @@ public class RefinedCoreItem extends Item {
         // somehow below 1
         if (level < 1) {
             player.sendMessage(
-                    Text.literal("§cThis is an exception: Your power level is somehow below 1.."),
+                    Text.translatable("message.loopypowers.refined_core.exception_low").formatted(Formatting.RED),
                     true
             );
             return TypedActionResult.fail(stack);
@@ -88,6 +84,6 @@ public class RefinedCoreItem extends Item {
             stack.decrement(1);
         }
 
-        return TypedActionResult.success(stack, world.isClient());
+        return TypedActionResult.success(stack);
     }
 }

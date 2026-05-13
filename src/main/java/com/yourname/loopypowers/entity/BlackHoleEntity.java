@@ -6,6 +6,7 @@ import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.DataTracker; // ADDED THIS IMPORT
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
@@ -387,10 +388,13 @@ public class BlackHoleEntity extends Entity {
     }
 
     /* ============================================================
-       Data
+       Data (1.21.1 UPDATE)
        ============================================================ */
 
-    @Override protected void initDataTracker() {}
+    @Override
+    protected void initDataTracker(DataTracker.Builder builder) {
+        // 1.21.1 requires the DataTracker.Builder argument
+    }
 
     @Override
     protected void readCustomDataFromNbt(NbtCompound nbt) {

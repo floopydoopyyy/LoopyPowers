@@ -11,8 +11,9 @@ public class DeepFreezeEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) { // CHANGED void to boolean
         // handled by ice power, this is purely visual
+        return true; // ADDED
     }
 
     @Override

@@ -4,7 +4,6 @@ import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.RenderPackets;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.AttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributeModifier;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.effect.StatusEffect;
@@ -15,6 +14,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.particle.DustParticleEffect;
+import net.minecraft.util.Identifier;
 import org.joml.Vector3f;
 
 public class StunEffect extends StatusEffect {
@@ -28,35 +28,36 @@ public class StunEffect extends StatusEffect {
         // reduce movement speed
         this.addAttributeModifier(
                 EntityAttributes.GENERIC_MOVEMENT_SPEED,
-                "c51ceae4-f860-4b53-8356-9a2cddc48c66",
+                Identifier.of("loopypowers", "stun_slow"),
                 -0.80f,
-                EntityAttributeModifier.Operation.MULTIPLY_TOTAL
+                EntityAttributeModifier.Operation.ADD_MULTIPLIED_TOTAL //
         );
 
         // reduce weapon swing speed
         this.addAttributeModifier(
                 EntityAttributes.GENERIC_ATTACK_SPEED,
-                "5bfd003b-d3eb-4601-8b2b-0ffc06df9a56",
+                Identifier.of("loopypowers", "stun_attack_speed"),
                 -0.50f,
-                EntityAttributeModifier.Operation.MULTIPLY_TOTAL
+                EntityAttributeModifier.Operation.ADD_MULTIPLIED_TOTAL //
         );
 
         // reduce attack damage
         this.addAttributeModifier(
                 EntityAttributes.GENERIC_ATTACK_DAMAGE,
-                "b888eb1a-fbf2-4fb3-81b0-2f3b9c7b949b",
+                Identifier.of("loopypowers", "stun_damage"),
                 -4.0f,
-                EntityAttributeModifier.Operation.ADDITION
+                EntityAttributeModifier.Operation.ADD_VALUE //
         );
     }
 
     @Override
-    public void onApplied(LivingEntity entity, AttributeContainer attributes, int amplifier) {
-        super.onApplied(entity, attributes, amplifier);
+    public void onApplied(LivingEntity entity, int amplifier) {
+        super.onApplied(entity, amplifier);
 
         // Play the ringing sound exactly when effect applied
         if (!entity.getWorld().isClient && entity instanceof ServerPlayerEntity player) {
-            player.playSound(ModSounds.EARRING, SoundCategory.PLAYERS, 1.5f, 1.0f);
+            // Route sound through the world
+            player.getWorld().playSound(null, player.getBlockPos(), ModSounds.EARRING, SoundCategory.PLAYERS, 1.5f, 1.0f);
         }
     }
 
@@ -66,10 +67,10 @@ public class StunEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
-        if (entity.getWorld().isClient) return;
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) {
+        if (entity.getWorld().isClient) return true; // Changed to return true
 
-        // --- VISUAL INDICATOR: SWIRLING STARS ---
+        // STARS
         if (entity.getWorld() instanceof ServerWorld world) {
             double radius = 0.55; // Distance from the center of the head
             double height = entity.getY() + entity.getHeight() + 0.35; // Just above the head
@@ -92,7 +93,18 @@ public class StunEffect extends StatusEffect {
         if (entity instanceof ServerPlayerEntity p) {
             // Player Stun Logic
             if (p.age % 10 == 0) { // throttles audio packets
-                RenderPackets.sendStunAudio(p, p.getStatusEffect(ModEffects.STUN).getDuration());
+
+                int duration = 0;
+                for (StatusEffectInstance instance : p.getStatusEffects()) {
+                    if (instance.getEffectType().value() == this) {
+                        duration = instance.getDuration();
+                        break;
+                    }
+                }
+
+                if (duration > 0) {
+                    RenderPackets.sendStunAudio(p, duration);
+                }
             }
 
             p.setSprinting(false);
@@ -111,5 +123,7 @@ public class StunEffect extends StatusEffect {
             entity.setYaw(entity.prevYaw);
             entity.setPitch(entity.prevPitch);
         }
+
+        return true;
     }
 }

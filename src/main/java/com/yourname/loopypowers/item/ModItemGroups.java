@@ -16,7 +16,7 @@ public class ModItemGroups {
 
     public static final ItemGroup LOOPYPOWERS_GROUP = Registry.register(
             Registries.ITEM_GROUP,
-            new Identifier(Loopypowers.MOD_ID, "loopypowers_group"),
+            Identifier.of(Loopypowers.MOD_ID, "loopypowers_group"),
             FabricItemGroup.builder()
                     .icon(() -> new ItemStack(CELESTIAL_SHARD)) // icon item
                     .displayName(Text.literal("Loopy's Powers"))

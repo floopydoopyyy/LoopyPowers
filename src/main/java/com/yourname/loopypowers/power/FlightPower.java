@@ -8,9 +8,11 @@ import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.hit.HitResult;
@@ -93,7 +95,8 @@ public class FlightPower implements Power {
     public void onRemove(ServerPlayerEntity player) {
         unequipWings(player);
         ACTIVE_STATES.remove(player.getUuid());
-        player.removeStatusEffect(ModEffects.GROUNDED);
+
+        player.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED));
 
         if (player.isAlive()) {
             player.getCommandTags().remove("fl_hecanfly_done");
@@ -133,13 +136,15 @@ public class FlightPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         FlightState state = getState(player);
 
         // EGG
         if (state.funnyTimer > 0) {
             state.funnyTimer--;
-        } else if (!player.getCommandTags().contains("fl_hecanfly_done")) {
-            // lock egg
+        } else {
+            // lock egg (Set.add handles redundancy gracefully, removing the unnecessary contains check)
             player.getCommandTags().add("fl_hecanfly_done");
         }
 
@@ -176,25 +181,29 @@ public class FlightPower implements Power {
 
         if (state.boomInvuln) return false; // Invulnerable during boom dash
 
-        // Force them downward + lock re-glide
-        Vec3d v = victim.getVelocity();
-        victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
-        victim.velocityModified = true;
+        // now only ground when hit midair
+        if (victim.isFallFlying() || state.flightActive) {
+            // Force them downward + lock re-glide
+            Vec3d v = victim.getVelocity();
+            victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
+            victim.velocityModified = true;
 
-        // Apply visual Grounded effect
-        victim.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
+            // Apply visual Grounded effect using registry
+            victim.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED), HURT_LOCK_DURATION, 0, false, false, true));
 
-        // Clear flight states
-        state.flightActive = false;
-        state.trailStep = 0;
-        state.soundStep = 0;
+            // Clear flight states
+            state.flightActive = false;
+            state.trailStep = 0;
+            state.soundStep = 0;
+            victim.stopFallFlying();
 
-        // particles
-        ServerWorld w = victim.getServerWorld();
-        w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
-                8, 0.35, 0.35, 0.35, 0.02);
-        w.playSound(null, victim.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
-                victim.getSoundCategory(), 0.7f, 0.9f);
+            // particles
+            ServerWorld w = victim.getServerWorld();
+            w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
+                    8, 0.35, 0.35, 0.35, 0.02);
+            w.playSound(null, victim.getX(), victim.getY(), victim.getZ(), SoundEvents.ENTITY_PHANTOM_FLAP,
+                    victim.getSoundCategory(), 0.7f, 0.9f);
+        }
 
         return true;
     }
@@ -212,8 +221,8 @@ public class FlightPower implements Power {
 
     @Override
     public boolean tryActivatePrimary(ServerPlayerEntity player) {
-        if (player.hasStatusEffect(ModEffects.GROUNDED)) {
-            player.sendMessage(net.minecraft.text.Text.literal("§7You're grounded."), true);
+        if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED))) {
+            player.sendMessage(Text.translatable("power.loopypowers.flight.grounded"), true);
             return false;
         }
         activatePrimary(player);
@@ -229,7 +238,7 @@ public class FlightPower implements Power {
         if (player.isFallFlying() && !player.getCommandTags().contains("fl_hecanfly_done")) {
             // % chance to play when used
             if (RNG.nextFloat() < 0.25f) {
-                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
+                player.getServerWorld().playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
                 // mark em
                 player.getCommandTags().add("fl_hecanfly_done");
             }
@@ -263,7 +272,7 @@ public class FlightPower implements Power {
                 player.getX(), player.getY() + 0.8, player.getZ(),
                 12, 0.25, 0.15, 0.25, 0.02
         );
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.GUST,
                 player.getSoundCategory(),
                 0.9f, 1.6f
@@ -306,8 +315,8 @@ public class FlightPower implements Power {
     // SECONDARY
     @Override
     public boolean tryActivateSecondary(ServerPlayerEntity player) {
-        if (player.hasStatusEffect(ModEffects.GROUNDED)) {
-            player.sendMessage(net.minecraft.text.Text.literal("§7You're grounded."), true);
+        if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED))) {
+            player.sendMessage(Text.translatable("power.loopypowers.flight.grounded"), true);
             return false;
         }
         activateSecondary(player);
@@ -324,7 +333,7 @@ public class FlightPower implements Power {
         );
         w.playSound(
                 null,
-                player.getBlockPos(),
+                player.getX(), player.getY(), player.getZ(),
                 ModSounds.UPDRAFT,
                 player.getSoundCategory(),
                 1.1f,
@@ -353,7 +362,7 @@ public class FlightPower implements Power {
     @Override
     public boolean tryActivateUltimate(ServerPlayerEntity player) {
         if (player.isOnGround() || player.isTouchingWater()) {
-            player.sendMessage(net.minecraft.text.Text.literal("§7You must be airborne to use sonic boom."), true);
+            player.sendMessage(Text.translatable("power.loopypowers.flight.must_be_airborne"), true);
             return false;
         }
         activateUltimate(player);
@@ -375,7 +384,7 @@ public class FlightPower implements Power {
         player.fallDistance = 0;
 
         ServerWorld w = player.getServerWorld();
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_WARDEN_SONIC_CHARGE,
                 player.getSoundCategory(), 1.5f, 1.0f);
 
@@ -419,13 +428,14 @@ public class FlightPower implements Power {
                 player.setVelocity(launch.x, Math.max(launch.y, 0.05), launch.z);
                 player.velocityModified = true;
 
-                world.playSound(null, player.getBlockPos(),
+                world.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
                         player.getSoundCategory(), 1.6f, 1.0f);
             }
 
             return;
         }
+
         // BIG PUSH
         if (state.boomDash > 0) {
             state.boomDash--;
@@ -456,19 +466,35 @@ public class FlightPower implements Power {
             List<LivingEntity> nearby = world.getEntitiesByClass(LivingEntity.class, box,
                     e -> e.isAlive() && e != player);
 
+            // --- ENTITY COLLISION CHECK ---
+            boolean hitEntity = false;
+            Box hitBox = player.getBoundingBox().expand(0.8); // 0.8 block tolerance for direct impact
+
             for (LivingEntity e : nearby) {
-                Vec3d away = e.getPos().subtract(player.getPos());
-                if (away.lengthSquared() < 0.0001) continue;
-                Vec3d knock = away.normalize().multiply(0.9).add(0, 0.15, 0);
-                e.addVelocity(knock.x, knock.y, knock.z);
-                e.velocityModified = true;
+                if (hitBox.intersects(e.getBoundingBox())) {
+                    hitEntity = true;
+                    break;
+                }
             }
 
+            // If we didn't get a direct hit, push nearby entities out of the way
+            if (!hitEntity) {
+                for (LivingEntity e : nearby) {
+                    Vec3d away = e.getPos().subtract(player.getPos());
+                    if (away.lengthSquared() < 0.0001) continue;
+                    Vec3d knock = away.normalize().multiply(0.9).add(0, 0.15, 0);
+                    e.addVelocity(knock.x, knock.y, knock.z);
+                    e.velocityModified = true;
+                }
+            }
+
+            // Calculate if we collided with terrain OR an entity
             boolean collided =
                     player.horizontalCollision
                             || player.verticalCollision
                             || player.isOnGround()
-                            || boomHitsBlock(world, player);
+                            || boomHitsBlock(world, player)
+                            || hitEntity;
 
             if (collided) {
                 doBoomImpact(world, player);
@@ -492,7 +518,7 @@ public class FlightPower implements Power {
     private void tickPassiveFlight(ServerPlayerEntity player, FlightState state) {
         if (player.isCreative() || player.isSpectator()) return;
 
-        if (player.hasStatusEffect(ModEffects.GROUNDED)) {
+        if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED))) {
             if (player.isFallFlying()) player.stopFallFlying();
             state.flightActive = false;
             return;
@@ -538,7 +564,7 @@ public class FlightPower implements Power {
         state.soundStep--;
         if (state.soundStep <= 0) {
             state.soundStep = SOUND_INTERVAL;
-            w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP, player.getSoundCategory(),
+            w.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_PHANTOM_FLAP, player.getSoundCategory(),
                     0.35f, 1.35f);
         }
     }
@@ -596,7 +622,7 @@ public class FlightPower implements Power {
 
         world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
                 c.x, c.y + 1.0, c.z, 1, 0, 0, 0, 0);
-        world.playSound(null, player.getBlockPos(),
+        world.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(), 1.2f, 0.9f);
 
@@ -628,7 +654,7 @@ public class FlightPower implements Power {
             e.addVelocity(kb.x, kb.y, kb.z);
             e.velocityModified = true;
         }
-        player.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, BOOM_KNOCKOUT_DURATION, 0, false, false, true));
+        player.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED), BOOM_KNOCKOUT_DURATION, 0, false, false, true));
         player.setVelocity(0, Math.min(player.getVelocity().y, -0.25), 0);
         player.velocityModified = true;
     }
@@ -643,42 +669,38 @@ public class FlightPower implements Power {
        DISPLAY
        ============================================================ */
 
-    @Override public String getName() { return "Flight"; }
-    @Override public String getPrimaryName() { return "Gust"; }
-    @Override public String getSecondaryName() { return "Updraft"; }
-    @Override public String getUltimateName() { return "Sonic Boom"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.flight.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.flight.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.flight.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.flight.ultimate_name").getString(); }
 
     @Override
     public String getOverviewDescription() {
-        return "Flight revolves around mobility, with very little to offer outside of that. Both abilities grant you heightened mobility and the" +
-                "ultimate can be used both for mobility and damage. It is useful for survival but you may have limited tools in combat compared to other powers.";
+        return Text.translatable("power.loopypowers.flight.description.overview").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Wings Of Valor";
+        return Text.translatable("power.loopypowers.flight.passive_name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "You permanently have wings as a chestplate that grant you elytra flight. When damaged, any forms of flight are blocked" +
-                "for a few seconds. You cannot remove these wings and they cannot break.";
+        return Text.translatable("power.loopypowers.flight.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Gain a burst of momentum in the direction that you're looking and gain a brief speed boost after.";
+        return Text.translatable("power.loopypowers.flight.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Shoot yourself into the air and enter flight. If you are grounded this ability cannot be used.";
+        return Text.translatable("power.loopypowers.flight.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Can only be used while flying. Stop all movement and briefly charge up. Once charged, shoot off in the direction you're looking with high speed." +
-                "During flight, nearby entities will be pushed away and if you collide with a solid block, explode nearby entites with high knockback and become grounded" +
-                "for a few seconds.";
+        return Text.translatable("power.loopypowers.flight.description.ultimate").getString();
     }
 }

@@ -8,9 +8,11 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import net.minecraft.util.hit.HitResult;
@@ -27,6 +29,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import static com.yourname.loopypowers.CooldownUI.makeChargeSuffix;
+import static com.yourname.loopypowers.CooldownUI.setCooldownEnd;
 
 public class ExplosionPower implements Power {
 
@@ -139,7 +144,8 @@ public class ExplosionPower implements Power {
 
         player.removeStatusEffect(StatusEffects.SPEED);
         player.removeStatusEffect(StatusEffects.SLOWNESS);
-        player.removeStatusEffect(ModEffects.BRACED);
+
+        player.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.BRACED));
     }
 
     @Override
@@ -149,6 +155,8 @@ public class ExplosionPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ExplosionState state = getState(player);
 
         if (state.blastLockTicks > 0) state.blastLockTicks--;
@@ -184,11 +192,7 @@ public class ExplosionPower implements Power {
         }
 
         // Immunity to own explosion damage
-        if (state.noSelfExpTicks > 0 && source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_EXPLOSION)) {
-            return false;
-        }
-
-        return true;
+        return state.noSelfExpTicks <= 0 || !source.isIn(net.minecraft.registry.tag.DamageTypeTags.IS_EXPLOSION);
     }
 
     /* ============================================================
@@ -201,7 +205,7 @@ public class ExplosionPower implements Power {
         state.ignitingTicks = IGNITE_FUSE_TICKS;
 
         ServerWorld w = player.getServerWorld();
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_TNT_PRIMED,
                 player.getSoundCategory(),
                 1.0f, 1.0f);
@@ -252,7 +256,7 @@ public class ExplosionPower implements Power {
 
         if (w.getTime() % 20 == 0) {
             float pitch = 0.9f + 0.35f * progress;
-            w.playSound(null, player.getBlockPos(),
+            w.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.ENTITY_TNT_PRIMED,
                     player.getSoundCategory(),
                     0.55f,
@@ -307,7 +311,7 @@ public class ExplosionPower implements Power {
 
         applyRecoil(player, origin);
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(),
                 0.9f, 1.15f);
@@ -379,11 +383,12 @@ public class ExplosionPower implements Power {
         }
 
         long endMs = System.currentTimeMillis() + (state.blastRechargeTicks * 50L);
-        String suffix = com.yourname.loopypowers.CooldownUI.makeChargeSuffix(
-                state.blastCharges, BLAST_MAX_CHARGES, state.blastRechargeTicks, BLAST_RECHARGE_TICKS
-        );
 
-        com.yourname.loopypowers.CooldownUI.setCooldownEnd(player, key, endMs, suffix);
+        String suffix = makeChargeSuffix(
+                state.blastCharges, BLAST_MAX_CHARGES, state.blastRechargeTicks, BLAST_RECHARGE_TICKS
+        ).getString();
+
+        setCooldownEnd(player, key, endMs, suffix);
     }
 
     /* ============================================================
@@ -404,7 +409,7 @@ public class ExplosionPower implements Power {
         }
 
         ServerWorld w = player.getServerWorld();
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_TNT_PRIMED,
                 player.getSoundCategory(),
                 1.0f, 0.8f);
@@ -466,7 +471,7 @@ public class ExplosionPower implements Power {
         state.ultWaitingLand = false;
         state.ultLaunchDelayTicks = 0;
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.BLOCK_FIRE_EXTINGUISH,
                 player.getSoundCategory(),
                 0.9f, 1.2f);
@@ -487,7 +492,7 @@ public class ExplosionPower implements Power {
         state.ultAirTicks = 0;
         state.ultWaitingLand = false;
 
-        w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_IRON_GOLEM_DAMAGE, player.getSoundCategory(), 1.0f, 1.5f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_IRON_GOLEM_DAMAGE, player.getSoundCategory(), 1.0f, 1.5f);
 
         Vec3d v = player.getVelocity();
         player.setVelocity(v.x * 0.5, v.y * 0.2, v.z * 0.5);
@@ -530,7 +535,7 @@ public class ExplosionPower implements Power {
 
         state.noSelfExpTicks = finisher ? 8 : 6;
 
-        player.addStatusEffect(new StatusEffectInstance(ModEffects.BRACED, 200, 0, false, false, true));
+        player.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.BRACED), 200, 0, false, false, true));
 
         state.ultWaitingLand = true;
 
@@ -565,21 +570,21 @@ public class ExplosionPower implements Power {
         scheduleLaunch(state, targetX, targetY, targetZ);
 
         float plingPitch = 1.25f + (0.12f * popIndex);
-        w.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.BLOCK_NOTE_BLOCK_PLING, // Removed .value() for 1.21.1
                 player.getSoundCategory(),
                 0.8f, plingPitch);
 
         if (finisher) {
-            w.playSound(null, player.getBlockPos(),
-                    ModSounds.EXPLODEBIG,
+            w.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    Registries.SOUND_EVENT.getEntry(ModSounds.EXPLODEBIG),
                     player.getSoundCategory(),
                     0.8f, 0.85f);
             CameraShake.shakeNearby(player, 14.0, 16, 1.55f);
         } else {
             float pitch = 1.05f + 0.12f * popIndex;
-            w.playSound(null, player.getBlockPos(),
-                    ModSounds.EXPLODEBIG,
+            w.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    Registries.SOUND_EVENT.getEntry(ModSounds.EXPLODEBIG),
                     player.getSoundCategory(),
                     0.75f, pitch);
             CameraShake.shakeNearby(player, 9.0, 8, 0.9f);
@@ -719,7 +724,7 @@ public class ExplosionPower implements Power {
 
                 if (state.isIn(net.minecraft.registry.tag.BlockTags.SAND) && w.random.nextFloat() < GLASS_CONVERT_CHANCE) {
                     w.setBlockState(targetPos, net.minecraft.block.Blocks.GLASS.getDefaultState());
-                    w.playSound(null, targetPos, SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.BLOCKS, 0.5f, 2.6f);
+                    w.playSound(null, targetPos.getX() + 0.5, targetPos.getY() + 0.5, targetPos.getZ() + 0.5, SoundEvents.BLOCK_FIRE_EXTINGUISH, net.minecraft.sound.SoundCategory.BLOCKS, 0.5f, 2.6f);
                     continue;
                 }
 
@@ -761,7 +766,7 @@ public class ExplosionPower implements Power {
 
             if (isSecondary && wasAlive && e.getHealth() <= 0 && e instanceof ServerPlayerEntity) {
                 if (w.random.nextFloat() < WHY_SOUND_CHANCE) {
-                    w.playSound(null, e.getBlockPos(), ModSounds.WHY, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
+                    w.playSound(null, e.getX(), e.getY(), e.getZ(), Registries.SOUND_EVENT.getEntry(ModSounds.WHY), net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
                 }
             }
 
@@ -806,46 +811,30 @@ public class ExplosionPower implements Power {
        COOLDOWNS / DISPLAY
        ============================================================ */
 
-    @Override public String getName() { return "Explosion"; }
-    @Override public String getPrimaryName() { return "Ignition"; }
-    @Override public String getSecondaryName() { return "Propulsion Blast"; }
-    @Override public String getUltimateName() { return "Chain Reaction"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.explosion.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.explosion.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.explosion.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.explosion.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs() { return 28_000; }
     @Override public long getSecondaryCooldownMs() { return 0; }
     @Override public long getUltimateCooldownMs() { return 460_000; }
 
     @Override
-    public String getOverviewDescription() {
-        return "Explosion is a high damage, combo-based and movement-oriented power, where abilities are intended to be used together to move quickly and deal high amounts of group damage." +
-                " While also offering some other utilities, like being able to resist all forms of explosion damage, including creepers, end crystals etc. And can also be very destructive.";
-    }
+    public String getOverviewDescription() { return Text.translatable("power.loopypowers.explosion.description.overview").getString(); }
 
     @Override
-    public String getPassiveName() {
-        return "Shock Absorption";
-    }
+    public String getPassiveName() { return Text.translatable("power.loopypowers.explosion.description.passive").getString(); }
 
     @Override
-    public String getPassiveDescription() {
-        return "You take less explosion damage";
-    }
+    public String getPassiveDescription() {return Text.translatable("power.loopypowers.explosion.description.passive").getString(); }
 
     @Override
-    public String getPrimaryDescription() {
-        return "Ignite yourself, speeding yourself up and explode after a few seconds, damaging anything around you.";
-    }
+    public String getPrimaryDescription() { return Text.translatable("power.loopypowers.explosion.description.primary").getString(); }
 
     @Override
-    public String getSecondaryDescription() {
-        return "Shoot an explosion where you are looking. The recoil will send you flying in the direction you shot the blast from" +
-                "you will still take fall damage after using this. This ability has 2 charges on separate cooldowns.";
-    }
+    public String getSecondaryDescription() { return Text.translatable("power.loopypowers.explosion.description.secondary").getString(); }
 
     @Override
-    public String getUltimateDescription() {
-        return "Shoot yourself in the air with a big explosion at your feet (or shoot yourself when you land if airborne.) each time you land you will explode and be" +
-                "shot up again. On your final explosion, you will briefly pause and do a bigger explosion. These falls will not inflict fall damage and you are free to use" +
-                "other abilities while airborne. Being in water will also pause the fuse. (so you will explode when surfacing instead)";
-    }
+    public String getUltimateDescription() { return Text.translatable("power.loopypowers.explosion.description.ultimate").getString(); }
 }

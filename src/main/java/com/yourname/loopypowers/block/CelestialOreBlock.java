@@ -6,6 +6,7 @@ import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.intprovider.UniformIntProvider;
 import net.minecraft.util.math.random.Random;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
@@ -13,7 +14,7 @@ import org.joml.Vector3f;
 public class CelestialOreBlock extends ExperienceDroppingBlock {
 
     public CelestialOreBlock(Settings settings) {
-        super(settings);
+        super(UniformIntProvider.create(3, 7), settings);
     }
 
     @Override

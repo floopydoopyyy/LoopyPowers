@@ -13,6 +13,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.particle.DustParticleEffect;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.*;
@@ -27,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+
+import static com.yourname.loopypowers.CooldownUI.makeChargeSuffix;
 
 public class TeleportPower implements Power {
 
@@ -117,6 +120,8 @@ public class TeleportPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         TeleportState state = getState(player);
 
         // Primary Charges
@@ -193,7 +198,7 @@ public class TeleportPower implements Power {
             state.blinkRechargeTicks = PRIMARY_RECHARGE_TICKS;
         }
 
-        blinkForward(player, PRIMARY_BLINK_DIST);
+        blinkForward(player);
     }
 
     private static void tickBlinkRecharge(TeleportState state) {
@@ -236,14 +241,14 @@ public class TeleportPower implements Power {
 
         long endMs = System.currentTimeMillis() + (leftTicks * 50L);
 
-        String suffix = CooldownUI.makeChargeSuffix(
+        String suffix = makeChargeSuffix(
                 state.blinkCharges, PRIMARY_MAX_CHARGES, leftTicks, PRIMARY_RECHARGE_TICKS
-        );
+        ).getString();
 
         CooldownUI.setCooldownEnd(player, key, endMs, suffix);
     }
 
-    private static void blinkForward(ServerPlayerEntity player, double maxDistance) {
+    private static void blinkForward(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
 
         Vec3d eye = player.getEyePos();
@@ -257,7 +262,7 @@ public class TeleportPower implements Power {
             distanceMultiplier = Math.max(0.2, 1.0 + look.y);
         }
 
-        double actualDistance = maxDistance * distanceMultiplier;
+        double actualDistance = PRIMARY_BLINK_DIST * distanceMultiplier;
 
         boolean allowAir = look.y > PRIMARY_AIR_LOOK_THRESHOLD;
         if (!allowAir) {
@@ -366,11 +371,11 @@ public class TeleportPower implements Power {
     public void activateSecondary(ServerPlayerEntity player) {
         if (!(player.getWorld() instanceof ServerWorld world)) return;
 
-        Entity target = getLookedAtEntity(player, SECONDARY_RANGE);
+        Entity target = getLookedAtEntity(player);
 
         // if whiff do a thing
         if (!(target instanceof LivingEntity living)) {
-            SecondaryWhiffFx(player, world, SECONDARY_RANGE);
+            SecondaryWhiffFx(player, world);
             return;
         }
 
@@ -409,9 +414,9 @@ public class TeleportPower implements Power {
     @Override
     public long getSecondaryCooldownMs() { return SECONDARY_COOLDOWN_MS; }
 
-    private static void SecondaryWhiffFx(ServerPlayerEntity player, ServerWorld world, double range) {
+    private static void SecondaryWhiffFx(ServerPlayerEntity player, ServerWorld world) {
         Vec3d start = player.getEyePos();
-        Vec3d end = start.add(player.getRotationVec(1.0f).multiply(range));
+        Vec3d end = start.add(player.getRotationVec(1.0f).multiply(SECONDARY_RANGE));
 
         HitResult hr = world.raycast(new RaycastContext(
                 start,
@@ -480,7 +485,7 @@ public class TeleportPower implements Power {
         if (state.frenzyTicks <= 0) return;
 
         ServerWorld world = player.getServerWorld();
-        spawnFrenzyRadius(world, player, ULTIMATE_AURA_RADIUS);
+        spawnFrenzyRadius(world, player);
         spawnFrenzyAura(world, player);
 
         if (state.frenzyStep > 0) {
@@ -524,14 +529,14 @@ public class TeleportPower implements Power {
         world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, player.getSoundCategory(), 0.6f, 1.5f);
     }
 
-    private static void spawnFrenzyRadius(ServerWorld world, ServerPlayerEntity player, double radius) {
+    private static void spawnFrenzyRadius(ServerWorld world, ServerPlayerEntity player) {
         Vec3d center = player.getPos();
 
         int points = 80; // more points makes the circle more circly
         for (int i = 0; i < points; i++) {
             double angle = (2 * Math.PI * i) / points;
-            double x = center.x + Math.cos(angle) * radius;
-            double z = center.z + Math.sin(angle) * radius;
+            double x = center.x + Math.cos(angle) * ULTIMATE_AURA_RADIUS;
+            double z = center.z + Math.sin(angle) * ULTIMATE_AURA_RADIUS;
 
             world.spawnParticles(
                     FRENZY_RING,
@@ -577,12 +582,12 @@ public class TeleportPower implements Power {
     // RAYCAST ENTITY HELPER
     // =========================
 
-    private static Entity getLookedAtEntity(ServerPlayerEntity player, double range) {
+    private static Entity getLookedAtEntity(ServerPlayerEntity player) {
         Vec3d start = player.getEyePos();
         Vec3d look = player.getRotationVec(1.0f);
-        Vec3d end = start.add(look.multiply(range));
+        Vec3d end = start.add(look.multiply(SECONDARY_RANGE));
 
-        Box box = player.getBoundingBox().stretch(look.multiply(range)).expand(SECONDARY_HIT_MARGIN);
+        Box box = player.getBoundingBox().stretch(look.multiply(SECONDARY_RANGE)).expand(SECONDARY_HIT_MARGIN);
 
         var hit = ProjectileUtil.raycast(
                 player,
@@ -590,7 +595,7 @@ public class TeleportPower implements Power {
                 end,
                 box,
                 e -> e instanceof LivingEntity && e != player,
-                range * range
+                SECONDARY_RANGE * SECONDARY_RANGE
         );
 
         return hit != null ? hit.getEntity() : null;
@@ -610,20 +615,22 @@ public class TeleportPower implements Power {
     // HELPER METHODS
     // =========================
 
-    private static void forceAttack(ServerPlayerEntity player, LivingEntity target) { // this is just used for the ult, otherwise the attack cooldown would just tickle
+    private static void forceAttack(ServerPlayerEntity player, LivingEntity target) {
         float baseDamage = (float) player.getAttributeValue(net.minecraft.entity.attribute.EntityAttributes.GENERIC_ATTACK_DAMAGE);
+        DamageSource frenzySrc = ModDamageTypes.frenzy(player.getWorld(), player);
 
-        // adds enchants on sword to damage
-        float enchantBonus = net.minecraft.enchantment.EnchantmentHelper.getAttackDamage(
-                player.getMainHandStack(),
-                target.getGroup()
-        );
-
-        float totalDamage = (baseDamage + enchantBonus); //this is very unbalanced
+        float totalDamage = baseDamage;
+        if (player.getWorld() instanceof ServerWorld serverWorld) {
+            totalDamage = net.minecraft.enchantment.EnchantmentHelper.getDamage(
+                    serverWorld,
+                    player.getMainHandStack(),
+                    target,
+                    frenzySrc,
+                    baseDamage
+            );
+        }
 
         player.swingHand(Hand.MAIN_HAND, true);
-
-        DamageSource frenzySrc = ModDamageTypes.frenzy(player.getWorld(), player);
         target.damage(frenzySrc, totalDamage);
     }
 
@@ -676,45 +683,38 @@ public class TeleportPower implements Power {
     }
 
     // names
-    @Override public String getName() { return "Teleportation"; }
-    @Override public String getPrimaryName() { return "Blink"; }
-    @Override public String getSecondaryName() { return "Boogie Woogie"; }
-    @Override public String getUltimateName() { return "Frenzy"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.teleport.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.teleport.primary.name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.teleport.secondary.name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.teleport.ultimate.name").getString(); }
 
     @Override
     public String getOverviewDescription() {
-        return "Teleportation is focussed on being confusing in battle, where you're more of a mosquito in a fight since you have little direct combat tools and just move around." +
-                " The abilities revolve around manipulation and being hard to hit, while also being able to do well in setup.";
+        return Text.translatable("power.loopypowers.teleport.description.overview").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Slippy";
+        return Text.translatable("power.loopypowers.teleport.passive.name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "You have a small chance to dodge an instance of ANY damage, this will then go on a short cooldown before being available again.";
+        return Text.translatable("power.loopypowers.teleport.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "You have 3 charges of a teleport that moves you a moderate distance in the direction you're looking. This ability goes on cooldown per charge and " +
-                "prioritises bringing you to a safe location (e.g. putting you on the ground instead of the air). A lingering trail is left between the locations of the teleport and each" +
-                " teleport will reset your attack cooldown, allowing for multi-hit combos.";
+        return Text.translatable("power.loopypowers.teleport.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Swap places with the entity you're looking at and reset your attack cooldown. The entity will be facing whatever direction they were facing before the teleport, but" +
-                " you will be facing the entity you swapped with. Missing this will still consume the cooldown.";
+        return Text.translatable("power.loopypowers.teleport.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Become very angry for a period of time and teleport behind a random nearby living entity and swing your weapon repeatedly." +
-                " The damage inflicted uses the damage from your weapon in your main hand, but enchantments that don't directly edit the weapon" +
-                " damage are not applied (e.g. fire aspect, knockback). The radius of this ultimate is indicated by the particles surrounding and" +
-                " if no entities are nearby, you can just walk around normally.";
+        return Text.translatable("power.loopypowers.teleport.description.ultimate").getString();
     }
 }

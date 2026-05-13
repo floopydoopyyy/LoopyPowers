@@ -3,6 +3,8 @@ package com.yourname.loopypowers.manager;
 import com.yourname.loopypowers.CooldownUI;
 import com.yourname.loopypowers.power.FlightPower;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 
 import java.util.Map;
 import java.util.HashMap;
@@ -32,15 +34,15 @@ public class PassiveManager {
     }
 
     private static void sendFeedback(ServerPlayerEntity player, boolean enabled) {
-        String msg = enabled
-                ? "§aPassive Enabled"
-                : "§cPassive Disabled";
+        Text msg = enabled
+                ? Text.translatable("message.loopypowers.passive_enabled").formatted(Formatting.GREEN)
+                : Text.translatable("message.loopypowers.passive_disabled").formatted(Formatting.RED);
 
         CooldownUI.pushActionbarOverride(player, msg, 20);
     }
 
     private static void sendBlockedFeedback(ServerPlayerEntity player) {
-        String msg = "§cThis passive cannot be disabled.";
+        Text msg = Text.translatable("message.loopypowers.passive_blocked").formatted(Formatting.RED);
         CooldownUI.pushActionbarOverride(player, msg, 20);
     }
 }

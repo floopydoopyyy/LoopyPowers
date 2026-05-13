@@ -13,51 +13,51 @@ public final class ModDamageTypes {
     private ModDamageTypes() {}
 
     // ============================================================
-    // REGISTRY KEYS
+    // REGISTRY KEYS (1.21.1 - Identifier.of)
     // ============================================================
 
-    public static final RegistryKey<DamageType> BLEED = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "bleed"));
-    public static final RegistryKey<DamageType> BIND = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "bind"));
-    public static final RegistryKey<DamageType> OVERDRIVE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "overdrive"));
-    public static final RegistryKey<DamageType> RUSH = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "rush"));
-    public static final RegistryKey<DamageType> FRENZY = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "frenzy"));
-    public static final RegistryKey<DamageType> THUNDERCLAP = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "thunderclap"));
-    public static final RegistryKey<DamageType> SMITE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "smite"));
-    public static final RegistryKey<DamageType> SONIC = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "sonic"));
-    public static final RegistryKey<DamageType> SOUND = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "sound"));
-    public static final RegistryKey<DamageType> SUPER_EXPLOSION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "super_explosion"));
-    public static final RegistryKey<DamageType> EXPLOSION_NORMAL = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "explosion_normal"));
-    public static final RegistryKey<DamageType> ICE_SPIKE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "ice_spike"));
-    public static final RegistryKey<DamageType> ICE_SHATTER = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "ice_shatter"));
-    public static final RegistryKey<DamageType> ICE_SHOCKWAVE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "ice_shockwave"));
-    public static final RegistryKey<DamageType> ICE_BEAM = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "ice_beam"));
-    public static final RegistryKey<DamageType> THORN = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "thorn"));
-    public static final RegistryKey<DamageType> VINE_BIND = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "vine_bind"));
-    public static final RegistryKey<DamageType> SLAM = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "slam"));
-    public static final RegistryKey<DamageType> RUSH_COLLISION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "rush_collision"));
-    public static final RegistryKey<DamageType> ABSORB = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "absorb"));
-    public static final RegistryKey<DamageType> SMOOTHING = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "smoothing"));
-    public static final RegistryKey<DamageType> FATE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "fate"));
-    public static final RegistryKey<DamageType> COSMIC_RAY = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "cosmic_ray"));
-    public static final RegistryKey<DamageType> SHOOTING_STAR = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "shooting_star"));
-    public static final RegistryKey<DamageType> BLACK_HOLE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "black_hole"));
-    public static final RegistryKey<DamageType> BACKSTAB = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "backstab"));
-    public static final RegistryKey<DamageType> ULTIMATE_STAB = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "darkult"));
-    public static final RegistryKey<DamageType> PHASE_BURST = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "phase_burst"));
-    public static final RegistryKey<DamageType> FRACTURE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "fracture"));
-    public static final RegistryKey<DamageType> BET = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "bet"));
-    public static final RegistryKey<DamageType> DUEL = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "duel"));
-    public static final RegistryKey<DamageType> HOUSE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "house"));
-    public static final RegistryKey<DamageType> WALL_COLLISION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "wall_collision"));
-    public static final RegistryKey<DamageType> STRANGLE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "strangle"));
-    public static final RegistryKey<DamageType> BLOCK_THROW = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "block_throw"));
-    public static final RegistryKey<DamageType> DEBRIS_ORBIT = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "debris_orbit"));
-    public static final RegistryKey<DamageType> FIRE_POWER = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "fire_power"));
-    public static final RegistryKey<DamageType> FIRE_EXPLOSION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "fire_explosion"));
-    public static final RegistryKey<DamageType> RITUAL = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "ritual"));
-    public static final RegistryKey<DamageType> ONEPUNCH = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "onepunch"));
-    public static final RegistryKey<DamageType> ABSORBPULSE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "absorbpulse"));
-    public static final RegistryKey<DamageType> BLOODSELF = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, new Identifier(Loopypowers.MOD_ID, "bloodself"));
+    public static final RegistryKey<DamageType> BLEED = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "bleed"));
+    public static final RegistryKey<DamageType> BIND = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "bind"));
+    public static final RegistryKey<DamageType> OVERDRIVE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "overdrive"));
+    public static final RegistryKey<DamageType> RUSH = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "rush"));
+    public static final RegistryKey<DamageType> FRENZY = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "frenzy"));
+    public static final RegistryKey<DamageType> THUNDERCLAP = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "thunderclap"));
+    public static final RegistryKey<DamageType> SMITE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "smite"));
+    public static final RegistryKey<DamageType> SONIC = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "sonic"));
+    public static final RegistryKey<DamageType> SOUND = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "sound"));
+    public static final RegistryKey<DamageType> SUPER_EXPLOSION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "super_explosion"));
+    public static final RegistryKey<DamageType> EXPLOSION_NORMAL = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "explosion_normal"));
+    public static final RegistryKey<DamageType> ICE_SPIKE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "ice_spike"));
+    public static final RegistryKey<DamageType> ICE_SHATTER = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "ice_shatter"));
+    public static final RegistryKey<DamageType> ICE_SHOCKWAVE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "ice_shockwave"));
+    public static final RegistryKey<DamageType> ICE_BEAM = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "ice_beam"));
+    public static final RegistryKey<DamageType> THORN = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "thorn"));
+    public static final RegistryKey<DamageType> VINE_BIND = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "vine_bind"));
+    public static final RegistryKey<DamageType> SLAM = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "slam"));
+    public static final RegistryKey<DamageType> RUSH_COLLISION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "rush_collision"));
+    public static final RegistryKey<DamageType> ABSORB = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "absorb"));
+    public static final RegistryKey<DamageType> SMOOTHING = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "smoothing"));
+    public static final RegistryKey<DamageType> FATE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "fate"));
+    public static final RegistryKey<DamageType> COSMIC_RAY = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "cosmic_ray"));
+    public static final RegistryKey<DamageType> SHOOTING_STAR = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "shooting_star"));
+    public static final RegistryKey<DamageType> BLACK_HOLE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "black_hole"));
+    public static final RegistryKey<DamageType> BACKSTAB = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "backstab"));
+    public static final RegistryKey<DamageType> ULTIMATE_STAB = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "darkult"));
+    public static final RegistryKey<DamageType> PHASE_BURST = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "phase_burst"));
+    public static final RegistryKey<DamageType> FRACTURE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "fracture"));
+    public static final RegistryKey<DamageType> BET = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "bet"));
+    public static final RegistryKey<DamageType> DUEL = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "duel"));
+    public static final RegistryKey<DamageType> HOUSE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "house"));
+    public static final RegistryKey<DamageType> WALL_COLLISION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "wall_collision"));
+    public static final RegistryKey<DamageType> STRANGLE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "strangle"));
+    public static final RegistryKey<DamageType> BLOCK_THROW = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "block_throw"));
+    public static final RegistryKey<DamageType> DEBRIS_ORBIT = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "debris_orbit"));
+    public static final RegistryKey<DamageType> FIRE_POWER = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "fire_power"));
+    public static final RegistryKey<DamageType> FIRE_EXPLOSION = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "fire_explosion"));
+    public static final RegistryKey<DamageType> RITUAL = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "ritual"));
+    public static final RegistryKey<DamageType> ONEPUNCH = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "onepunch"));
+    public static final RegistryKey<DamageType> ABSORBPULSE = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "absorbpulse"));
+    public static final RegistryKey<DamageType> BLOODSELF = RegistryKey.of(RegistryKeys.DAMAGE_TYPE, Identifier.of(Loopypowers.MOD_ID, "bloodself"));
 
     // ============================================================
     // DAMAGE SOURCE GENERATORS

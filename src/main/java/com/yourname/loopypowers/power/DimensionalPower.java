@@ -14,9 +14,11 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.entity.damage.DamageSource;
@@ -124,8 +126,9 @@ public class DimensionalPower implements Power {
 
                 // Free entities stuck inside the ultimate
                 for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
-                    e.removeStatusEffect(ModEffects.FRACTURED);
-                    e.removeStatusEffect(ModEffects.DISPLACED);
+                    // Fix: Dynamically convert to RegistryEntry if ModEffects still returns raw StatusEffect
+                    e.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FRACTURED));
+                    e.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DISPLACED));
                 }
             }
         }
@@ -138,6 +141,8 @@ public class DimensionalPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ServerWorld world = player.getServerWorld();
         DimensionalState state = getState(player);
 
@@ -217,8 +222,8 @@ public class DimensionalPower implements Power {
     private void startPassivePhase(ServerPlayerEntity player, DimensionalState state) {
         state.phaseTicks = PASSIVE_PHASE_TICKS;
 
-        player.getServerWorld().playSound(null, player.getBlockPos(),
-                ModSounds.FLICKER,
+        player.getServerWorld().playSound(null, player.getX(), player.getY(), player.getZ(),
+                Registries.SOUND_EVENT.getEntry(ModSounds.FLICKER),
                 player.getSoundCategory(), 0.5f, 1.2f);
     }
 
@@ -258,14 +263,14 @@ public class DimensionalPower implements Power {
                 world.spawnParticles(darkBlue, x, y, z, 3, 0.3, 0.4, 0.3, 0.015);
             }
 
-            net.minecraft.sound.SoundEvent flickerSound = switch (world.random.nextInt(3)) {
+            var flickerSound = switch (world.random.nextInt(3)) {
                 case 0 -> ModSounds.FLICKER;
                 case 1 -> ModSounds.FLICKER2;
                 default -> ModSounds.FLICKER3;
             };
 
-            world.playSound(null, player.getBlockPos(),
-                    flickerSound,
+            world.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    Registries.SOUND_EVENT.getEntry(flickerSound),
                     player.getSoundCategory(), 0.5f, 1.0f);
         }
 
@@ -306,7 +311,7 @@ public class DimensionalPower implements Power {
             player.fallDistance = 0;
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOW_FALLING, 40, 0, false, false, false));
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP, player.getSoundCategory(), 1.0f, 0.5f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_PHANTOM_FLAP, player.getSoundCategory(), 1.0f, 0.5f);
             world.spawnParticles(ParticleTypes.SQUID_INK, player.getX(), player.getBodyY(0.5), player.getZ(), 30, 0.4, 0.6, 0.4, 0.1);
             world.spawnParticles(ParticleTypes.POOF, player.getX(), player.getBodyY(0.5), player.getZ(), 20, 0.4, 0.6, 0.4, 0.05);
 
@@ -314,7 +319,7 @@ public class DimensionalPower implements Power {
             // air pocket
             player.setAir(player.getMaxAir());
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_BREATH, player.getSoundCategory(), 1.0f, 1.0f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_PLAYER_BREATH, player.getSoundCategory(), 1.0f, 1.0f);
             world.spawnParticles(ParticleTypes.BUBBLE_POP, player.getX(), player.getEyeY(), player.getZ(), 40, 0.4, 0.4, 0.4, 0.1);
             world.spawnParticles(ParticleTypes.CLOUD, player.getX(), player.getEyeY(), player.getZ(), 20, 0.4, 0.4, 0.4, 0.05);
 
@@ -322,7 +327,7 @@ public class DimensionalPower implements Power {
             // fire world
             player.setFrozenTicks(0);
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_FIRE_EXTINGUISH, player.getSoundCategory(), 0.8f, 1.0f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_FIRE_EXTINGUISH, player.getSoundCategory(), 0.8f, 1.0f);
             world.spawnParticles(ParticleTypes.LAVA, player.getX(), player.getBodyY(0.5), player.getZ(), 15, 0.4, 0.6, 0.4, 0.1);
             world.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, player.getX(), player.getBodyY(0.5), player.getZ(), 30, 0.4, 0.6, 0.4, 0.05);
 
@@ -332,7 +337,7 @@ public class DimensionalPower implements Power {
             player.setVelocity(player.getVelocity().x, -1.5, player.getVelocity().z);
             player.velocityModified = true;
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_ANVIL_LAND, player.getSoundCategory(), 0.8f, 0.8f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_ANVIL_LAND, player.getSoundCategory(), 0.8f, 0.8f);
             world.spawnParticles(ParticleTypes.ASH, player.getX(), player.getBodyY(0.5), player.getZ(), 40, 0.4, 0.6, 0.4, 0.1);
 
         } else if (player.hasStatusEffect(StatusEffects.BLINDNESS) || player.hasStatusEffect(StatusEffects.DARKNESS)) {
@@ -341,7 +346,7 @@ public class DimensionalPower implements Power {
             player.removeStatusEffect(StatusEffects.DARKNESS);
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.NIGHT_VISION, 100, 0, false, false, false));
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_BEACON_ACTIVATE, player.getSoundCategory(), 1.0f, 1.5f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_BEACON_ACTIVATE, player.getSoundCategory(), 1.0f, 1.5f);
             world.spawnParticles(ParticleTypes.FLASH, player.getX(), player.getEyeY(), player.getZ(), 2, 0.1, 0.1, 0.1, 0.0);
 
         } else if (player.hasStatusEffect(StatusEffects.POISON) || player.hasStatusEffect(StatusEffects.WITHER)) {
@@ -349,7 +354,7 @@ public class DimensionalPower implements Power {
             player.removeStatusEffect(StatusEffects.POISON);
             player.removeStatusEffect(StatusEffects.WITHER);
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, player.getSoundCategory(), 1.2f, 1.0f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, player.getSoundCategory(), 1.2f, 1.0f);
             world.spawnParticles(ParticleTypes.GLOW, player.getX(), player.getBodyY(0.5), player.getZ(), 40, 0.4, 0.6, 0.4, 0.1);
             world.spawnParticles(ParticleTypes.SCRAPE, player.getX(), player.getBodyY(0.5), player.getZ(), 20, 0.4, 0.6, 0.4, 0.1);
 
@@ -358,15 +363,15 @@ public class DimensionalPower implements Power {
             player.getHungerManager().setFoodLevel(8);
             player.getHungerManager().setSaturationLevel(4.0f);
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_BURP, player.getSoundCategory(), 1.0f, 0.9f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_PLAYER_BURP, player.getSoundCategory(), 1.0f, 0.9f);
             world.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, player.getX(), player.getEyeY(), player.getZ(), 15, 0.2, 0.2, 0.2, 0.05);
 
         } else if (player.isOnFire()) {
             // water dimension
             player.extinguish();
 
-            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_SPLASH, player.getSoundCategory(), 1.0f, 1.2f);
-            world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_FIRE_EXTINGUISH, player.getSoundCategory(), 0.6f, 1.0f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_GENERIC_SPLASH, player.getSoundCategory(), 1.0f, 1.2f);
+            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_FIRE_EXTINGUISH, player.getSoundCategory(), 0.6f, 1.0f);
 
             world.spawnParticles(ParticleTypes.SPLASH, player.getX(), player.getBodyY(0.5), player.getZ(), 50, 0.4, 0.6, 0.4, 0.1);
             world.spawnParticles(ParticleTypes.FALLING_WATER, player.getX(), player.getBodyY(0.5), player.getZ(), 30, 0.4, 0.6, 0.4, 0.1);
@@ -378,7 +383,7 @@ public class DimensionalPower implements Power {
                 player.removeStatusEffect(StatusEffects.SLOWNESS);
                 player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 20, 1, false, false, false));
 
-                world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_MINECART_RIDING, player.getSoundCategory(), 0.5f, 1.5f);
+                world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_MINECART_RIDING, player.getSoundCategory(), 0.5f, 1.5f);
                 world.spawnParticles(ParticleTypes.SOUL, player.getX(), player.getBodyY(0.2), player.getZ(), 25, 0.3, 0.1, 0.3, 0.1);
             }
         }
@@ -405,7 +410,7 @@ public class DimensionalPower implements Power {
 
         spawnPhaseParticles(world, player);
 
-        world.playSound(null, player.getBlockPos(),
+        world.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                 player.getSoundCategory(), ENTRY_SOUND_VOL, ENTRY_SOUND_PITCH);
     }
@@ -447,7 +452,7 @@ public class DimensionalPower implements Power {
         // back to previous gamemode
         player.changeGameMode(state.prevMode);
 
-        world.playSound(null, player.getBlockPos(),
+        world.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
                 player.getSoundCategory(), EXIT_SOUND_VOL, EXIT_SOUND_PITCH);
 
@@ -551,7 +556,7 @@ public class DimensionalPower implements Power {
                     net.minecraft.entity.passive.PigEntity pig = net.minecraft.entity.EntityType.PIG.create(world);
                     if (pig != null) {
                         pig.refreshPositionAndAngles(x, y, z, world.random.nextFloat() * 360f, 0);
-                        pig.setCustomName(net.minecraft.text.Text.literal("hamuel"));
+                        pig.setCustomName(net.minecraft.text.Text.translatable("entity.loopypowers.hamuel"));
                         world.spawnEntity(pig);
                         world.spawnParticles(ParticleTypes.POOF, x, y + 0.5, z, 5, 0.2, 0.2, 0.2, 0.02);
                     }
@@ -561,7 +566,7 @@ public class DimensionalPower implements Power {
                     net.minecraft.entity.passive.SheepEntity sheep = net.minecraft.entity.EntityType.SHEEP.create(world);
                     if (sheep != null) {
                         sheep.refreshPositionAndAngles(x, y, z, world.random.nextFloat() * 360f, 0);
-                        sheep.setCustomName(net.minecraft.text.Text.literal("woolliam"));
+                        sheep.setCustomName(net.minecraft.text.Text.translatable("entity.loopypowers.woolliam"));
                         world.spawnEntity(sheep);
                         world.spawnParticles(ParticleTypes.POOF, x, y + 0.5, z, 5, 0.2, 0.2, 0.2, 0.02);
                     }
@@ -597,7 +602,7 @@ public class DimensionalPower implements Power {
                         int idx = (startIdx + i) % 4;
                         if (player.getEquippedStack(slots[idx]).isEmpty()) {
                             player.equipStack(slots[idx], new net.minecraft.item.ItemStack(leathers[idx]));
-                            world.playSound(null, player.getBlockPos(), SoundEvents.ITEM_ARMOR_EQUIP_LEATHER, player.getSoundCategory(), 1.0f, 1.0f);
+                            world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ITEM_ARMOR_EQUIP_LEATHER, player.getSoundCategory(), 1.0f, 1.0f);
                             break;
                         }
                     }
@@ -606,7 +611,7 @@ public class DimensionalPower implements Power {
                     // a steve head appearing on head slot
                     if (player.getEquippedStack(net.minecraft.entity.EquipmentSlot.HEAD).isEmpty()) {
                         player.equipStack(net.minecraft.entity.EquipmentSlot.HEAD, new net.minecraft.item.ItemStack(net.minecraft.item.Items.PLAYER_HEAD));
-                        world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP, player.getSoundCategory(), 1.0f, 1.0f);
+                        world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_ITEM_PICKUP, player.getSoundCategory(), 1.0f, 1.0f);
                     }
                 }
                 case 7 -> {
@@ -618,7 +623,7 @@ public class DimensionalPower implements Power {
                         snowball.setVelocity((world.random.nextDouble() - 0.5) * 1.5, world.random.nextDouble(), (world.random.nextDouble() - 0.5) * 1.5);
                         world.spawnEntity(snowball);
                     }
-                    world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_SNOWBALL_THROW, player.getSoundCategory(), 1.0f, 1.0f);
+                    world.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_SNOWBALL_THROW, player.getSoundCategory(), 1.0f, 1.0f);
                 }
                 case 8 -> {
                     // a few falling sand blocks
@@ -695,12 +700,13 @@ public class DimensionalPower implements Power {
 
         player.swingHand(Hand.MAIN_HAND, true);
 
-        world.playSound(null, player.getBlockPos(),
+        world.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_ENDERMAN_TELEPORT,
                 player.getSoundCategory(), 0.6f, 1.4f);
     }
 
-    // PUBLIC STATIC EXPOSED FOR THE PROJECTILE TO CALL
+    // Suppressed warning since this is called remotely via the projectile entity
+    @SuppressWarnings("unused")
     public static void applyDisplace(ServerPlayerEntity caster, LivingEntity target, int durationTicks) {
         ACTIVE_DISPLACEMENTS.computeIfAbsent(caster.getUuid(), k -> new HashMap<>()).put(target.getUuid(), durationTicks);
     }
@@ -831,7 +837,7 @@ public class DimensionalPower implements Power {
 
         ACTIVE_FRACTURES.put(player.getUuid(), state);
 
-        world.playSound(null, player.getBlockPos(),
+        world.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
                 player.getSoundCategory(), 1.2f, 0.4f);
     }
@@ -939,7 +945,7 @@ public class DimensionalPower implements Power {
 
             if (isNearAnyCrack(e.getPos(), state) || isNearAnyRing(e.getPos(), state)) {
                 e.addStatusEffect(new StatusEffectInstance(
-                        ModEffects.FRACTURED,
+                        Registries.STATUS_EFFECT.getEntry(ModEffects.FRACTURED),
                         40,
                         0,
                         false, false, true
@@ -1207,12 +1213,12 @@ public class DimensionalPower implements Power {
        METADATA
        ============================================================ */
 
-    @Override public String getName() { return "Interdimensional"; }
+    @Override public String getName() { return "power.loopypowers.interdimensional.name"; }
 
-    @Override public String getPassiveName()   { return "Instability"; }
-    @Override public String getPrimaryName()   { return "Phase Shift"; }
-    @Override public String getSecondaryName() { return "Displace"; }
-    @Override public String getUltimateName()  { return "Fracture"; }
+    @Override public String getPassiveName()   { return Text.translatable("power.loopypowers.interdimensional.passive_name").getString(); }
+    @Override public String getPrimaryName()   { return Text.translatable("power.loopypowers.interdimensional.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.interdimensional.secondary_name").getString(); }
+    @Override public String getUltimateName()  { return Text.translatable("power.loopypowers.interdimensional.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs()   { return 22_000; }
     @Override public long getSecondaryCooldownMs() { return 17_000; }
@@ -1220,32 +1226,26 @@ public class DimensionalPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Interdimensional is a power that is centered around making and taking opportunities, able to separate out entities and take duels easily. The power" +
-                "also has some defensive utility, able to quickly escape or get brief damage immunity when under pressure.";
+        return Text.translatable("power.loopypowers.interdimensional.description.overview").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "You have a constant chance to start 'flickering', when flickering you cannot receive any damage from any source and have a chance to adapt to certain events. The chance to flicker increases when taking damage" +
-                " and goes on cooldown briefly after flickering.";
+        return Text.translatable("power.loopypowers.interdimensional.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Enter spectator mode briefly, being able to pass through blocks, fly and travel faster, leaving a visible trail of particles. When exiting spectator mode," +
-                " do a burst of damage to nearby entities. You can end up inside blocks during this.";
+        return Text.translatable("power.loopypowers.interdimensional.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Shoot a slow, piercing projectile that banishes hit entities. Banished entities cannot move, attack, interact, or receive damage from any sources for a few seconds." +
-                " Their location is indicated by particles an they can still see during banishment.";
+        return Text.translatable("power.loopypowers.interdimensional.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Create a 'fracture' at your location, this creates a series of cracks along the ground that create isolated 'sections' that entities must remain in." +
-                " Any entities touching these cracks will be significantly slowed and take constant damage, the caster does not receive damage or slowness from these cracks." +
-                " The intention of this is to force groups to become isolated, making it easier to take duels and kill groups.";
+        return Text.translatable("power.loopypowers.interdimensional.description.ultimate").getString();
     }
 }

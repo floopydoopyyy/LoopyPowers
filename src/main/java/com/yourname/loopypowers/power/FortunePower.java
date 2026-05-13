@@ -44,10 +44,6 @@ public class FortunePower implements Power {
         return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new FortuneState());
     }
 
-    private static FortuneState getStateOpt(Entity player) {
-        return ACTIVE_STATES.get(player.getUuid());
-    }
-
     /* ============================================================
        BASIC
        ============================================================ */
@@ -60,9 +56,7 @@ public class FortunePower implements Power {
         breakDuel(player.getUuid());
 
         var server = player.getServer();
-        if (server != null) {
-            removeHouseNow(server, player.getUuid());
-        }
+        removeHouseNow(server, player.getUuid());
     }
 
     @Override
@@ -73,9 +67,7 @@ public class FortunePower implements Power {
         breakDuel(player.getUuid());
 
         var server = player.getServer();
-        if (server != null) {
-            removeHouseNow(server, player.getUuid());
-        }
+        removeHouseNow(server, player.getUuid());
     }
 
     @Override
@@ -85,8 +77,10 @@ public class FortunePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         FortuneState state = getState(player);
-        tickLuck(player, state);
+        tickLuck(state);
         tickDuelsWorld(player.getServerWorld());
     }
 
@@ -128,7 +122,7 @@ public class FortunePower implements Power {
         state.luckDecayTicks = LUCK_DECAY_DELAY_TICKS;
     }
 
-    private static void tickLuck(ServerPlayerEntity p, FortuneState state) {
+    private static void tickLuck(FortuneState state) {
         if (state.luck <= 0) return;
 
         state.luckDecayTicks--;
@@ -165,7 +159,7 @@ public class FortunePower implements Power {
             target.damage(attacker.getDamageSources().playerAttack(attacker), extra);
 
             // actionbar
-            CooldownUI.pushActionbarOverride(attacker, "§6§lJACKPOT:§r §eLucky Shot!", PROC_ACTIONBAR_TICKS);
+            CooldownUI.pushActionbarOverride(attacker, Text.translatable("power.loopypowers.fortune.jackpot.lucky_shot"), PROC_ACTIONBAR_TICKS);
 
             // particles on enemy
             spawnProcParticlesEnemy(w, target);
@@ -180,7 +174,7 @@ public class FortunePower implements Power {
             //debuff enemy
             target.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 40, 0, true, false));
 
-            CooldownUI.pushActionbarOverride(attacker, "§6§lJACKPOT:§r §cBad Beat!", PROC_ACTIONBAR_TICKS);
+            CooldownUI.pushActionbarOverride(attacker, Text.translatable("power.loopypowers.fortune.jackpot.bad_beat"), PROC_ACTIONBAR_TICKS);
 
             spawnProcParticlesEnemy(w, target);
 
@@ -193,7 +187,7 @@ public class FortunePower implements Power {
             attacker.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 40, 0, true, false));
             attacker.addStatusEffect(new StatusEffectInstance(StatusEffects.ABSORPTION, 60, 0, true, false));
 
-            CooldownUI.pushActionbarOverride(attacker, "§6§lJACKPOT:§r §7Favour!", PROC_ACTIONBAR_TICKS);
+            CooldownUI.pushActionbarOverride(attacker, Text.translatable("power.loopypowers.fortune.jackpot.favour"), PROC_ACTIONBAR_TICKS);
 
             spawnProcParticlesSelf(w, attacker);
 
@@ -328,14 +322,14 @@ public class FortunePower implements Power {
             player.addStatusEffect(new StatusEffectInstance(
                     StatusEffects.STRENGTH, PRIM_BUFF_TICKS, 1, true, false
             ));
-            CooldownUI.pushActionbarOverride(player, "§6§lJACKPOT:§r §4Raise!", 50);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("power.loopypowers.fortune.jackpot.raise"), 50);
 
         } else if (roll == 1) {
             // brief regeneration
             player.addStatusEffect(new StatusEffectInstance(
                     StatusEffects.REGENERATION, JACKPOT_REGEN_TICKS, 0, true, false
             ));
-            CooldownUI.pushActionbarOverride(player, "§6§lJACKPOT:§r §dDraw no bet!", 50);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("power.loopypowers.fortune.jackpot.draw_no_bet"), 50);
 
         } else {
             // doubled time
@@ -347,7 +341,7 @@ public class FortunePower implements Power {
             player.addStatusEffect(new StatusEffectInstance(
                     StatusEffects.SPEED, doubled, PRIM_SPEED_AMP, true, false
             ));
-            CooldownUI.pushActionbarOverride(player, "§6§lJACKPOT:§r §eDouble Time!", 50);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("power.loopypowers.fortune.jackpot.double_time"), 50);
         }
         return true;
     }
@@ -394,7 +388,7 @@ public class FortunePower implements Power {
         if (isInDuel(player)) {
             breakDuel(player.getUuid());
             w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_CHAIN_BREAK, player.getSoundCategory(), 0.8f, 1.0f);
-            CooldownUI.pushActionbarOverride(player, "§7Duel ended.", 35);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("power.loopypowers.fortune.duel_ended"), 35);
             return;
         }
 
@@ -759,7 +753,6 @@ public class FortunePower implements Power {
     public void activateUltimate(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
         var server = player.getServer();
-        if (server == null) return;
 
         removeHouseNow(server, player.getUuid());
 
@@ -794,7 +787,6 @@ public class FortunePower implements Power {
         if (ACTIVE_HOUSES.isEmpty()) return;
 
         var server = w.getServer();
-        if (server == null) return;
 
         List<Map.Entry<UUID, HouseState>> snapshot = new ArrayList<>(ACTIVE_HOUSES.entrySet());
         List<UUID> toRemove = new ArrayList<>();
@@ -806,6 +798,7 @@ public class FortunePower implements Power {
             if (!st.worldKey.equals(key)) continue;
 
             updateHouseInside(w, st);
+            enforceHousePrison(w, st); // keep trapped
 
             if ((now % HOUSE_ROOF_FX_EVERY_TICKS) == 0L) spawnHouseRoofFx(w, st);
             if ((now % HOUSE_BREAK_EVERY_TICKS) == 0L) enforceHouseBuildCeiling(w, st);
@@ -828,7 +821,7 @@ public class FortunePower implements Power {
                                 st.center.getX() + 0.5, st.baseY + 0.2, st.center.getZ() + 0.5,
                                 16, 0.6, 0.2, 0.6, 0.04);
 
-                        forceNewRule(w, st, true);
+                        forceNewRule(w, st);
                     } else {
                         w.playSound(null, st.center, SoundEvents.BLOCK_CHAIN_PLACE,
                                 net.minecraft.sound.SoundCategory.PLAYERS, 0.45f, 1.25f);
@@ -853,7 +846,7 @@ public class FortunePower implements Power {
 
     private static void tickHouseRules(ServerWorld w, HouseState st) {
         if (st.rule == null) {
-            forceNewRule(w, st, true);
+            forceNewRule(w, st);
             return;
         }
 
@@ -882,11 +875,11 @@ public class FortunePower implements Power {
 
         st.ruleLeft--;
         if (st.ruleLeft <= 0) {
-            forceNewRule(w, st, false);
+            forceNewRule(w, st);
         }
     }
 
-    private static void forceNewRule(ServerWorld w, HouseState st, boolean first) {
+    private static void forceNewRule(ServerWorld w, HouseState st) {
         // clear last rules persistent state
         if (st.rule == HouseRule.HOT_SEAT) {
             st.hotSeatHolder = null;
@@ -974,47 +967,12 @@ public class FortunePower implements Power {
     }
 
     private static void announceRule(ServerWorld w, HouseState st, HouseRule rule) {
-        String name = switch (rule) { // rule names
-            case LOADED_DICE -> "Loaded Dice";
-            case FREE_DRINKS -> "Free Drinks";
-            case VIP_PASS -> "VIP Pass";
-            case NO_RUNNING -> "No Running";
-            case NO_FIGHTING -> "No Fighting";
-            case DOUBLE_OR_NOTHING -> "Double or Nothing";
-            case SHUFFLE -> "Shuffle";
-            case ROULETTE -> "Roulette";
-            case LIGHTNING_ROUND -> "Lightning Round";
-            case HOT_SEAT -> "Hot Seat";
-            case CHIP_TOSS -> "Chip Toss";
-            case WILDCARDS -> "Wildcards";
-            case SMOKE_MACHINE -> "Smoke Machine";
-            case SPOTLIGHT -> "Spotlight";
-            case JACKPOT -> "Jackpot";
-            case CARD_COUNTER -> "Card Counter";
-            case WOOLIAM_INVASION -> "Wooliam";
-        };
+        String ruleKey = rule.name().toLowerCase();
 
-        String desc = switch (rule) { // rule descriptions
-            case LOADED_DICE -> "Owner gains Strength.";
-            case FREE_DRINKS -> "Everyone gains Regeneration.";
-            case VIP_PASS -> "Owner gains Regeneration.";
-            case NO_RUNNING -> "Everyone gets Slowness.";
-            case NO_FIGHTING -> "Everyone gets Weakness.";
-            case DOUBLE_OR_NOTHING -> "Everyone deals and receives increased damage.";
-            case SHUFFLE -> "Everyone swaps positions.";
-            case ROULETTE -> "A random entity is damaged";
-            case LIGHTNING_ROUND -> "Everyone takes periodic damage.";
-            case HOT_SEAT -> "Someone is marked; hit to pass it on before it detonates.";
-            case CHIP_TOSS -> "Some people will be launched.";
-            case WILDCARDS -> "Random entities are spawned.";
-            case SMOKE_MACHINE -> "Everyone is blinded.";
-            case SPOTLIGHT -> "Someone is glowing and takes extra damage.";
-            case JACKPOT -> "The next hit is amplified.";
-            case CARD_COUNTER -> "Owner's luck is set to the max.";
-            case WOOLIAM_INVASION -> "";
-        };
+        Text name = Text.translatable("power.loopypowers.fortune.rule." + ruleKey + ".name");
+        Text desc = Text.translatable("power.loopypowers.fortune.rule." + ruleKey + ".desc");
 
-        Text msg = Text.literal("§6§l[HOUSE RULE]§r §e" + name + " §7- " + desc); // outputs rule
+        Text msg = Text.translatable("power.loopypowers.fortune.house_rule.format", name, desc);
 
         int playerCount = 0;
         for (UUID u : st.inside) {
@@ -1107,7 +1065,7 @@ public class FortunePower implements Power {
         pick.damage(ModDamageTypes.house(w, owner), RULE_ROULETTE_DAMAGE); // house deals damage
 
         if (pick instanceof ServerPlayerEntity sp) {
-            sp.sendMessage(Text.literal("§cRoulette chose you!"), false);
+            sp.sendMessage(Text.translatable("power.loopypowers.fortune.roulette_chosen"), false);
         }
 
         w.playSound(null, pick.getBlockPos(), SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
@@ -1233,7 +1191,7 @@ public class FortunePower implements Power {
     private static void spawnWildcards(ServerWorld w, HouseState st) {
         int n = RULE_WILDCARDS_MIN + w.random.nextInt(RULE_WILDCARDS_MAX - RULE_WILDCARDS_MIN + 1);
 
-        net.minecraft.entity.EntityType[] pool = new net.minecraft.entity.EntityType[] { // entities that can spawn
+        net.minecraft.entity.EntityType<?>[] pool = new net.minecraft.entity.EntityType<?>[] { // entities that can spawn
                 net.minecraft.entity.EntityType.ZOMBIE,
                 net.minecraft.entity.EntityType.SKELETON,
                 net.minecraft.entity.EntityType.SPIDER,
@@ -1242,7 +1200,7 @@ public class FortunePower implements Power {
         };
 
         for (int i = 0; i < n; i++) {
-            net.minecraft.entity.EntityType type = pool[w.random.nextInt(pool.length)];
+            net.minecraft.entity.EntityType<?> type = pool[w.random.nextInt(pool.length)];
             Entity created = type.create(w);
             if (!(created instanceof LivingEntity mob)) continue;
 
@@ -1268,7 +1226,7 @@ public class FortunePower implements Power {
             if (sheep != null) {
                 BlockPos p = randomInsidePos(w, st, 1);
                 sheep.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
-                sheep.setCustomName(Text.literal("wooliam"));
+                sheep.setCustomName(Text.translatable("power.loopypowers.fortune.wooliam"));
                 w.spawnEntity(sheep);
                 w.spawnParticles(ParticleTypes.POOF, sheep.getX(), sheep.getY() + 0.5, sheep.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
             }
@@ -1278,7 +1236,7 @@ public class FortunePower implements Power {
         if (pig != null) {
             BlockPos p = randomInsidePos(w, st, 1);
             pig.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
-            pig.setCustomName(Text.literal("hamuel"));
+            pig.setCustomName(Text.translatable("power.loopypowers.fortune.hamuel"));
             w.spawnEntity(pig);
             w.spawnParticles(ParticleTypes.POOF, pig.getX(), pig.getY() + 0.5, pig.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
         }
@@ -1595,8 +1553,7 @@ public class FortunePower implements Power {
                 cx + HOUSE_RADIUS + 1, yMax, cz + HOUSE_RADIUS + 1
         );
 
-        List<LivingEntity> insideNow = w.getEntitiesByClass(LivingEntity.class, box, ent -> ent.isAlive());
-        Set<UUID> newInside = new HashSet<>();
+        List<LivingEntity> insideNow = w.getEntitiesByClass(LivingEntity.class, box, LivingEntity::isAlive);
 
         for (LivingEntity ent : insideNow) {
             BlockPos p = ent.getBlockPos();
@@ -1604,17 +1561,15 @@ public class FortunePower implements Power {
             int dz = p.getZ() - cz;
 
             if (Math.abs(dx) <= HOUSE_RADIUS && Math.abs(dz) <= HOUSE_RADIUS) {
-                newInside.add(ent.getUuid());
+                // If they aren't on the list yet, add them. - list not cleared now
                 if (!st.inside.contains(ent.getUuid())) {
+                    st.inside.add(ent.getUuid());
                     w.spawnParticles(ParticleTypes.ENCHANT,
                             ent.getX(), ent.getY() + ent.getHeight() * 0.6, ent.getZ(),
                             8, 0.25, 0.25, 0.25, 0.0);
                 }
             }
         }
-
-        st.inside.clear();
-        st.inside.addAll(newInside);
     }
 
     private static void spawnHouseRoofFx(ServerWorld w, HouseState st) {
@@ -1699,11 +1654,43 @@ public class FortunePower implements Power {
         w.setBlockState(pos, net.minecraft.block.Blocks.AIR.getDefaultState(), 3);
     }
 
+    private static void enforceHousePrison(ServerWorld w, HouseState st) { // forces players to stay
+        Vec3d center = new Vec3d(st.center.getX() + 0.5, st.baseY + 1.0, st.center.getZ() + 0.5);
+
+        for (UUID uuid : st.inside) {
+            Entity e = w.getEntity(uuid);
+            if (!(e instanceof LivingEntity le) || !le.isAlive()) continue;
+
+            double dx = le.getX() - center.x;
+            double dz = le.getZ() - center.z;
+            double distSq = dx * dx + dz * dz;
+
+            // if they are right at the edge pull them back
+            if (distSq > (HOUSE_RADIUS - 0.8) * (HOUSE_RADIUS - 0.8) && distSq <= (HOUSE_RADIUS + 2) * (HOUSE_RADIUS + 2)) {
+                Vec3d push = center.subtract(le.getPos()).normalize().multiply(0.8);
+                le.addVelocity(push.x, 0.2, push.z);
+                le.velocityModified = true;
+
+                // audio
+                if (w.getTime() % 5 == 0) {
+                    w.playSound(null, le.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_HIT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 0.5f);
+                    w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, le.getX(), le.getY() + 1.0, le.getZ(), 10, 0.2, 0.4, 0.2, 0.05);
+                }
+            }
+            // snap back if too far
+            else if (distSq > (HOUSE_RADIUS + 2) * (HOUSE_RADIUS + 2) || le.getY() > st.baseY + HOUSE_WALL_LAYERS + 2 || le.getY() < st.baseY - 1) {
+                teleportEntity(w, le, center, le.getYaw(), le.getPitch());
+                w.playSound(null, le.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 0.8f);
+                w.spawnParticles(ParticleTypes.REVERSE_PORTAL, le.getX(), le.getY() + 1.0, le.getZ(), 30, 0.5, 0.5, 0.5, 0.05);
+            }
+        }
+    }
+
     // COOLDOWNS
-    @Override public String getName() { return "Fortune"; }
-    @Override public String getPrimaryName() { return "All In"; }
-    @Override public String getSecondaryName() { return "Raise The Stakes"; }
-    @Override public String getUltimateName() { return "House Rule"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.fortune.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.fortune.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.fortune.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.fortune.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs() { return 26_000; }
     @Override public long getSecondaryCooldownMs() { return 48_000; }
@@ -1711,59 +1698,31 @@ public class FortunePower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Yes, this is a gambling power, I just needed a cooler name. Fortune is mainly centered around risk and reward, where your abilities benefit you"
-                + " but also have costs. You have a hidden luck stat that builds when hitting entities and can be enhanced by this stat, so to a degree, the longer you're"
-                + " in a fight the more effective you are.";
+        return Text.translatable("power.loopypowers.fortune.description.overview").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Growing Odds";
+        return Text.translatable("power.loopypowers.fortune.passive_name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "You have a hidden luck stat that increases when hitting entities and decreases when out of combat. This stat improves chances for jackpots on ability uses or hits. This stat is spent when a jackpot triggers, and you will receive an actionbar alert to what jackpot was used.\n\n"
-                + "On-hit Jackpots:\n"
-                + "• Favour: Grants you Speed and Absorption.\n"
-                + "• Lucky Shot: Deals extra damage to the target.\n"
-                + "• Bad Beat: Inflicts Weakness on the target.";
+        return Text.translatable("power.loopypowers.fortune.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Damage yourself and gain Strength and Speed. You have a chance of hitting 1 of 3 jackpots (odds scale with your luck passive).\n\n"
-                + "Primary Jackpots:\n"
-                + "• Raise: Upgrades your buff to Strength II.\n"
-                + "• Draw No Bet: Grants you brief Regeneration.\n"
-                + "• Double Time: Doubles the duration of your base buffs.";
+        return Text.translatable("power.loopypowers.fortune.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Shoot a beam that on hit, will put you into a soft duel with the target; you will both deal 50% more damage "
-                + "to each other and take 50% less damage from other sources.";
+        return Text.translatable("power.loopypowers.fortune.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Summon a magical casino cage that quickly builds from your feet, trapping anything inside for a short time. Players can't build out of this but can break/teleport out. Every few seconds, a new House Rule is rolled.\n\n"
-                + "House Rules:\n"
-                + "• Loaded Dice: Owner gains Strength.\n"
-                + "• Free Drinks: Everyone gains Regeneration.\n"
-                + "• VIP Pass: Owner gains Regeneration.\n"
-                + "• No Running: Everyone gets Slowness.\n"
-                + "• No Fighting: Everyone gets Weakness.\n"
-                + "• Double or Nothing: Everyone deals and receives increased damage.\n"
-                + "• Shuffle: Everyone swaps positions.\n"
-                + "• Roulette: A random entity is damaged.\n"
-                + "• Lightning Round: Everyone takes periodic damage.\n"
-                + "• Hot Seat: Someone is marked; hit someone to pass it on before it detonates.\n"
-                + "• Chip Toss: Some people are launched into the air.\n"
-                + "• Wildcards: Random hostile entities are spawned.\n"
-                + "• Smoke Machine: Everyone is blinded.\n"
-                + "• Spotlight: Someone is marked to glow and takes extra damage.\n"
-                + "• Jackpot: The next hit in the room is heavily amplified.\n"
-                + "• Card Counter: Owner's luck is instantly set to the maximum.";
+        return Text.translatable("power.loopypowers.fortune.description.ultimate").getString();
     }
 }

@@ -9,7 +9,7 @@ public class ModEffects {
 
     public static final StatusEffect FATE = new FateEffect();
     public static final StatusEffect BLOODBOUND = new BloodBoundEffect();
-    public static final StatusEffect BLEED = new BloodBoundEffect();
+    public static final StatusEffect BLEED = new BleedEffect(); // remember to fix this in the other branches please
     public static final StatusEffect EXPOSED = new ExposedEffect();
     public static final StatusEffect TETHERED = new TetheredEffect();
     public static final StatusEffect STUN = new StunEffect();
@@ -22,18 +22,19 @@ public class ModEffects {
     public static final StatusEffect DISPLACED = new DisplacedEffect();
 
     public static void register() {
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "fate"), FATE);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "bloodbound"), BLOODBOUND);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "bleed"), BLEED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "exposed"), EXPOSED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "tethered"), TETHERED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "stunned"), STUN);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "deepfreeze"), DEEPFREEZE);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "fractured"), FRACTURED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "compelled"), COMPELLED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "possessed"), POSSESSED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "grounded"), GROUNDED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "braced"), BRACED);
-        Registry.register(Registries.STATUS_EFFECT, new Identifier("loopypowers", "displaced"), DISPLACED);
+        // 1.21.1 - Identifier.of
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "fate"), FATE);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "bloodbound"), BLOODBOUND);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "bleed"), BLEED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "exposed"), EXPOSED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "tethered"), TETHERED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "stunned"), STUN);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "deepfreeze"), DEEPFREEZE);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "fractured"), FRACTURED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "compelled"), COMPELLED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "possessed"), POSSESSED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "grounded"), GROUNDED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "braced"), BRACED);
+        Registry.register(Registries.STATUS_EFFECT, Identifier.of("loopypowers", "displaced"), DISPLACED);
     }
 }

@@ -1,8 +1,5 @@
 package com.yourname.loopypowers.entity;
 
-import com.yourname.loopypowers.Loopypowers;
-import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
-import net.minecraft.entity.EntityDimensions;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.entity.EntityType;
 import net.minecraft.registry.Registries;
@@ -11,96 +8,74 @@ import net.minecraft.util.Identifier;
 
 import static com.yourname.loopypowers.Loopypowers.MOD_ID;
 
-// ==================================
-// REGISTERS ALL MODDED ENTITIES
-// ==============================
-// these equals things are fun
-
-
 public class ModEntities {
-    // FIREBALL
-    public static final EntityType<PowerFireballEntity> POWER_FIREBALL = Registry.register(
-            Registries.ENTITY_TYPE,
-            new Identifier(MOD_ID, "power_fireball"),
-            FabricEntityTypeBuilder.<PowerFireballEntity>create(SpawnGroup.MISC, PowerFireballEntity::new)
-                    .dimensions(EntityDimensions.fixed(1.0f, 1.0f)) // similar-ish size to fireball
-                    .trackRangeBlocks(64)
-                    .trackedUpdateRate(10)
-                    .build()
+
+    private static <T extends net.minecraft.entity.Entity> EntityType<T> register(String name, EntityType.Builder<T> builder) {
+        Identifier id = Identifier.of(MOD_ID, name);
+        return Registry.register(Registries.ENTITY_TYPE, id, builder.build(name));
+    }
+
+    // FIREBALL - Using explicit lambda to resolve constructor error
+    public static final EntityType<PowerFireballEntity> POWER_FIREBALL = register("power_fireball",
+            EntityType.Builder.create((EntityType<PowerFireballEntity> type, net.minecraft.world.World world) -> new PowerFireballEntity(type, world), SpawnGroup.MISC)
+                    .dimensions(1.0f, 1.0f)
+                    .maxTrackingRange(4)
+                    .trackingTickInterval(10)
     );
+
     // BLOOD CLOT
-    public static final EntityType<BloodClotEntity> BLOOD_CLOT = Registry.register(
-            Registries.ENTITY_TYPE,
-            new Identifier(MOD_ID, "blood_clot"),
-            FabricEntityTypeBuilder.create(SpawnGroup.MISC, BloodClotEntity::new)
-                    .dimensions(EntityDimensions.fixed(0.25f, 0.25f)) // IMPORTANT
-                    .trackRangeChunks(4)
-                    .trackedUpdateRate(10)
-                    .build()
+    public static final EntityType<BloodClotEntity> BLOOD_CLOT = register("blood_clot",
+            EntityType.Builder.create(BloodClotEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.25f, 0.25f)
+                    .maxTrackingRange(4)
+                    .trackingTickInterval(10)
     );
+
     // SONIC BOLT
-    public static final EntityType<SonicBoltEntity> SONIC_BOLT = Registry.register(
-            Registries.ENTITY_TYPE,
-            new Identifier(MOD_ID, "sonic_bolt"),
-            FabricEntityTypeBuilder.<SonicBoltEntity>create(SpawnGroup.MISC, SonicBoltEntity::new)
-                    .dimensions(EntityDimensions.fixed(0.25f, 0.25f)) // this size is difficult
-                    .trackRangeChunks(4)
-                    .trackedUpdateRate(10)
-                    .build()
+    public static final EntityType<SonicBoltEntity> SONIC_BOLT = register("sonic_bolt",
+            EntityType.Builder.create(SonicBoltEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.25f, 0.25f)
+                    .maxTrackingRange(4)
+                    .trackingTickInterval(10)
     );
 
     // SHADOW STEP
-    public static final EntityType<ShadowStepEntity> SHADOW_STEP =
-            Registry.register(
-                    Registries.ENTITY_TYPE,
-                    new Identifier(MOD_ID, "shadow_step"),
-                    FabricEntityTypeBuilder.<ShadowStepEntity>create(SpawnGroup.MISC, ShadowStepEntity::new)
-                            .dimensions(EntityDimensions.fixed(0.25f, 0.25f))
-                            .trackRangeBlocks(64)
-                            .trackedUpdateRate(10)
-                            .build()
-            );
+    public static final EntityType<ShadowStepEntity> SHADOW_STEP = register("shadow_step",
+            EntityType.Builder.create(ShadowStepEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.25f, 0.25f)
+                    .maxTrackingRange(4)
+                    .trackingTickInterval(10)
+    );
 
     // COMPEL PROJECTILE
-    public static final EntityType<CompelEntity> COMPEL_ENTITY = Registry.register(
-            Registries.ENTITY_TYPE,
-            new Identifier("loopypowers", "compel_entity"),
-            FabricEntityTypeBuilder.<CompelEntity>create(SpawnGroup.MISC, CompelEntity::new)
-                    .dimensions(EntityDimensions.fixed(0.5f, 0.5f))
-                    .trackRangeBlocks(64)
-                    .trackedUpdateRate(1)
-                    .build()
+    public static final EntityType<CompelEntity> COMPEL_ENTITY = register("compel_entity",
+            EntityType.Builder.create(CompelEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.5f, 0.5f)
+                    .maxTrackingRange(4)
+                    .trackingTickInterval(1)
     );
+
     // PUPPETRY PROJECTILE
-    public static final EntityType<CompelEntity> PUPPETRY_ENTITY = Registry.register(
-            Registries.ENTITY_TYPE,
-            new Identifier("loopypowers", "puppetry_entity"),
-            FabricEntityTypeBuilder.<CompelEntity>create(SpawnGroup.MISC, CompelEntity::new)
-                    .dimensions(EntityDimensions.fixed(0.5f, 0.5f))
-                    .trackRangeBlocks(64)
-                    .trackedUpdateRate(1)
-                    .build()
+    public static final EntityType<PuppetryEntity> PUPPETRY_ENTITY = register("puppetry_entity",
+            EntityType.Builder.create(PuppetryEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.5f, 0.5f)
+                    .maxTrackingRange(4)
+                    .trackingTickInterval(1)
     );
 
     // COSMIC BLACK HOLE
-    public static final EntityType<BlackHoleEntity> BLACK_HOLE_ENTITY = Registry.register(
-            Registries.ENTITY_TYPE,
-            new Identifier(Loopypowers.MOD_ID, "black_hole"),
-            FabricEntityTypeBuilder.create(SpawnGroup.MISC, BlackHoleEntity::new)
-                    .dimensions(EntityDimensions.fixed(0.5f, 0.5f))
-                    .build()
+    public static final EntityType<BlackHoleEntity> BLACK_HOLE_ENTITY = register("black_hole",
+            EntityType.Builder.create(BlackHoleEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.5f, 0.5f)
     );
 
-    // DIMENSIONAL DISPLACEMENT
-    public static final EntityType<BlackHoleEntity> DISPLACE_ENTITY = Registry.register(
-            Registries.ENTITY_TYPE,
-            new Identifier(Loopypowers.MOD_ID, "displace_entity"),
-            FabricEntityTypeBuilder.create(SpawnGroup.MISC, BlackHoleEntity::new)
-                    .dimensions(EntityDimensions.fixed(0.5f, 0.5f))
-                    .build()
+    // DIMENSIONAL DISPLACEMENT - FIXED: Changed type from BlackHoleEntity to DisplaceEntity
+    public static final EntityType<DisplaceEntity> DISPLACE_ENTITY = register("displace_entity",
+            EntityType.Builder.create(DisplaceEntity::new, SpawnGroup.MISC)
+                    .dimensions(0.5f, 0.5f)
     );
 
     public static void init() {
-        // just forces class load
+        // Class load hook
     }
 }

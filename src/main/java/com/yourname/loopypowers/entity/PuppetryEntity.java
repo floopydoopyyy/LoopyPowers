@@ -4,6 +4,7 @@ import com.yourname.loopypowers.power.PsychicPower;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.DataTracker; // ADDED
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -327,7 +328,7 @@ public class PuppetryEntity extends Entity {
        Data
        ============================================================ */
 
-    @Override protected void initDataTracker() {}
+    @Override protected void initDataTracker(DataTracker.Builder builder) {}
 
     @Override
     protected void readCustomDataFromNbt(NbtCompound nbt) {

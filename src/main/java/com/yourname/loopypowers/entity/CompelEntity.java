@@ -4,6 +4,7 @@ import com.yourname.loopypowers.power.PsychicPower;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.DataTracker; // ADDED
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -195,18 +196,17 @@ public class CompelEntity extends Entity {
         Vec3d up = new Vec3d(0, 1, 0);
 
         float radius = PARTICLE_RADIUS;
-        float length = PARTICLE_LENGTH;
-        float pspeed = PARTICLE_SPEED;
+        // Removed redundant 'length' and 'pspeed' variables here to fix IDE warnings
 
         // spiral wrapped around velocity direction
         for (int i = 0; i < PARTICLE_SEGMENTS; i++) {
 
-            float angle = (life * pspeed) + (i * 2.0f);
+            float angle = (life * PARTICLE_SPEED) + (i * 2.0f);
 
             double sideOffset = Math.cos(angle) * radius;
             double upOffset = Math.sin(angle) * radius;
 
-            double backOffset = -i * length;
+            double backOffset = -i * PARTICLE_LENGTH;
 
             Vec3d pos = this.getPos()
                     .add(dir.multiply(backOffset))
@@ -268,12 +268,12 @@ public class CompelEntity extends Entity {
         PsychicPower.applyCompel(this.owner, target);
 
         float radius = 0.25f;
-        float pspeed = 0.6f;
+        // Using PARTICLE_SPEED directly here as well to fix IDE warning
 
         // spiral burst around target
         for (int i = 0; i < 6; i++) {
 
-            float angle = (life * pspeed) + (i * (float) Math.PI / 3);
+            float angle = (life * PARTICLE_SPEED) + (i * (float) Math.PI / 3);
 
             double offsetX = Math.cos(angle) * radius;
             double offsetZ = Math.sin(angle) * radius;
@@ -339,7 +339,7 @@ public class CompelEntity extends Entity {
 
         for (int i = 0; i < 4; i++) {
 
-            float angle = (life * pspeed) + (i * (float) Math.PI / 2);
+            float angle = (life * PARTICLE_SPEED) + (i * (float) Math.PI / 2);
 
             double offsetX = Math.cos(angle) * radius;
             double offsetZ = Math.sin(angle) * radius;
@@ -382,7 +382,7 @@ public class CompelEntity extends Entity {
        ============================================================ */
 
     @Override
-    protected void initDataTracker() {}
+    protected void initDataTracker(DataTracker.Builder builder) {} // 1.21.1 FIXED
 
     @Override
     protected void readCustomDataFromNbt(NbtCompound nbt) {

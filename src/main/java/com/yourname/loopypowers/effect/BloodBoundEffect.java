@@ -11,8 +11,9 @@ public class BloodBoundEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) { // CHANGED void to boolean
         // handled by blood power, this is purely visual
+        return true; // ADDED
     }
 
     @Override

@@ -3,16 +3,15 @@ package com.yourname.loopypowers;
 import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.client.HiddenPlayersClient;
 import com.yourname.loopypowers.entity.ModEntities;
-import com.yourname.loopypowers.manager.PassiveManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.entity.EmptyEntityRenderer;
 import net.minecraft.client.render.entity.FlyingItemEntityRenderer;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.particle.DustParticleEffect;
@@ -21,15 +20,11 @@ import org.lwjgl.glfw.GLFW;
 import com.yourname.loopypowers.network.AbilityPackets;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Vector3f;
-import java.util.ArrayDeque;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 
-// handles client side keybinds, packets and camerashake (if it would work) and player views
+import java.util.*;
+
 public class LoopypowersClient implements ClientModInitializer {
 
-	// keybinds
 	public static KeyBinding PRIMARY_ABILITY_KEY;
 	public static KeyBinding SECONDARY_ABILITY_KEY;
 	public static KeyBinding ULTIMATE_ABILITY_KEY;
@@ -40,12 +35,12 @@ public class LoopypowersClient implements ClientModInitializer {
 		// entity rendering
 		EntityRendererRegistry.register(ModEntities.POWER_FIREBALL, FlyingItemEntityRenderer::new);
 		EntityRendererRegistry.register(ModEntities.BLOOD_CLOT, com.yourname.loopypowers.client.BloodClotRenderer::new);
-		EntityRendererRegistry.register(ModEntities.SONIC_BOLT, (ctx) -> new net.minecraft.client.render.entity.EmptyEntityRenderer<>(ctx));
-		EntityRendererRegistry.register(ModEntities.SHADOW_STEP, (ctx) -> new net.minecraft.client.render.entity.EmptyEntityRenderer<>(ctx));
-		EntityRendererRegistry.register(ModEntities.COMPEL_ENTITY, (ctx) -> new net.minecraft.client.render.entity.EmptyEntityRenderer<>(ctx));
-		EntityRendererRegistry.register(ModEntities.PUPPETRY_ENTITY, (ctx) -> new net.minecraft.client.render.entity.EmptyEntityRenderer<>(ctx));
-		EntityRendererRegistry.register(ModEntities.BLACK_HOLE_ENTITY, (ctx) -> new net.minecraft.client.render.entity.EmptyEntityRenderer<>(ctx));
-		EntityRendererRegistry.register(ModEntities.DISPLACE_ENTITY, (ctx) -> new net.minecraft.client.render.entity.EmptyEntityRenderer<>(ctx));
+		EntityRendererRegistry.register(ModEntities.SONIC_BOLT, EmptyEntityRenderer::new);
+		EntityRendererRegistry.register(ModEntities.SHADOW_STEP, EmptyEntityRenderer::new);
+		EntityRendererRegistry.register(ModEntities.COMPEL_ENTITY, EmptyEntityRenderer::new);
+		EntityRendererRegistry.register(ModEntities.PUPPETRY_ENTITY, EmptyEntityRenderer::new);
+		EntityRendererRegistry.register(ModEntities.BLACK_HOLE_ENTITY, EmptyEntityRenderer::new);
+		EntityRendererRegistry.register(ModEntities.DISPLACE_ENTITY, EmptyEntityRenderer::new);
 		// block rendering
 		BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.THORN_VINE, RenderLayer.getCutout());
 		BlockRenderLayerMap.INSTANCE.putBlock(ModBlocks.ICE_SPIKE, RenderLayer.getCutout());
@@ -53,96 +48,49 @@ public class LoopypowersClient implements ClientModInitializer {
 
 		System.out.println("Loopypowers client loaded");
 
-		// registering keybinds
-		PRIMARY_ABILITY_KEY = KeyBindingHelper.registerKeyBinding(
-				new KeyBinding(
-						"key.loopypowers.primary",
-						GLFW.GLFW_KEY_G,
-						"category.loopypowers"
-				)
-		);
+		PRIMARY_ABILITY_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.loopypowers.primary", GLFW.GLFW_KEY_G, "category.loopypowers"));
+		SECONDARY_ABILITY_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.loopypowers.secondary", GLFW.GLFW_KEY_F, "category.loopypowers"));
+		ULTIMATE_ABILITY_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.loopypowers.ultimate", GLFW.GLFW_KEY_Q, "category.loopypowers"));
+		TOGGLE_PASSIVE_KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.loopypowers.toggle_passive", GLFW.GLFW_KEY_APOSTROPHE, "category.loopypowers"));
 
-		SECONDARY_ABILITY_KEY = KeyBindingHelper.registerKeyBinding(
-				new KeyBinding(
-						"key.loopypowers.secondary",
-						GLFW.GLFW_KEY_F,
-						"category.loopypowers"
-				)
-		);
-
-		ULTIMATE_ABILITY_KEY = KeyBindingHelper.registerKeyBinding(
-				new KeyBinding(
-						"key.loopypowers.ultimate",
-						GLFW.GLFW_KEY_Q,
-						"category.loopypowers"
-				)
-		);
-
-		TOGGLE_PASSIVE_KEY = KeyBindingHelper.registerKeyBinding(
-				new KeyBinding(
-						"key.loopypowers.toggle_passive",
-						GLFW.GLFW_KEY_APOSTROPHE,
-						"category.loopypowers"
-				)
-		);
-
-		// register some powers client side
+		// 1.21.1 FIXED: Client Receivers using CustomPayloads
 		ClientPlayNetworking.registerGlobalReceiver(
-				AbilityPackets.SYNC_STRENGTH_POWER,
-				(client, handler, buf, responseSender) -> {
-					boolean hasStrength = buf.readBoolean();
-					client.execute(() -> com.yourname.loopypowers.network.ClientPowerState.setStrengthPower(hasStrength));
-				}
+				AbilityPackets.SyncStrengthPayload.ID,
+				(payload, context) -> context.client().execute(() ->
+						com.yourname.loopypowers.network.ClientPowerState.setStrengthPower(payload.hasStrength()))
 		);
 
-		// reciever - hides player
 		ClientPlayNetworking.registerGlobalReceiver(
-				AbilityPackets.HIDE_PLAYER,
-				(client, handler, buf, responseSender) -> {
-					int entityId = buf.readInt();
-					int ticks = buf.readInt();
-					//System.out.println("HIDE_PLAYER recv: " + entityId + " for " + ticks);
-					client.execute(() -> HiddenPlayersClient.hide(entityId, ticks));
-				}
+				AbilityPackets.HidePlayerPayload.ID,
+				(payload, context) -> context.client().execute(() ->
+						HiddenPlayersClient.hide(payload.entityId(), payload.ticks()))
 		);
 
-		// sets up camerashake
 		ClientPlayNetworking.registerGlobalReceiver(
-				AbilityPackets.CAMERA_SHAKE,
-				(client, handler, buf, responseSender) -> {
-					int ticks = buf.readInt();
-					float strength = buf.readFloat();
-					client.execute(() -> CameraShakeClient.start(ticks, strength));
-				}
+				AbilityPackets.CameraShakePayload.ID,
+				(payload, context) -> context.client().execute(() ->
+						CameraShakeClient.start(payload.ticks(), payload.strength()))
 		);
 
-		// stun audio reduction
 		ClientPlayNetworking.registerGlobalReceiver(
-				AbilityPackets.STUN_AUDIO,
-				(client, handler, buf, responseSender) -> {
-					int ticks = buf.readInt();
-					client.execute(() -> StunAudioClient.setStun(ticks));
-				}
+				AbilityPackets.StunAudioPayload.ID,
+				(payload, context) -> context.client().execute(() ->
+						StunAudioClient.setStun(payload.ticks()))
 		);
 
-		// FOR POWERS USING JUMP
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			if (client.player == null) return;
-			// detect if space used
 			if (!client.options.jumpKey.wasPressed()) return;
-			// must be falling and not gliding
 			if (client.player.isOnGround()) return;
 			if (client.player.isFallFlying()) return;
-			// if also moving downwards
 			if (client.player.getVelocity().y > -0.08) return;
 
-			ClientPlayNetworking.send(AbilityPackets.FLIGHT_GLIDE_REQUEST, PacketByteBufs.empty()); // send request to glide
+			// 1.21.1 FIXED: Sending Payload
+			ClientPlayNetworking.send(new AbilityPackets.FlightGlidePayload());
 		});
 
-		//this is the tick handler
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			if (client.player == null) return;
-
 			while (PRIMARY_ABILITY_KEY.wasPressed()) sendPrimaryAbility();
 			while (SECONDARY_ABILITY_KEY.wasPressed()) sendSecondaryAbility();
 			while (ULTIMATE_ABILITY_KEY.wasPressed()) sendUltimateAbility();
@@ -155,103 +103,65 @@ public class LoopypowersClient implements ClientModInitializer {
 			StunAudioClient.tick();
 		});
 
-		// sound (the power) particle packets
 		ClientPlayNetworking.registerGlobalReceiver(
-				AbilityPackets.RESONANCE_TRAIL,
-				(client, handler, buf, responseSender) -> {
-					int targetId = buf.readInt();
-					int count = buf.readInt();
-					float intensity = buf.readFloat();
+				AbilityPackets.ResonanceTrailPayload.ID,
+				(payload, context) -> context.client().execute(() -> {
+					if (context.client().world == null) return;
+					var e = Objects.requireNonNull(context.client().world).getEntityById(payload.targetId());
+					if (!(e instanceof net.minecraft.entity.LivingEntity le)) return;
 
-					client.execute(() -> {
-						if (client.world == null) return;
-						var e = client.world.getEntityById(targetId);
-						if (!(e instanceof net.minecraft.entity.LivingEntity le)) return;
+					Vec3d vel = le.getVelocity();
+					Vec3d back = vel.lengthSquared() > 1.0e-4 ? vel.normalize().multiply(-0.35) : new Vec3d(0, 0, 0);
+					int n = Math.max(1, Math.min(10, (int) (payload.count() * MathHelper.clamp(payload.intensity(), 0.6f, 1.6f))));
+					ArrayDeque<ResTrailPoint> dq = RES_TRAILS.computeIfAbsent(payload.targetId(), k -> new ArrayDeque<>());
 
-						// make it look like sculk trailing
-						Vec3d vel = le.getVelocity();
-						Vec3d back = vel.lengthSquared() > 1.0e-4 ? vel.normalize().multiply(-0.35) : new Vec3d(0, 0, 0);
+					for (int i = 0; i < n; i++) {
+						double jx = (Objects.requireNonNull(context.client().world).random.nextDouble() - 0.5) * 0.45;
+						double jy = Objects.requireNonNull(context.client().world).random.nextDouble() * (le.getHeight() * 0.9);
+						double jz = (Objects.requireNonNull(context.client().world).random.nextDouble() - 0.5) * 0.45;
 
-						// density of particles but VERY clamped
-						int n = Math.max(1, Math.min(10, (int) (count * MathHelper.clamp(intensity, 0.6f, 1.6f))));
+						double px = le.getX() + back.x + jx;
+						double py = le.getY() + 0.10 + jy;
+						double pz = le.getZ() + back.z + jz;
 
-						// store points so we can re-emit for ~3 seconds
-						ArrayDeque<ResTrailPoint> dq = RES_TRAILS.computeIfAbsent(targetId, k -> new ArrayDeque<>());
-
-						for (int i = 0; i < n; i++) {
-							double jx = (client.world.random.nextDouble() - 0.5) * 0.45;
-							double jy = client.world.random.nextDouble() * (le.getHeight() * 0.9);
-							double jz = (client.world.random.nextDouble() - 0.5) * 0.45;
-
-							double px = le.getX() + back.x + jx;
-							double py = le.getY() + 0.10 + jy;
-							double pz = le.getZ() + back.z + jz;
-
-							dq.addLast(new ResTrailPoint(px, py, pz, intensity));
-						}
-
-						while (dq.size() > RES_TRAIL_MAX_POINTS) dq.removeFirst();
-					});
-				}
+						dq.addLast(new ResTrailPoint(px, py, pz, payload.intensity()));
+					}
+					while (dq.size() > RES_TRAIL_MAX_POINTS) dq.removeFirst();
+				})
 		);
 
 		ClientPlayNetworking.registerGlobalReceiver(
-				AbilityPackets.RESONANCE_RING,
-				(client, handler, buf, responseSender) -> {
-					int targetId = buf.readInt();
-					float intensity = buf.readFloat();
+				AbilityPackets.ResonanceRingPayload.ID,
+				(payload, context) -> context.client().execute(() -> {
+					if (context.client().world == null) return;
+					var e = Objects.requireNonNull(context.client().world).getEntityById(payload.targetId());
+					if (!(e instanceof net.minecraft.entity.LivingEntity le)) return;
 
-					client.execute(() -> {
-						if (client.world == null) return;
-						var e = client.world.getEntityById(targetId);
-						if (!(e instanceof net.minecraft.entity.LivingEntity le)) return;
+					double cx = le.getX();
+					double cy = le.getY() + le.getHeight() * 0.55;
+					double cz = le.getZ();
 
-						// mid-body
-						double cx = le.getX();
-						double cy = le.getY() + le.getHeight() * 0.55;
-						double cz = le.getZ();
+					int points = 18;
+					double radius = 0.9 + (MathHelper.clamp(payload.intensity(), 0.6f, 1.6f) - 1.0) * 0.25;
 
-						int points = 18;
-						double radius = 0.9 + (MathHelper.clamp(intensity, 0.6f, 1.6f) - 1.0) * 0.25;
+					for (int i = 0; i < points; i++) {
+						double a = (Math.PI * 2.0) * (i / (double) points);
+						double x = cx + Math.cos(a) * radius;
+						double z = cz + Math.sin(a) * radius;
 
-						for (int i = 0; i < points; i++) {
-							double a = (Math.PI * 2.0) * (i / (double) points);
-
-							double x = cx + Math.cos(a) * radius;
-							double z = cz + Math.sin(a) * radius;
-
-							// ring around player
-							client.world.addParticle(
-									ParticleTypes.SCULK_CHARGE_POP,
-									x, cy, z,
-									0.0, 0.0, 0.0
-							);
-
-							// occasional effect
-							if (client.world.random.nextFloat() < 0.35f) {
-								client.world.addParticle(
-										ParticleTypes.SCULK_SOUL,
-										x, cy + (client.world.random.nextDouble() - 0.5) * 0.35, z,
-										0.0, 0.0, 0.0
-								);
-							}
+						Objects.requireNonNull(context.client().world).addParticle(ParticleTypes.SCULK_CHARGE_POP, x, cy, z, 0.0, 0.0, 0.0);
+						if (Objects.requireNonNull(context.client().world).random.nextFloat() < 0.35f) {
+							Objects.requireNonNull(context.client().world).addParticle(ParticleTypes.SCULK_SOUL, x, cy + (Objects.requireNonNull(context.client().world).random.nextDouble() - 0.5) * 0.35, z, 0.0, 0.0, 0.0);
 						}
-					});
-				}
+					}
+				})
 		);
 
 		ClientPlayNetworking.registerGlobalReceiver(
-				AbilityPackets.RESONANCE_LINE,
-				(client, handler, buf, responseSender) -> {
-					int targetId = buf.readInt();
-					int ticks = buf.readInt();
-					float intensity = buf.readFloat(); // ignore!!!
-
-					client.execute(() -> {
-						// store/refresh
-						RES_LINES.put(targetId, Math.max(RES_LINES.getOrDefault(targetId, 0), ticks));
-					});
-				}
+				AbilityPackets.ResonanceLinePayload.ID,
+				(payload, context) -> context.client().execute(() ->
+						RES_LINES.put(payload.targetId(), Math.max(RES_LINES.getOrDefault(payload.targetId(), 0), payload.ticks()))
+				)
 		);
 	}
 	// RESONANCE TRAIL BUFFER (client only)
@@ -382,33 +292,21 @@ public class LoopypowersClient implements ClientModInitializer {
 		}
 	}
 
-	// sending packets
+	// sending payloads
 	public static void sendPrimaryAbility() {
-		ClientPlayNetworking.send(
-				AbilityPackets.PRIMARY_ABILITY,
-				PacketByteBufs.empty()
-		);
+		ClientPlayNetworking.send(new AbilityPackets.PrimaryAbilityPayload());
 	}
 
 	public static void sendSecondaryAbility() {
-		ClientPlayNetworking.send(
-				AbilityPackets.SECONDARY_ABILITY,
-				PacketByteBufs.empty()
-		);
+		ClientPlayNetworking.send(new AbilityPackets.SecondaryAbilityPayload());
 	}
 
 	public static void sendUltimateAbility() {
-		ClientPlayNetworking.send(
-				AbilityPackets.ULTIMATE_ABILITY,
-				PacketByteBufs.empty()
-		);
+		ClientPlayNetworking.send(new AbilityPackets.UltimateAbilityPayload());
 	}
 
 	public static void sendTogglePassive() {
-		ClientPlayNetworking.send(
-				AbilityPackets.TOGGLE_PASSIVE,
-				PacketByteBufs.empty()
-		);
+		ClientPlayNetworking.send(new AbilityPackets.TogglePassivePayload());
 	}
 }
 

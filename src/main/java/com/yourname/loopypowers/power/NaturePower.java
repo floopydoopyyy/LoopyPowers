@@ -24,15 +24,17 @@ import net.minecraft.util.math.*;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.RaycastContext;
 import org.joml.Vector3f;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.world.World;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import net.minecraft.block.Blocks;
+import net.minecraft.text.Text;
 
 import java.util.*;
 
 /**
- * Nature power skeleton (1.20.1 / Fabric)
+ * Nature power skeleton (1.20.1 / Fabric -> 1.21.1)
  * Focus: area denial + trapping + "hunt" marking.
  */
 public class NaturePower implements Power {
@@ -94,7 +96,7 @@ public class NaturePower implements Power {
                     if (ent instanceof LivingEntity le) {
                         le.removeStatusEffect(StatusEffects.SLOWNESS);
                         le.removeStatusEffect(StatusEffects.GLOWING);
-                        le.removeStatusEffect(ModEffects.TETHERED);
+                        le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.TETHERED));
                     }
                 }
             }
@@ -137,6 +139,8 @@ public class NaturePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         NatureState state = getState(player);
 
         // PASSIVE
@@ -283,7 +287,7 @@ public class NaturePower implements Power {
             double maxY = center.y + halfH;
 
             // VISUALS
-            int count = (int) MathHelper.lerp(t, GAS_PARTICLES_MIN, GAS_PARTICLES_MAX);
+            int count = MathHelper.lerp(t, GAS_PARTICLES_MIN, GAS_PARTICLES_MAX);
 
             // thick core
             w.spawnParticles(
@@ -734,7 +738,7 @@ public class NaturePower implements Power {
             if (((b.age + b.seed) % VINE_SLOW_REFRESH) == 0) {
                 le.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, VINE_SLOW_TICKS, VINE_SLOW_AMP, true, false));
                 le.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 15, 0, true, false));
-                le.addStatusEffect(new StatusEffectInstance(ModEffects.TETHERED, 5, 0, true, false));
+                le.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.TETHERED), 5, 0, true, false));
             }
 
             //soft tether
@@ -951,10 +955,10 @@ public class NaturePower implements Power {
         return removed;
     }
 
-    @Override public String getName() { return "Nature"; }
-    @Override public String getPrimaryName() { return "Toxic Spores"; }
-    @Override public String getSecondaryName() { return "Verdant Prison"; }
-    @Override public String getUltimateName() { return "Wild Hunt"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.nature.name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.nature.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.nature.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.nature.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs() { return 18_000; }
     @Override public long getSecondaryCooldownMs() { return 38_000; }
@@ -962,34 +966,31 @@ public class NaturePower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Nature is a power centered around area denial, the abilities can lock off areas and entrap entities. " +
-                "Users get buffs in sunlight and water, making you especially deadly in certain zones (particularly in enclosed spaces)";
+        return Text.translatable("power.loopypowers.nature.description.overview").getString();
     }
 
     @Override
     public String getPassiveName() {
-        return "Photosynthesis";
+        return Text.translatable("power.loopypowers.nature.passive_name").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "You gain regeneration in sunlight and in water.";
+        return Text.translatable("power.loopypowers.nature.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Create a cloud of expanding poison gas. Anything inside the cloud will be inflicted with poison. You are immune to this gas.";
+        return Text.translatable("power.loopypowers.nature.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Conjure a circular cage of thorned vines around you for a long time. Anyone who touches these vines will be slowed and take damage." +
-                " People with the nature power do not take damage from the vines but are still slowed, the vines are also difficult to break.";
+        return Text.translatable("power.loopypowers.nature.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Shoot many vines in front of you. Any enemies close and in direct line of site will be hit by these vines and tethered to their current location, which" +
-                " will keep them trapped in that location, dealing periodic damage and slowing them. When near a tethered energy, the caster becomes empowered with speed and haste.";
+        return Text.translatable("power.loopypowers.nature.description.ultimate").getString();
     }
 }

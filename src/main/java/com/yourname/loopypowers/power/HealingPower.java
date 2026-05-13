@@ -10,9 +10,11 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.entity.damage.DamageSource;
 import org.joml.Vector3f;
@@ -82,6 +84,8 @@ public class HealingPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         HealingState state = getState(player);
         handlePassive(player, state);
         handleAbsorb(player, state);
@@ -119,7 +123,7 @@ public class HealingPower implements Power {
             victim.damage(ModDamageTypes.absorb(victim.getWorld()), applied);
 
             float pitch = 0.8f + (intensity * 1.2f);
-            victim.getServerWorld().playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, pitch);
+            victim.getServerWorld().playSound(null, victim.getX(), victim.getY(), victim.getZ(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, pitch);
 
             int fxCount = 5 + (int)(intensity * 15);
             victim.getServerWorld().spawnParticles(
@@ -200,10 +204,10 @@ public class HealingPower implements Power {
         );
 
         // copy effects safely using active statuses
-        for (net.minecraft.entity.effect.StatusEffect effectType : new java.util.ArrayList<>(player.getActiveStatusEffects().keySet())) {
+        for (RegistryEntry<net.minecraft.entity.effect.StatusEffect> effectType : new java.util.ArrayList<>(player.getActiveStatusEffects().keySet())) {
 
             // keep the good stuff
-            if (effectType.getCategory() == net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) continue;
+            if (effectType.value().getCategory() == net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) continue;
 
             player.removeStatusEffect(effectType);
             removed++;
@@ -254,12 +258,12 @@ public class HealingPower implements Power {
         );
 
         // sound
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_PLAYER_LEVELUP,
                 player.getSoundCategory(),
                 0.8f, 0.6f);
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE,
                 player.getSoundCategory(),
                 0.6f, 1.2f);
@@ -342,6 +346,8 @@ public class HealingPower implements Power {
         HealingState state = getState(player);
         state.absorbStored = 0f;
         state.absorbTicks = ABSORB_DURATION;
+
+        player.getServerWorld().playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.3f);
     }
 
     private void handleAbsorb(ServerPlayerEntity player, HealingState state) {
@@ -511,7 +517,7 @@ public class HealingPower implements Power {
         float pitch = 0.9f + (capped * 0.02f);
         if (pitch > 1.5f) pitch = 1.5f;
 
-        w.playSound(null, player.getBlockPos(),
+        w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(),
                 1.0f, pitch);
@@ -528,7 +534,7 @@ public class HealingPower implements Power {
 
         for (StatusEffectInstance effect : effects) {
             // only take negative effects (catch all categories just in case)
-            if (effect.getEffectType().getCategory() == net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) continue;
+            if (effect.getEffectType().value().getCategory() == net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) continue;
 
             // apply weakened version
             target.addStatusEffect(new StatusEffectInstance(
@@ -745,7 +751,7 @@ public class HealingPower implements Power {
 
                 net.minecraft.sound.SoundEvent sound = w.random.nextFloat() < MEDIC_SOUND_CHANCE ? ModSounds.MEDIC : SoundEvents.ENTITY_ENDER_DRAGON_FLAP;
 
-                w.playSound(null, player.getBlockPos(),
+                w.playSound(null, player.getX(), player.getY(), player.getZ(),
                         sound,
                         player.getSoundCategory(),
                         0.9f, 1.0f);
@@ -819,8 +825,8 @@ public class HealingPower implements Power {
         if (ticks % interval != 0) return;
 
         // safe checking using category instead of isBeneficial
-        for (net.minecraft.entity.effect.StatusEffect effectType : new java.util.ArrayList<>(player.getActiveStatusEffects().keySet())) {
-            if (effectType.getCategory() != net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) {
+        for (RegistryEntry<net.minecraft.entity.effect.StatusEffect> effectType : new java.util.ArrayList<>(player.getActiveStatusEffects().keySet())) {
+            if (effectType.value().getCategory() != net.minecraft.entity.effect.StatusEffectCategory.BENEFICIAL) {
                 player.removeStatusEffect(effectType);
                 break;
             }
@@ -831,12 +837,11 @@ public class HealingPower implements Power {
        OTHER STUFF
        ============================================================ */
 
-    @Override public String getName() { return "Healing Factor"; }
-
-    @Override public String getPassiveName() { return "Fast Patch"; }
-    @Override public String getPrimaryName() { return "Purge"; }
-    @Override public String getSecondaryName() { return "Repulse"; }
-    @Override public String getUltimateName() { return "Survival of the Fittest"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.healing.name").getString(); }
+    @Override public String getPassiveName() { return Text.translatable("power.loopypowers.healing.passive_name").getString(); }
+    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.healing.primary_name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.healing.secondary_name").getString(); }
+    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.healing.ultimate_name").getString(); }
 
     @Override public long getPrimaryCooldownMs() { return 33_000; }
     @Override public long getSecondaryCooldownMs() { return 29_000; }
@@ -844,42 +849,26 @@ public class HealingPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Healing Factor is intended to be a more utility focussed power, with the primary focus being survivability, with some other utility like damage." +
-                " You can punish people for overcomitting, but may struggle in direct combat due to your limited damage abilities.";
+        return Text.translatable("power.loopypowers.healing.description.overview").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "After not being hurt for a while, you will quickly begin to regenerate your health. This does NOT use the regeneration effect and therefore will occur regardless" +
-                " of hunger.";
+        return Text.translatable("power.loopypowers.healing.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Heal yourself slightly and purge most negative effects (including some power effects) from you. You will heal more based on the number of effects you clear.";
+        return Text.translatable("power.loopypowers.healing.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Briefly slow your movement and charge up, during this you take significantly less damage and the damage you take charges up your pulse, the damage and knockback of the" +
-                " pulse scales with the amount of damage you have taken (with a limit) and has range falloff. Your pulse also propagates anyone hit with any vanilla negative effects" +
-                " you had at the time, removing them from you. At higher charges you will emit more particles.";
+        return Text.translatable("power.loopypowers.healing.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Enter a state where you gain different buffs based on your current health. The stages are as follows:\n" +
-                "100% - 80%: Overflow - Strength 2, absorption\n" +
-                "80% - 60%: Exceptional - Strength 1, slight lifesteal\n" +
-                "60% - 40%: Equilibrium - Regeneration, stronger lifesteal, slight smoothing\n" +
-                "40% - 20%: Inadequate - Regeneration, resistance, stronger smoothing, cleansing\n" +
-                "20% - 0%: Exposed - Speed 2 (with a burst on entry), regeneration, cleansing\n" +
-                "\n" +
-                "There are transition stages where effects briefly overlap when entering a new phase.\n" +
-                "\n" +
-                "Non-potion effects:\n" +
-                "Lifesteal - Hits restore health\n" +
-                "Smoothing - Reduces large bursts of damage\n" +
-                "Cleansing - Periodically removes a negative effect";
+        return Text.translatable("power.loopypowers.healing.description.ultimate").getString();
     }
 }

@@ -22,7 +22,7 @@ public class ElytraFeatureRendererMixin {
 
     @Unique
     private static final Identifier WINGS_OF_VALOR_TEXTURE =
-            new Identifier(Loopypowers.MOD_ID, "textures/entity/wings_of_valor.png");
+            Identifier.of(Loopypowers.MOD_ID, "textures/entity/wings_of_valor.png");
 
     /**
      * makes elytra model appear.

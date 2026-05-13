@@ -11,8 +11,9 @@ public class ExposedEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) {
         // handled by darkness power, this is purely visual
+        return true;
     }
 
     @Override

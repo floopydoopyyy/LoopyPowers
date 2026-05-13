@@ -2,6 +2,7 @@ package com.yourname.loopypowers.entity;
 
 import com.yourname.loopypowers.power.SoundPower;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.DataTracker; // ADDED
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.particle.VibrationParticleEffect;
 import net.minecraft.server.world.ServerWorld;
@@ -79,7 +80,7 @@ public class SonicBoltEntity extends net.minecraft.entity.Entity {
         handleCollisions(prev, next);
     }
 
-    @Override protected void initDataTracker() {}
+    @Override protected void initDataTracker(DataTracker.Builder builder) {} // 1.21.1 FIXED
     @Override protected void readCustomDataFromNbt(net.minecraft.nbt.NbtCompound nbt) {}
     @Override protected void writeCustomDataToNbt(net.minecraft.nbt.NbtCompound nbt) {}
 

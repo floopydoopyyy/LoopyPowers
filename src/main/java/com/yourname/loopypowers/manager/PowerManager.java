@@ -4,10 +4,10 @@ import com.yourname.loopypowers.CooldownUI;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.network.AbilityPackets;
 import com.yourname.loopypowers.power.*;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting; // Added for translations
 
 import java.util.*;
 
@@ -87,9 +87,10 @@ public class PowerManager {
         PlayerDataStore.save(player);
 
         if (!silent) {
-            player.sendMessage(Text.literal("§eYou gained the power: §6" + power.getName()), false);
-            player.sendMessage(Text.literal("§eType '/power help overview' for ability explanations."));
-            player.sendMessage(Text.literal("§eGo into keybinds to view/modify ability buttons."));
+            // TRANSLATED CHAT ANNOUNCEMENTS
+            player.sendMessage(Text.translatable("message.loopypowers.power_gained", power.getName()).formatted(Formatting.YELLOW), false);
+            player.sendMessage(Text.translatable("message.loopypowers.power_help").formatted(Formatting.YELLOW), false);
+            player.sendMessage(Text.translatable("message.loopypowers.power_keybinds").formatted(Formatting.YELLOW), false);
         }
     }
 
@@ -139,7 +140,7 @@ public class PowerManager {
 
         long end = nowMs() + durationMs;
         COOLDOWN_END_MS.computeIfAbsent(player.getUuid(), u -> new HashMap<>()).put(key, end);
-        CooldownUI.setCooldownEnd(player, key, end, null);
+        CooldownUI.setCooldownEnd(player, key, end, (Text) null);
     }
 
     public static void clearCooldown(ServerPlayerEntity player, String key) {
@@ -179,7 +180,7 @@ public class PowerManager {
 
             long newEnd = Math.max(now, currentEnd - amountMs);
             entry.setValue(newEnd);
-            CooldownUI.setCooldownEnd(player, entry.getKey(), newEnd, null);
+            CooldownUI.setCooldownEnd(player, entry.getKey(), newEnd, (Text) null);
         }
     }
 
@@ -196,7 +197,7 @@ public class PowerManager {
 
         long newEnd = Math.max(now, currentEnd - amountMs);
         map.put(key, newEnd);
-        CooldownUI.setCooldownEnd(player, key, newEnd, null);
+        CooldownUI.setCooldownEnd(player, key, newEnd, (Text) null);
     }
 
     public static void setCooldownOverride(String key, long durationMs) { COOLDOWN_OVERRIDE_MS.put(key, durationMs); }
@@ -232,16 +233,16 @@ public class PowerManager {
 
     public static void usePrimary(ServerPlayerEntity player) {
         Power power = PLAYER_POWERS.get(player.getUuid());
-        
-        // No power check
+
+        // TRANSLATED: No power check
         if (power == null) {
-            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.no_power").formatted(Formatting.RED), 40);
             return;
         }
 
-        // Displaced lock EXCEPTIONS
-        if (player.hasStatusEffect(ModEffects.DISPLACED) && !(power instanceof HealingPower)) {
-            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+        // TRANSLATED: Displaced lock EXCEPTIONS using RegistryEntry
+        if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DISPLACED)) && !(power instanceof HealingPower)) {
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.displaced").formatted(Formatting.RED), 20);
             return;
         }
 
@@ -259,17 +260,19 @@ public class PowerManager {
 
         // No power check
         if (power == null) {
-            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.no_power").formatted(Formatting.RED), 40);
             return;
         }
 
-        if (player.hasStatusEffect(ModEffects.DISPLACED)) {
-            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+        // Using RegistryEntry
+        if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DISPLACED))) {
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.displaced").formatted(Formatting.RED), 20);
             return;
         }
 
+        // Level check
         if (getLevel(player) < 2) {
-            CooldownUI.pushActionbarOverride(player, "§cYou must be level 2 to use your secondary.", 30);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.secondary_level_req").formatted(Formatting.RED), 30);
             return;
         }
 
@@ -287,17 +290,19 @@ public class PowerManager {
 
         // No power check
         if (power == null) {
-            CooldownUI.pushActionbarOverride(player, "§cYou do not have a power.", 40);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.no_power").formatted(Formatting.RED), 40);
             return;
         }
 
-        if (player.hasStatusEffect(ModEffects.DISPLACED)) {
-            CooldownUI.pushActionbarOverride(player, "§cYou are displaced.", 20);
+        // Using RegistryEntry
+        if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.DISPLACED))) {
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.displaced").formatted(Formatting.RED), 20);
             return;
         }
 
+        // Level check
         if (getLevel(player) < 3) {
-            CooldownUI.pushActionbarOverride(player, "§cYou must be level 3 to use your ultimate.", 30);
+            CooldownUI.pushActionbarOverride(player, Text.translatable("message.loopypowers.ultimate_level_req").formatted(Formatting.RED), 30);
             return;
         }
 
@@ -314,15 +319,15 @@ public class PowerManager {
         Power p = PLAYER_POWERS.get(player.getUuid());
         boolean hasStrength = (p instanceof StrengthPower);
 
-        var buf = PacketByteBufs.create();
-        buf.writeBoolean(hasStrength);
-        ServerPlayNetworking.send(player, AbilityPackets.SYNC_STRENGTH_POWER, buf);
+        net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(
+                player,
+                new AbilityPackets.SyncStrengthPayload(hasStrength)
+        );
     }
 
     private static long modifyCooldown(ServerPlayerEntity player, Power power, AbilityTypes type, long baseMs) {
-        // ask StrengthPower if they are raging, but exclude the ultimate ability
         if (power instanceof StrengthPower && type != AbilityTypes.ULTIMATE && StrengthPower.isRaging(player)) {
-            return Math.max(250L, (long)(baseMs * 0.20)); // 80% reduction
+            return Math.max(250L, (long)(baseMs * 0.20));
         }
         return baseMs;
     }
@@ -355,7 +360,8 @@ public class PowerManager {
         int current = getLevel(player);
         if (current < 3) {
             setLevel(player, current + 1);
-            player.sendMessage(Text.literal("§bYour bond evolved to Level " + (current + 1) + "!"), false);
+            // TRANSLATED: Level up
+            player.sendMessage(Text.translatable("message.loopypowers.level_up", current + 1).formatted(Formatting.AQUA), false);
         }
     }
 
@@ -379,24 +385,12 @@ public class PowerManager {
         }
     }
 
-    /**
-     * Loads power, level, and cooldowns from NBT.
-     *
-     * Cooldown end-times are absolute epoch-ms values. Any that have already
-     * passed are effectively expired (getCooldownRemainingMs clamps to 0),
-     * so there is no special handling needed for server restarts.
-     *
-     * CooldownUI is synced here so the HUD is correct immediately after load.
-     */
     public static void loadFromNbt(ServerPlayerEntity player, net.minecraft.nbt.NbtCompound nbt) {
-
-        // ── Power ─────────────────────────────────────────────────────────────
         if (nbt.contains("lp_power")) {
             String name = nbt.getString("lp_power");
             for (Power p : ALL_POWERS) {
                 if (p.getName().equals(name)) {
                     PLAYER_POWERS.put(player.getUuid(), p);
-                    // Silently assign the power on load
                     p.onAssign(player);
                     syncClientFlags(player);
                     break;
@@ -404,12 +398,10 @@ public class PowerManager {
             }
         }
 
-        // ── Level ─────────────────────────────────────────────────────────────
         if (nbt.contains("lp_level")) {
             setLevel(player, nbt.getInt("lp_level"));
         }
 
-        // ── Cooldowns ─────────────────────────────────────────────────────────
         if (nbt.contains("lp_cooldowns")) {
             net.minecraft.nbt.NbtCompound cdTag = nbt.getCompound("lp_cooldowns");
 
@@ -418,18 +410,11 @@ public class PowerManager {
 
             for (String key : cdTag.getKeys()) {
                 long endMs = cdTag.getLong(key);
-
-                // Only restore cooldowns that are still active.
-                // Expired ones are simply dropped so the HUD stays clean.
                 if (endMs > now) {
                     map.put(key, endMs);
-
-                    // Sync HUD immediately — without this, the bar is invisible
-                    // until the player next activates the ability.
-                    CooldownUI.setCooldownEnd(player, key, endMs, null);
+                    CooldownUI.setCooldownEnd(player, key, endMs, (Text) null);
                 }
             }
-
             COOLDOWN_END_MS.put(player.getUuid(), map);
         }
     }
@@ -440,9 +425,6 @@ public class PowerManager {
         COOLDOWN_END_MS.put(newPlayer.getUuid(), new HashMap<>(oldMap));
     }
 
-    /**
-     * MUST be called when a player disconnects to prevent memory leaks
-     */
     public static void clearPlayerState(ServerPlayerEntity player) {
         UUID id = player.getUuid();
         PLAYER_POWERS.remove(id);

@@ -14,10 +14,9 @@ public class ModOreGeneration {
     // configured_feature - vein size, air exposure
 
     public static void generateOres() {
-
         RegistryKey<PlacedFeature> placedFeature = RegistryKey.of(
                 RegistryKeys.PLACED_FEATURE,
-                new Identifier(Loopypowers.MOD_ID, "deepslate_celestial_ore")
+                Identifier.of(Loopypowers.MOD_ID, "deepslate_celestial_ore")
         );
 
         BiomeModifications.addFeature(

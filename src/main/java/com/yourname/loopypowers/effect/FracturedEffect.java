@@ -14,18 +14,19 @@ import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
+import net.minecraft.util.Identifier; // Added for 1.21.1
 import org.joml.Vector3f;
 
 public class FracturedEffect extends StatusEffect {
     public FracturedEffect() {
         super(StatusEffectCategory.HARMFUL, 0x4B0082); // Dark Violet
 
-        // Slowness
+        // 1.21.1 Attribute Modifier change! No more UUIDs, and MULTIPLY_TOTAL was renamed.
         this.addAttributeModifier(
                 EntityAttributes.GENERIC_MOVEMENT_SPEED,
-                "7101b44b-4b2a-4a2a-8b1b-1b2b3b4b5b6b",
+                Identifier.of("loopypowers", "fractured_slowness"),
                 -0.50f,
-                EntityAttributeModifier.Operation.MULTIPLY_TOTAL
+                EntityAttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
         );
     }
 
@@ -35,8 +36,8 @@ public class FracturedEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
-        if (entity.getWorld().isClient) return;
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) { // Changed void to boolean
+        if (entity.getWorld().isClient) return true; // Changed to return true
 
         // every 15 ticks
         if (entity.age % 15 == 0) {
@@ -73,5 +74,6 @@ public class FracturedEffect extends StatusEffect {
                 world.playSound(null, entity.getBlockPos(), flickerSound, SoundCategory.PLAYERS, 0.5f, 1.0f);
             }
         }
+        return true; // MUST return true at the end
     }
 }

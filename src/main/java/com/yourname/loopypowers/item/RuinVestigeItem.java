@@ -2,17 +2,16 @@ package com.yourname.loopypowers.item;
 
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.ritual.RitualManager;
-import net.minecraft.client.item.TooltipContext;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.tooltip.TooltipType; // Added for 1.21.1
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import net.minecraft.util.TypedActionResult;
 import net.minecraft.world.World;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -27,22 +26,19 @@ public class RuinVestigeItem extends Item {
         return true;
     }
 
+    // 1.21.1 Tooltip Update
     @Override
-    public void appendTooltip(ItemStack stack, @Nullable World world,
-                              List<Text> tooltip, TooltipContext context) {
-
-        tooltip.add(Text.literal("It hums with chaotic energy...")
+    public void appendTooltip(ItemStack stack, Item.TooltipContext context, List<Text> tooltip, TooltipType type) {
+        tooltip.add(Text.translatable("item.loopypowers.ruin_vestige.tooltip.flavor")
                 .formatted(Formatting.GRAY));
 
-        tooltip.add(Text.literal("Bestows a random ruin power to the subject.")
-                .formatted(Formatting.DARK_PURPLE));
+        tooltip.add(Text.translatable("item.loopypowers.ruin_vestige.tooltip.desc")
+                .formatted(Formatting.LIGHT_PURPLE));
 
-        tooltip.add(Text.literal("Available Powers:")
+        tooltip.add(Text.translatable("item.loopypowers.vestige.tooltip.available")
                 .formatted(Formatting.GRAY));
-        tooltip.add(Text.literal("Explosion, Fortune, Blood")
+        tooltip.add(Text.translatable("item.loopypowers.ruin_vestige.tooltip.powers")
                 .formatted(Formatting.GRAY));
-
-        super.appendTooltip(stack, world, tooltip, context);
     }
 
     @Override
@@ -52,10 +48,10 @@ public class RuinVestigeItem extends Item {
         if (!world.isClient) {
             ServerPlayerEntity player = (ServerPlayerEntity) user;
 
-            // already has the power
+            // already has the power - Translatable
             if (PowerManager.getPower(player) != null) {
                 player.sendMessage(
-                        Text.literal("§cYou already possess a power."),
+                        Text.translatable("message.loopypowers.vestige.already_has_power").formatted(Formatting.RED),
                         true
                 );
                 return TypedActionResult.fail(stack);
@@ -70,6 +66,6 @@ public class RuinVestigeItem extends Item {
             }
         }
 
-        return TypedActionResult.success(stack, world.isClient());
+        return TypedActionResult.success(stack);
     }
 }

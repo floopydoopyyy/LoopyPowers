@@ -11,8 +11,9 @@ public class TetheredEffect extends StatusEffect {
     }
 
     @Override
-    public void applyUpdateEffect(LivingEntity entity, int amplifier) {
+    public boolean applyUpdateEffect(LivingEntity entity, int amplifier) {
         // handled by nature power, this is purely visual
+        return true;
     }
 
     @Override

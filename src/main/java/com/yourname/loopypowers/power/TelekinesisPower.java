@@ -10,6 +10,7 @@ import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
@@ -92,12 +93,12 @@ public class TelekinesisPower implements Power {
     private static final double THROW_RELEASE_RANGE   = 12.0;
 
     // ── Choke phase ──────────────────────
-    private static final int    CHOKE_TICKS           = 60;   // duration of choke
-    private static final int    CHOKE_DAMAGE_INTERVAL = 10;   // ticks between damage pulses
-    private static final float  CHOKE_DAMAGE_PER_TICK = 2.0f; // damage per pulse
-    private static final double CHOKE_SQUEEZE_VEL     = -0.01; // upward squeeze velocity
-    private static final double CHOKE_ORBIT_RADIUS_START = 0.5; // particle orbit start radius
-    private static final double CHOKE_ORBIT_RADIUS_END   = 0.2; // tightens to this by end
+    private static final int    CHOKE_TICKS           = 60;
+    private static final int    CHOKE_DAMAGE_INTERVAL = 10;
+    private static final float  CHOKE_DAMAGE_PER_TICK = 2.0f;
+    private static final double CHOKE_SQUEEZE_VEL     = -0.01;
+    private static final double CHOKE_ORBIT_RADIUS_START = 0.5;
+    private static final double CHOKE_ORBIT_RADIUS_END   = 0.2;
 
     // EGG
     private static final int    QUOTE_CHANCE           = 450;
@@ -115,30 +116,30 @@ public class TelekinesisPower implements Power {
     private static final float  IMPACT_FLOOR_SCALE  = 1.8f;
 
     // ── Ultimate ──────────────────────────────────
-    private static final int    DEBRIS_MAX_BLOCKS            = 10;   // max orbiting blocks
-    private static final double DEBRIS_HARVEST_RADIUS        = 10.0; // radius to harvest blocks from
-    private static final int    DEBRIS_ORBIT_TICKS           = 260;  // how long ult lasts
-    private static final double DEBRIS_ORBIT_RADIUS          = 4.5;  // orbit radius around player
-    private static final double DEBRIS_ORBIT_RADIUS_INNER    = 2.5;  // inner ring radius (dual-ring)
-    private static final double DEBRIS_ORBIT_SPEED           = 0.045;// outer ring radians per tick
-    private static final double DEBRIS_ORBIT_SPEED_INNER     = 0.08; // inner ring — faster, opposite dir
-    private static final double DEBRIS_PULL_RADIUS           = 12.0; // entity pull radius
+    private static final int    DEBRIS_MAX_BLOCKS            = 10;
+    private static final double DEBRIS_HARVEST_RADIUS        = 10.0;
+    private static final int    DEBRIS_ORBIT_TICKS           = 260;
+    private static final double DEBRIS_ORBIT_RADIUS          = 4.5;
+    private static final double DEBRIS_ORBIT_RADIUS_INNER    = 2.5;
+    private static final double DEBRIS_ORBIT_SPEED           = 0.045;
+    private static final double DEBRIS_ORBIT_SPEED_INNER     = 0.08;
+    private static final double DEBRIS_PULL_RADIUS           = 12.0;
     private static final double DEBRIS_PULL_STRENGTH         = 0.07;
     private static final float  DEBRIS_PULL_DAMAGE           = 0.1f;
-    private static final int    DEBRIS_THROW_COOLDOWN        = 8;    // ticks between throws
-    private static final int    DEBRIS_THROW_COUNT           = 5;    // blocks per throw
+    private static final int    DEBRIS_THROW_COOLDOWN        = 8;
+    private static final int    DEBRIS_THROW_COUNT           = 5;
     private static final float  DEBRIS_THROW_DAMAGE          = 13.0f;
     private static final double DEBRIS_THROW_SPEED           = 2.4;
-    private static final double DEBRIS_THROW_SPREAD          = 0.3; // shotgun spread per extra block
+    private static final double DEBRIS_THROW_SPREAD          = 0.3;
     private static final double DEBRIS_THROW_EXPLOSION_RADIUS = 4.0;
 
     // block regen
-    private static final int    DEBRIS_REGEN_DELAY_TICKS = 15;  // no swing time before regen starts
-    private static final int    DEBRIS_REGEN_INTERVAL    = 20;  // ticks per block regen
-    private static final int    DEBRIS_REGEN_AMOUNT      = 5;   // blocks per regen tick
+    private static final int    DEBRIS_REGEN_DELAY_TICKS = 15;
+    private static final int    DEBRIS_REGEN_INTERVAL    = 20;
+    private static final int    DEBRIS_REGEN_AMOUNT      = 5;
 
     // EGG
-    private static final int    WOOLLIAM_CHANCE            = 70;   // 1 in whatever chance for woolliam to make a cameo
+    private static final int    WOOLLIAM_CHANCE            = 70;
 
     /* ============================================================
        PARTICLE STUFF
@@ -183,11 +184,8 @@ public class TelekinesisPower implements Power {
     }
 
     private static void spawnChokeAura(ServerWorld world, LivingEntity entity, long time, float chokeProgress) {
-        // Orbit tightens
         double radius = CHOKE_ORBIT_RADIUS_START
                 + (CHOKE_ORBIT_RADIUS_END - CHOKE_ORBIT_RADIUS_START) * chokeProgress;
-
-        // speed up
         double spinSpeed = 0.12 + chokeProgress * 0.30;
         int points = 8;
 
@@ -195,14 +193,11 @@ public class TelekinesisPower implements Power {
             double angle = (time * spinSpeed) + (i * Math.PI * 2.0 / points);
             double x = entity.getX() + Math.cos(angle) * radius;
             double z = entity.getZ() + Math.sin(angle) * radius;
-
-            // Spiral upward
             double y = entity.getBodyY(0.3 + chokeProgress * 0.4);
 
             world.spawnParticles(TK_DARK_PINK, x, y, z, 1, 0, 0.01, 0, 0);
         }
 
-        // final vortex
         if (chokeProgress > 0.5f) {
             double innerRadius = radius * 0.4;
             for (int i = 0; i < 4; i++) {
@@ -286,7 +281,6 @@ public class TelekinesisPower implements Power {
 
         if (player.getServer() != null) {
             for (ServerWorld w : player.getServer().getWorlds()) {
-                // Clear debris field instantly
                 if (caster.debrisField != null) {
                     for (UUID uuid : caster.debrisField.orbitAngles.keySet()) {
                         Entity e = w.getEntity(uuid);
@@ -295,7 +289,6 @@ public class TelekinesisPower implements Power {
                     caster.debrisField = null;
                 }
 
-                // Clear pending thrown blocks
                 for (UUID uuid : caster.thrownBlocks.keySet()) {
                     Entity e = w.getEntity(uuid);
                     if (e != null) e.discard();
@@ -304,7 +297,6 @@ public class TelekinesisPower implements Power {
             }
         }
 
-        // Clear targets suspended, choked, or knocked airborne by this player globally
         Iterator<Map.Entry<UUID, TKVictimState>> it = ACTIVE_VICTIMS.entrySet().iterator();
         while (it.hasNext()) {
             TKVictimState vState = it.next().getValue();
@@ -331,6 +323,8 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ServerWorld world = player.getServerWorld();
         TKCasterState caster = getCasterState(player);
 
@@ -380,7 +374,6 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void onHit(ServerPlayerEntity attacker, LivingEntity target) {
-        // dodge passive if passive off
         if (!PassiveManager.isEnabled(attacker)) return;
 
         TKCasterState caster = getCasterState(attacker);
@@ -397,9 +390,6 @@ public class TelekinesisPower implements Power {
         world.spawnParticles(TK_LIGHT_PINK, target.getX(), target.getBodyY(0.7), target.getZ(), 4, 0.2, 0.3, 0.2, 0.03);
     }
 
-    // IMPACT DAMAGE
-
-    // attackerUuid is who caused the entity to become airborne, used for death messages
     private void markForImpactTracking(LivingEntity entity, Vec3d launchVelocity, UUID attackerUuid) {
         TKVictimState vState = ACTIVE_VICTIMS.computeIfAbsent(entity.getUuid(), k -> new TKVictimState());
         vState.airborneTicks = TK_AIRBORNE_TICKS;
@@ -641,9 +631,8 @@ public class TelekinesisPower implements Power {
         field.ticksRemaining = DEBRIS_ORBIT_TICKS;
         caster.debrisField = field;
 
-        int harvested = tryHarvestBlocks(player, world, DEBRIS_MAX_BLOCKS, field);
+        int harvested = tryHarvestBlocks(player, world, field);
 
-        // Visual rings always spawn to show the energy field is active
         for (int ring = 0; ring < 3; ring++) {
             double ringRadius = 1.5 + ring * 2.5;
             int points = 12 + ring * 6;
@@ -657,7 +646,6 @@ public class TelekinesisPower implements Power {
             }
         }
 
-        // Field activation FX
         for (int i = 0; i < 20; i++) {
             double a = world.random.nextDouble() * Math.PI * 2;
             double r = world.random.nextDouble() * 1.5;
@@ -671,17 +659,16 @@ public class TelekinesisPower implements Power {
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_SONIC_BOOM, player.getSoundCategory(), 1.2f, 0.4f);
 
-        // Only play the "crunchy" stone break sound if we actually grabbed blocks
         if (harvested > 0) {
             world.playSound(null, player.getBlockPos(),
                     SoundEvents.BLOCK_STONE_BREAK, player.getSoundCategory(), 1.5f, 0.6f);
         }
 
         world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 0.6f, 0.5f);
+                SoundEvents.ENTITY_GENERIC_EXPLODE.value(), player.getSoundCategory(), 0.6f, 0.5f);
     }
 
-    private int tryHarvestBlocks(ServerPlayerEntity player, ServerWorld world, int maxCount, DebrisField field) {
+    private int tryHarvestBlocks(ServerPlayerEntity player, ServerWorld world, DebrisField field) {
         Vec3d center = player.getPos();
         int radius = (int) Math.ceil(DEBRIS_HARVEST_RADIUS);
         List<BlockPos> candidates = new ArrayList<>();
@@ -703,7 +690,7 @@ public class TelekinesisPower implements Power {
         boolean wooliamSpawned = false;
 
         for (BlockPos pos : candidates) {
-            if (harvested >= maxCount) break;
+            if (harvested >= DEBRIS_MAX_BLOCKS) break;
 
             BlockState state = world.getBlockState(pos);
             world.removeBlock(pos, false);
@@ -727,14 +714,13 @@ public class TelekinesisPower implements Power {
                 orbitEntity = FallingBlockEntity.spawnFromBlock(world, pos, state);
             }
 
-            // orbital entity setup
             if (orbitEntity instanceof FallingBlockEntity falling) {
                 falling.setNoGravity(true);
                 falling.dropItem = false;
                 falling.timeFalling = -32768;
             }
 
-            field.orbitAngles.put(orbitEntity.getUuid(), (Math.PI * 2.0 * harvested) / maxCount);
+            field.orbitAngles.put(orbitEntity.getUuid(), (Math.PI * 2.0 * harvested) / DEBRIS_MAX_BLOCKS);
             harvested++;
         }
         return harvested;
@@ -778,7 +764,6 @@ public class TelekinesisPower implements Power {
             UUID uuid = entry.getKey();
             Entity ent = world.getEntity(uuid);
 
-            // Allow any orbiting entity (like Wooliam)
             if (ent == null || ent.isRemoved()) {
                 toRemove.add(uuid);
                 index++;
@@ -789,7 +774,7 @@ public class TelekinesisPower implements Power {
             double orbitRadius = isInner ? DEBRIS_ORBIT_RADIUS_INNER : DEBRIS_ORBIT_RADIUS;
             double orbitSpeed  = isInner ? -DEBRIS_ORBIT_SPEED_INNER : DEBRIS_ORBIT_SPEED;
 
-            double angle = (Math.PI * 2.0 * (index / 2)) / Math.max(1, total / 2) + (world.getTime() * orbitSpeed);
+            double angle = (Math.PI * 2.0 * (double)(index / 2)) / (double) Math.max(1, total / 2) + (world.getTime() * orbitSpeed);
             entry.setValue(angle);
 
             double x = playerPos.x + Math.cos(angle) * orbitRadius;
@@ -810,7 +795,6 @@ public class TelekinesisPower implements Power {
         }
         toRemove.forEach(field.orbitAngles::remove);
 
-        // pull and damage
         double contactRadius = DEBRIS_ORBIT_RADIUS_INNER * 1.2;
 
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class,
@@ -821,14 +805,12 @@ public class TelekinesisPower implements Power {
             double dist = toPlayer.length();
             if (dist < 0.5 || dist > DEBRIS_PULL_RADIUS) continue;
 
-            // slight pull
             double strength = DEBRIS_PULL_STRENGTH * (1.0 - dist / DEBRIS_PULL_RADIUS);
             Vec3d pull = toPlayer.normalize().multiply(strength);
 
             e.addVelocity(pull.x, pull.y * 0.3, pull.z);
             e.velocityModified = true;
 
-            // damage if close — attributed to the player running the ult
             if (dist <= contactRadius && world.getTime() % 10 == 0) {
                 e.damage(ModDamageTypes.debrisOrbit(world, player), DEBRIS_PULL_DAMAGE);
             }
@@ -840,7 +822,6 @@ public class TelekinesisPower implements Power {
             }
         }
 
-        // player particles
         long time = world.getTime();
         for (int ring = 0; ring < 3; ring++) {
             double ringR = DEBRIS_ORBIT_RADIUS_INNER + ring * 0.8;
@@ -885,14 +866,14 @@ public class TelekinesisPower implements Power {
             it.remove();
 
             if (orbitEntity != null && !orbitEntity.isRemoved()) {
-                orbitEntity.setNoGravity(false); // Re-enable gravity for the throw
+                orbitEntity.setNoGravity(false);
 
                 if (orbitEntity instanceof FallingBlockEntity fb) {
                     fb.timeFalling = 0;
                     fb.dropItem = false;
                 }
 
-                double spreadH = (thrown == 0) ? 0 : (thrown % 2 == 0 ? 1 : -1) * DEBRIS_THROW_SPREAD * ((thrown + 1) / 2);
+                double spreadH = (thrown == 0) ? 0 : (thrown % 2 == 0 ? 1 : -1) * DEBRIS_THROW_SPREAD * (double)((thrown + 1) / 2);
                 double spreadV = (world.random.nextDouble() - 0.5) * DEBRIS_THROW_SPREAD * 0.5;
 
                 Vec3d vel = look.multiply(DEBRIS_THROW_SPEED).add(right.multiply(spreadH)).add(up.multiply(spreadV));
@@ -952,7 +933,7 @@ public class TelekinesisPower implements Power {
             double dist = e.getPos().distanceTo(pos);
             if (dist > DEBRIS_THROW_EXPLOSION_RADIUS) continue;
 
-            float damage = DEBRIS_THROW_DAMAGE * (float)(1.0 - dist / DEBRIS_THROW_EXPLOSION_RADIUS);
+            float damage = DEBRIS_THROW_DAMAGE * (float) (1.0 - dist / DEBRIS_THROW_EXPLOSION_RADIUS);
             e.damage(ModDamageTypes.blockThrow(world, player), damage);
 
             Vec3d knockback = e.getPos().subtract(pos).normalize().multiply(0.8);
@@ -973,10 +954,8 @@ public class TelekinesisPower implements Power {
                     1, Math.cos(a) * 0.3, 0.2, Math.sin(a) * 0.3, 0.05);
         }
 
-        world.playSound(null,
-                new BlockPos((int)pos.x, (int)pos.y, (int)pos.z),
-                SoundEvents.ENTITY_GENERIC_EXPLODE, net.minecraft.sound.SoundCategory.PLAYERS,
-                1.0f, 0.8f);
+        world.playSound(null, player.getBlockPos(),
+                SoundEvents.ENTITY_GENERIC_EXPLODE.value(), player.getSoundCategory(), 0.6f, 0.5f);
     }
 
     private void handleDebrisRegen(ServerPlayerEntity player, TKCasterState caster, DebrisField field) {
@@ -1016,7 +995,6 @@ public class TelekinesisPower implements Power {
                 player.getSoundCategory(), 0.4f, 1.2f);
     }
 
-    // Resolve the player entity from a stored UUID
     private static Entity resolveOwner(UUID ownerUuid, ServerWorld world) {
         if (ownerUuid == null) return null;
         return world.getServer().getPlayerManager().getPlayer(ownerUuid);
@@ -1026,11 +1004,11 @@ public class TelekinesisPower implements Power {
        YAP
        ============================================================ */
 
-    @Override public String getName()          { return "Telekinesis"; }
-    @Override public String getPassiveName()   { return "Kinetic Thrust"; }
-    @Override public String getPrimaryName()   { return "Yank"; }
-    @Override public String getSecondaryName() { return "Stasis"; }
-    @Override public String getUltimateName()  { return "Debris Vortex"; }
+    @Override public String getName()          { return Text.translatable("power.loopypowers.telekinesis.name").getString(); }
+    @Override public String getPassiveName()   { return Text.translatable("power.loopypowers.telekinesis.passive.name").getString(); }
+    @Override public String getPrimaryName()   { return Text.translatable("power.loopypowers.telekinesis.primary.name").getString(); }
+    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.telekinesis.secondary.name").getString(); }
+    @Override public String getUltimateName()  { return Text.translatable("power.loopypowers.telekinesis.ultimate.name").getString(); }
 
     @Override public long getPrimaryCooldownMs()   { return 11_000; }
     @Override public long getSecondaryCooldownMs() { return 24_000; }
@@ -1038,35 +1016,26 @@ public class TelekinesisPower implements Power {
 
     @Override
     public String getOverviewDescription() {
-        return "Telekinesis is a control power focused on moving entities around and keeping them away from you." +
-                " Where most abilities can vary on power dependent on the current environment, meaning this power may be weaker in some areas, such as wide open spaces, but stronger" +
-                " in enclosed spaces, or cliff terrain as your knockback can prevent melee attacks or deal high fall/wall collision damage.";
+        return Text.translatable("power.loopypowers.telekinesis.description.overview").getString();
     }
 
     @Override
     public String getPassiveDescription() {
-        return "Melee hits have increases knockback, this stacks with knockback enchantments.";
+        return Text.translatable("power.loopypowers.telekinesis.description.passive").getString();
     }
 
     @Override
     public String getPrimaryDescription() {
-        return "Pull all entities in front of you towards you, this pull will also bring entities upwards.";
+        return Text.translatable("power.loopypowers.telekinesis.description.primary").getString();
     }
 
     @Override
     public String getSecondaryDescription() {
-        return "Suspend a group of entities in front of you, disabling their movement and floating them into the air. You then have two choices for actions to take:" +
-                " \nSwing your hand in any direction and launch the suspended entities in the direction you were looking, entities will take increased fall damage or bonus damage when colliding" +
-                " with a wall." +
-                " \nDo not swing your hand while they are suspended and will begin to choke them, losing the ability to throw them and dealing damage over time.";
+        return Text.translatable("power.loopypowers.telekinesis.description.secondary").getString();
     }
 
     @Override
     public String getUltimateDescription() {
-        return "Surround yourself in telekinetic energy, pulling in nearby entities and damaging them if they are very close." +
-                "\nNearby natural blocks are pulled from the world and orbit you, swinging will launch some of these blocks in the direction you are looking, dealing AOE damage and" +
-                " knockback." +
-                "\nYou must have a certain number of blocks to launch them and you replenish blocks slowly after not swinging for a few seconds." +
-                "\nThere are no changes to your movement during this, but your vision may be obscured. ";
+        return Text.translatable("power.loopypowers.telekinesis.description.ultimate").getString();
     }
 }
