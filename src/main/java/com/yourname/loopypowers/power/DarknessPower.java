@@ -71,6 +71,8 @@ public class DarknessPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         handleMistForm(player);
         tickBlackoutsWorld(player.getServerWorld());
     }

@@ -47,7 +47,7 @@ public class SoundPower implements Power {
     private static class SoundVictimState {
         int score = 0;
         int resonatedTicks = 0;
-        int dampenedTicks = 0;
+        int immunityTicks = 0; // Replaced dampenedTicks
         int hbStep = 0;
         long lastSeenTick = 0;
         long lastTickTime = 0;
@@ -76,6 +76,7 @@ public class SoundPower implements Power {
        ============================================================ */
 
     // Passive
+    private static final int    RES_IMMUNITY_TICKS = 140; // 7 seconds immunity
     private static final double RES_RADIUS         = 14.0;
     private static final int    RES_SCAN_INTERVAL  = 4;
     private static final int    RES_TRAIL_INTERVAL = 2;
@@ -84,7 +85,7 @@ public class SoundPower implements Power {
     private static final int    RES_THRESHOLD      = 15;
     private static final int    RES_DECAY_PER_SCAN = 1;
     private static final int    MAX_TRAIL_TARGETS  = 14;
-    private static final float    BURST_BONUS_DAMAGE  = 9.5f;
+    private static final float  BURST_BONUS_DAMAGE  = 7.5f;
 
     private static final int PTS_SLOW_MOVE = 1;
     private static final int PTS_FAST_MOVE = 2;
@@ -104,10 +105,10 @@ public class SoundPower implements Power {
     private static final int    BD_FINAL_DELAY_TICKS = 2;
     private static final double BD_PULL_RADIUS       = 10.0;
     private static final double BD_FINAL_RADIUS      = 7.0;
-    private static final float  BD_PULL_STRENGTH     = 0.24f;
+    private static final float  BD_PULL_STRENGTH     = 0.11f;
     private static final float  BD_PULL_UP           = 0.02f;
-    private static final float  BD_FINAL_KB          = 1.00f;
-    private static final float  BD_FINAL_UP          = 0.30f;
+    private static final float  BD_FINAL_KB          = 0.85f;
+    private static final float  BD_FINAL_UP          = 0.25f;
     private static final float  BD_FINAL_DAMAGE      = 15.5f;
     private static final int    BD_FINAL_STUN_TICKS  = 40;
     private static final int    BD_REMOTE_STUN_TICKS = 30;
@@ -118,8 +119,8 @@ public class SoundPower implements Power {
     private static final int BLAST_POINTS    = 120;
 
     // Ultimate
-    private static final int    ULT_WINDUP_TICKS      = 22;
-    private static final double ULT_RANGE             = 50.0;
+    private static final int    ULT_WINDUP_TICKS      = 28;
+    private static final double ULT_RANGE             = 45.0;
     private static final double ULT_BEAM_RADIUS       = 1.35;
     private static final float  ULT_DAMAGE            = 20.5f;
     private static final float  ULT_KB                = 2.5f;
@@ -173,6 +174,7 @@ public class SoundPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         SoundCasterState caster = getCasterState(player);
 
         if (caster.trailStep > 0) caster.trailStep--;
@@ -194,12 +196,9 @@ public class SoundPower implements Power {
         // Clean up global victims map occasionally to prevent memory leaks
         if (player.age % 100 == 0) {
             long now = player.getServerWorld().getTime();
-            VICTIM_STATES.values().removeIf(v -> (now - v.lastSeenTick) > 100 && v.score <= 0 && v.resonatedTicks <= 0);
+            VICTIM_STATES.values().removeIf(v -> (now - v.lastSeenTick) > 100 && v.score <= 0 && v.resonatedTicks <= 0 && v.immunityTicks <= 0);
         }
     }
-
-    @Override
-    public void onHit(ServerPlayerEntity attacker, LivingEntity target) {}
 
     public static void applyAbilityHit(ServerPlayerEntity caster, LivingEntity target, float baseDamage, boolean allowBurst) {
         target.damage(ModDamageTypes.sound(target.getWorld(), caster), baseDamage);
@@ -218,9 +217,10 @@ public class SoundPower implements Power {
         target.setVelocity(0, Math.min(target.getVelocity().y, 0.0), 0);
         target.velocityModified = true;
 
-        // Apply stun
+        // Apply stun & start immunity
         target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, 35, 0, false, false, true));
-        vState.dampenedTicks = 45;
+        vState.immunityTicks = RES_IMMUNITY_TICKS;
+        vState.score = 0;
 
         if (target instanceof ServerPlayerEntity targetPlayer) {
             CameraShake.shakeNearby(targetPlayer, 3, 15, 0.08f);
@@ -266,16 +266,29 @@ public class SoundPower implements Power {
                 if (delta > 20) delta = 20; // prevent massive jumps
                 vState.lastTickTime = nowTick;
 
+                boolean wasResonated = vState.resonatedTicks > 0;
                 if (vState.resonatedTicks > 0) vState.resonatedTicks -= delta;
-                if (vState.dampenedTicks > 0) vState.dampenedTicks -= delta;
+
+                // If resonance naturally expired this tick, start immunity
+                if (wasResonated && vState.resonatedTicks <= 0) {
+                    vState.immunityTicks = RES_IMMUNITY_TICKS;
+                    vState.score = 0;
+                }
+
+                if (vState.immunityTicks > 0) vState.immunityTicks -= delta;
                 if (vState.hbStep > 0) vState.hbStep -= delta;
             }
 
-            vState.score = Math.max(0, vState.score - RES_DECAY_PER_SCAN);
-            vState.score += computeConspicuousPoints(e);
+            // Block score buildup and instant radius if immune
+            if (vState.immunityTicks > 0) {
+                vState.score = 0;
+            } else {
+                vState.score = Math.max(0, vState.score - RES_DECAY_PER_SCAN);
+                vState.score += computeConspicuousPoints(e);
 
-            if (player.squaredDistanceTo(e) <= (RES_INSTANT_RADIUS * RES_INSTANT_RADIUS)) {
-                vState.score = RES_THRESHOLD;
+                if (player.squaredDistanceTo(e) <= (RES_INSTANT_RADIUS * RES_INSTANT_RADIUS)) {
+                    vState.score = RES_THRESHOLD;
+                }
             }
 
             if (vState.score < RES_THRESHOLD) {
@@ -496,13 +509,14 @@ public class SoundPower implements Power {
         target.addVelocity(dir.x * kb, up, dir.z * kb);
         target.velocityModified = true;
 
-        // Apply STUN Effect if resonated
+        // Apply STUN Effect if resonated & start immunity
         SoundVictimState vState = VICTIM_STATES.get(target.getUuid());
         if (vState != null && vState.resonatedTicks > 0) {
             vState.resonatedTicks = 0;
             target.removeStatusEffect(StatusEffects.GLOWING);
             target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, stunTicks, 0, false, false, true));
-            vState.dampenedTicks = Math.max(20, stunTicks);
+            vState.immunityTicks = RES_IMMUNITY_TICKS;
+            vState.score = 0;
 
             if (target instanceof ServerPlayerEntity spTarget) {
                 spTarget.playSound(ModSounds.EARRING, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);

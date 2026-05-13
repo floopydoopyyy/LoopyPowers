@@ -137,6 +137,7 @@ public class NaturePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         NatureState state = getState(player);
 
         // PASSIVE

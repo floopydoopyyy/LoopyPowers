@@ -235,6 +235,7 @@ public class PsychicPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         PsychicState state = getState(player);
 
         // Tick the leech internal cooldown (replaces tickTag on player)

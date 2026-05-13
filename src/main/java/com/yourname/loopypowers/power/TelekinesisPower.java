@@ -331,6 +331,8 @@ public class TelekinesisPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ServerWorld world = player.getServerWorld();
         TKCasterState caster = getCasterState(player);
 

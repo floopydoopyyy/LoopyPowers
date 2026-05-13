@@ -128,6 +128,7 @@ public class StrengthPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         StrengthState state = getState(player);
 
         if (!PassiveManager.isEnabled(player)) return;

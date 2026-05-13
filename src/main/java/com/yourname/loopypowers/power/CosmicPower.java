@@ -134,6 +134,8 @@ public class CosmicPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ServerWorld world = player.getServerWorld();
         UUID playerId = player.getUuid();
 

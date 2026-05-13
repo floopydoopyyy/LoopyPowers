@@ -82,6 +82,8 @@ public class HealingPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         HealingState state = getState(player);
         handlePassive(player, state);
         handleAbsorb(player, state);

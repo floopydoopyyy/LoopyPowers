@@ -85,6 +85,8 @@ public class FortunePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         FortuneState state = getState(player);
         tickLuck(player, state);
         tickDuelsWorld(player.getServerWorld());
@@ -806,6 +808,7 @@ public class FortunePower implements Power {
             if (!st.worldKey.equals(key)) continue;
 
             updateHouseInside(w, st);
+            enforceHousePrison(w, st); // keep trapped
 
             if ((now % HOUSE_ROOF_FX_EVERY_TICKS) == 0L) spawnHouseRoofFx(w, st);
             if ((now % HOUSE_BREAK_EVERY_TICKS) == 0L) enforceHouseBuildCeiling(w, st);
@@ -1595,8 +1598,7 @@ public class FortunePower implements Power {
                 cx + HOUSE_RADIUS + 1, yMax, cz + HOUSE_RADIUS + 1
         );
 
-        List<LivingEntity> insideNow = w.getEntitiesByClass(LivingEntity.class, box, ent -> ent.isAlive());
-        Set<UUID> newInside = new HashSet<>();
+        List<LivingEntity> insideNow = w.getEntitiesByClass(LivingEntity.class, box, LivingEntity::isAlive);
 
         for (LivingEntity ent : insideNow) {
             BlockPos p = ent.getBlockPos();
@@ -1604,17 +1606,15 @@ public class FortunePower implements Power {
             int dz = p.getZ() - cz;
 
             if (Math.abs(dx) <= HOUSE_RADIUS && Math.abs(dz) <= HOUSE_RADIUS) {
-                newInside.add(ent.getUuid());
+                // If they aren't on the list yet, add them. We NEVER clear this list now.
                 if (!st.inside.contains(ent.getUuid())) {
+                    st.inside.add(ent.getUuid());
                     w.spawnParticles(ParticleTypes.ENCHANT,
                             ent.getX(), ent.getY() + ent.getHeight() * 0.6, ent.getZ(),
                             8, 0.25, 0.25, 0.25, 0.0);
                 }
             }
         }
-
-        st.inside.clear();
-        st.inside.addAll(newInside);
     }
 
     private static void spawnHouseRoofFx(ServerWorld w, HouseState st) {
@@ -1697,6 +1697,45 @@ public class FortunePower implements Power {
         if (hardness < 0) return; // unbreakable
 
         w.setBlockState(pos, net.minecraft.block.Blocks.AIR.getDefaultState(), 3);
+    }
+
+    private static void enforceHousePrison(ServerWorld w, HouseState st) {
+        Vec3d center = new Vec3d(st.center.getX() + 0.5, st.baseY + 1.0, st.center.getZ() + 0.5);
+
+        Iterator<UUID> it = st.inside.iterator();
+        while (it.hasNext()) {
+            UUID uuid = it.next();
+            Entity e = w.getEntity(uuid);
+
+            // If they died, disconnected, or changed dimensions, let them go!
+            if (!(e instanceof LivingEntity le) || !le.isAlive()) {
+                it.remove();
+                continue;
+            }
+
+            double dx = le.getX() - center.x;
+            double dz = le.getZ() - center.z;
+            double distSq = dx * dx + dz * dz;
+
+            // bounce
+            if (distSq > (HOUSE_RADIUS - 0.8) * (HOUSE_RADIUS - 0.8) && distSq <= (HOUSE_RADIUS + 2) * (HOUSE_RADIUS + 2)) {
+                Vec3d push = center.subtract(le.getPos()).normalize().multiply(0.8);
+                le.addVelocity(push.x, 0.2, push.z);
+                le.velocityModified = true;
+
+                // fx
+                if (w.getTime() % 5 == 0) {
+                    w.playSound(null, le.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_HIT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 0.5f);
+                    w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, le.getX(), le.getY() + 1.0, le.getZ(), 10, 0.2, 0.4, 0.2, 0.05);
+                }
+            }
+            // tp
+            else if (distSq > (HOUSE_RADIUS + 2) * (HOUSE_RADIUS + 2) || le.getY() > st.baseY + HOUSE_WALL_LAYERS + 2 || le.getY() < st.baseY - 1) {
+                teleportEntity(w, le, center, le.getYaw(), le.getPitch());
+                w.playSound(null, le.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 0.8f);
+                w.spawnParticles(ParticleTypes.REVERSE_PORTAL, le.getX(), le.getY() + 1.0, le.getZ(), 30, 0.5, 0.5, 0.5, 0.05);
+            }
+        }
     }
 
     // COOLDOWNS

@@ -138,6 +138,7 @@ public class SpeedPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         SpeedState state = getState(player);
 
         // Tick internal cooldowns
@@ -263,12 +264,12 @@ public class SpeedPower implements Power {
         player.getServerWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
-                player.getSoundCategory(), 1.0f, 1.1f
+                player.getSoundCategory(), 0.5f, 1.2f
         );
         player.getServerWorld().playSound(
                 null, player.getBlockPos(),
                 ModSounds.RUSHSTART,
-                player.getSoundCategory(), 0.8f, 1.0f
+                player.getSoundCategory(), 0.4f, 1.0f
         );
     }
 
@@ -293,11 +294,11 @@ public class SpeedPower implements Power {
         spawnOverdriveCastParticles(player);
 
         player.playSound(SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER, 0.6f, 1.8f);
-        player.playSound(ModSounds.OVERDRIVESTART, 0.6f, 1.8f);
+        player.playSound(ModSounds.OVERDRIVESTART, 0.3f, 1.6f);
         player.getServerWorld().playSound(
                 null, player.getBlockPos(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
-                player.getSoundCategory(), 1.0f, 0.6f
+                player.getSoundCategory(), 0.7f, 0.6f
         );
     }
 

@@ -133,6 +133,8 @@ public class FlightPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         FlightState state = getState(player);
 
         // EGG
@@ -176,25 +178,29 @@ public class FlightPower implements Power {
 
         if (state.boomInvuln) return false; // Invulnerable during boom dash
 
-        // Force them downward + lock re-glide
-        Vec3d v = victim.getVelocity();
-        victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
-        victim.velocityModified = true;
+        // ONLY apply the pulldown and grounded debuff if they are flying
+        if (victim.isFallFlying() || state.flightActive) {
+            // Force them downward + lock re-glide
+            Vec3d v = victim.getVelocity();
+            victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
+            victim.velocityModified = true;
 
-        // Apply visual Grounded effect
-        victim.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
+            // Apply visual Grounded effect
+            victim.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
 
-        // Clear flight states
-        state.flightActive = false;
-        state.trailStep = 0;
-        state.soundStep = 0;
+            // Clear flight states
+            state.flightActive = false;
+            state.trailStep = 0;
+            state.soundStep = 0;
+            victim.stopFallFlying();
 
-        // particles
-        ServerWorld w = victim.getServerWorld();
-        w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
-                8, 0.35, 0.35, 0.35, 0.02);
-        w.playSound(null, victim.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
-                victim.getSoundCategory(), 0.7f, 0.9f);
+            // particles
+            ServerWorld w = victim.getServerWorld();
+            w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
+                    8, 0.35, 0.35, 0.35, 0.02);
+            w.playSound(null, victim.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
+                    victim.getSoundCategory(), 0.7f, 0.9f);
+        }
 
         return true;
     }
@@ -426,6 +432,7 @@ public class FlightPower implements Power {
 
             return;
         }
+
         // BIG PUSH
         if (state.boomDash > 0) {
             state.boomDash--;
@@ -456,19 +463,35 @@ public class FlightPower implements Power {
             List<LivingEntity> nearby = world.getEntitiesByClass(LivingEntity.class, box,
                     e -> e.isAlive() && e != player);
 
+            // --- ENTITY COLLISION CHECK ---
+            boolean hitEntity = false;
+            Box hitBox = player.getBoundingBox().expand(0.8); // 0.8 block tolerance for direct impact
+
             for (LivingEntity e : nearby) {
-                Vec3d away = e.getPos().subtract(player.getPos());
-                if (away.lengthSquared() < 0.0001) continue;
-                Vec3d knock = away.normalize().multiply(0.9).add(0, 0.15, 0);
-                e.addVelocity(knock.x, knock.y, knock.z);
-                e.velocityModified = true;
+                if (hitBox.intersects(e.getBoundingBox())) {
+                    hitEntity = true;
+                    break;
+                }
             }
 
+            // If we didn't get a direct hit, gently push entities out of the way
+            if (!hitEntity) {
+                for (LivingEntity e : nearby) {
+                    Vec3d away = e.getPos().subtract(player.getPos());
+                    if (away.lengthSquared() < 0.0001) continue;
+                    Vec3d knock = away.normalize().multiply(0.9).add(0, 0.15, 0);
+                    e.addVelocity(knock.x, knock.y, knock.z);
+                    e.velocityModified = true;
+                }
+            }
+
+            // Calculate if we collided with terrain OR an entity
             boolean collided =
                     player.horizontalCollision
                             || player.verticalCollision
                             || player.isOnGround()
-                            || boomHitsBlock(world, player);
+                            || boomHitsBlock(world, player)
+                            || hitEntity;
 
             if (collided) {
                 doBoomImpact(world, player);

@@ -149,6 +149,8 @@ public class ExplosionPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ExplosionState state = getState(player);
 
         if (state.blastLockTicks > 0) state.blastLockTicks--;

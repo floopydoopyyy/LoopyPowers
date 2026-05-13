@@ -107,6 +107,7 @@ public class BloodPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         tickBleed(player);
         tickBind(player);
     }
