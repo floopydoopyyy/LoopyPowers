@@ -85,6 +85,7 @@ public class FortunePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         FortuneState state = getState(player);
         tickLuck(player, state);
         tickDuelsWorld(player.getServerWorld());
@@ -806,6 +807,7 @@ public class FortunePower implements Power {
             if (!st.worldKey.equals(key)) continue;
 
             updateHouseInside(w, st);
+            enforceHouseImprisonment(w, st);
 
             if ((now % HOUSE_ROOF_FX_EVERY_TICKS) == 0L) spawnHouseRoofFx(w, st);
             if ((now % HOUSE_BREAK_EVERY_TICKS) == 0L) enforceHouseBuildCeiling(w, st);
@@ -1596,7 +1598,6 @@ public class FortunePower implements Power {
         );
 
         List<LivingEntity> insideNow = w.getEntitiesByClass(LivingEntity.class, box, ent -> ent.isAlive());
-        Set<UUID> newInside = new HashSet<>();
 
         for (LivingEntity ent : insideNow) {
             BlockPos p = ent.getBlockPos();
@@ -1604,17 +1605,15 @@ public class FortunePower implements Power {
             int dz = p.getZ() - cz;
 
             if (Math.abs(dx) <= HOUSE_RADIUS && Math.abs(dz) <= HOUSE_RADIUS) {
-                newInside.add(ent.getUuid());
+                // If they are newly entering the house, add them to the persistent trap list
                 if (!st.inside.contains(ent.getUuid())) {
+                    st.inside.add(ent.getUuid());
                     w.spawnParticles(ParticleTypes.ENCHANT,
                             ent.getX(), ent.getY() + ent.getHeight() * 0.6, ent.getZ(),
                             8, 0.25, 0.25, 0.25, 0.0);
                 }
             }
         }
-
-        st.inside.clear();
-        st.inside.addAll(newInside);
     }
 
     private static void spawnHouseRoofFx(ServerWorld w, HouseState st) {
@@ -1697,6 +1696,58 @@ public class FortunePower implements Power {
         if (hardness < 0) return; // unbreakable
 
         w.setBlockState(pos, net.minecraft.block.Blocks.AIR.getDefaultState(), 3);
+    }
+
+    private static void enforceHouseImprisonment(ServerWorld w, HouseState st) {
+        int cx = st.center.getX();
+        int cz = st.center.getZ();
+        double centerX = cx + 0.5;
+        double centerZ = cz + 0.5;
+
+        List<UUID> toRemove = new ArrayList<>();
+
+        for (UUID u : st.inside) {
+            Entity e = w.getEntity(u);
+
+            // Forget them if they die or are removed from the world
+            if (!(e instanceof LivingEntity le) || !le.isAlive()) {
+                toRemove.add(u);
+                continue;
+            }
+
+            double dx = le.getX() - centerX;
+            double dz = le.getZ() - centerZ;
+            double absX = Math.abs(dx);
+            double absZ = Math.abs(dz);
+
+            double bounceLimit = HOUSE_RADIUS - 0.85; // Just touching the inner edge of the bars
+            double tpLimit = HOUSE_RADIUS + 1.5;      // Fully outside the structure
+
+            boolean tooHigh = le.getY() > (st.baseY + HOUSE_WALL_LAYERS + 2);
+            boolean tooLow = le.getY() < (st.baseY - 1.5);
+
+            // tp
+            if (absX > tpLimit || absZ > tpLimit || tooHigh || tooLow) {
+                teleportEntity(w, le, new Vec3d(centerX, st.baseY + 1.0, centerZ), le.getYaw(), le.getPitch());
+                w.playSound(null, le.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
+            }
+            // bounce
+            else if (absX > bounceLimit || absZ > bounceLimit) {
+                // Determine direction to push them back towards the center
+                Vec3d push = new Vec3d(-dx, 0, -dz).normalize().multiply(0.35).add(0, 0.1, 0);
+                le.addVelocity(push.x, push.y, push.z);
+                le.velocityModified = true;
+
+                // feedback
+                if (w.getTime() % 15 == 0) {
+                    w.playSound(null, le.getBlockPos(), SoundEvents.BLOCK_CHAIN_STEP, net.minecraft.sound.SoundCategory.PLAYERS, 0.6f, 1.5f);
+                    w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, le.getX(), le.getY() + le.getHeight() * 0.5, le.getZ(), 4, 0.2, 0.2, 0.2, 0.0);
+                }
+            }
+        }
+
+        // Clean up anyone who died
+        st.inside.removeAll(toRemove);
     }
 
     // COOLDOWNS

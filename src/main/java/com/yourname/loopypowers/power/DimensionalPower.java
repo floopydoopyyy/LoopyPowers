@@ -138,6 +138,8 @@ public class DimensionalPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
+
         ServerWorld world = player.getServerWorld();
         DimensionalState state = getState(player);
 

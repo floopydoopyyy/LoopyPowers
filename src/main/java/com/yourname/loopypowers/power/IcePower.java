@@ -124,6 +124,7 @@ public class IcePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         tickFrozenWorld(player.getServerWorld());
         tickSpikesWorld(player.getServerWorld());
         tickBeam(player);
@@ -154,13 +155,12 @@ public class IcePower implements Power {
     private static final int FRZ_STAGE_4 = 80;   // Slowness 2 + Mining Fatigue 1
     private static final int FRZ_STAGE_5 = 95;   // Fully frozen
 
-    // “Quickly thaw out if not being damaged”
     private static final int FRZ_DECAY_DELAY_TICKS = 20;  // how long after last hit before freeze decays
     private static final int FRZ_DECAY_STEP_TICKS  = 10;   // after delay, decay every this many ticks
     private static final int FRZ_DECAY_POINTS_STEP = 5;   // how many points decay
     // Shatter
     private static final int   FRZ_IMMUNE_TICKS = 100;     // time of ice immunity after shatter
-    private static final float SHATTER_BONUS_DAMAGE = 9.0f; // damage on shatter
+    private static final float SHATTER_BONUS_DAMAGE = 12.0f; // damage on shatter
 
     // How many points abilities add
     private static final int FRZ_POINTS_MELEE = 7;  // melee hits

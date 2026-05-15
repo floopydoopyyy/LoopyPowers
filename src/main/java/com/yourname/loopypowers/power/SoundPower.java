@@ -47,7 +47,7 @@ public class SoundPower implements Power {
     private static class SoundVictimState {
         int score = 0;
         int resonatedTicks = 0;
-        int dampenedTicks = 0;
+        int immuneTicks = 0;
         int hbStep = 0;
         long lastSeenTick = 0;
         long lastTickTime = 0;
@@ -84,7 +84,7 @@ public class SoundPower implements Power {
     private static final int    RES_THRESHOLD      = 15;
     private static final int    RES_DECAY_PER_SCAN = 1;
     private static final int    MAX_TRAIL_TARGETS  = 14;
-    private static final float    BURST_BONUS_DAMAGE  = 9.5f;
+    private static final float    BURST_BONUS_DAMAGE  = 7.5f;
 
     private static final int PTS_SLOW_MOVE = 1;
     private static final int PTS_FAST_MOVE = 2;
@@ -104,10 +104,10 @@ public class SoundPower implements Power {
     private static final int    BD_FINAL_DELAY_TICKS = 2;
     private static final double BD_PULL_RADIUS       = 10.0;
     private static final double BD_FINAL_RADIUS      = 7.0;
-    private static final float  BD_PULL_STRENGTH     = 0.24f;
+    private static final float  BD_PULL_STRENGTH     = 0.12f;
     private static final float  BD_PULL_UP           = 0.02f;
-    private static final float  BD_FINAL_KB          = 1.00f;
-    private static final float  BD_FINAL_UP          = 0.30f;
+    private static final float  BD_FINAL_KB          = 0.85f;
+    private static final float  BD_FINAL_UP          = 0.20f;
     private static final float  BD_FINAL_DAMAGE      = 15.5f;
     private static final int    BD_FINAL_STUN_TICKS  = 40;
     private static final int    BD_REMOTE_STUN_TICKS = 30;
@@ -118,8 +118,8 @@ public class SoundPower implements Power {
     private static final int BLAST_POINTS    = 120;
 
     // Ultimate
-    private static final int    ULT_WINDUP_TICKS      = 22;
-    private static final double ULT_RANGE             = 50.0;
+    private static final int    ULT_WINDUP_TICKS      = 28;
+    private static final double ULT_RANGE             = 45.0;
     private static final double ULT_BEAM_RADIUS       = 1.35;
     private static final float  ULT_DAMAGE            = 20.5f;
     private static final float  ULT_KB                = 2.5f;
@@ -173,6 +173,7 @@ public class SoundPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         SoundCasterState caster = getCasterState(player);
 
         if (caster.trailStep > 0) caster.trailStep--;
@@ -220,7 +221,10 @@ public class SoundPower implements Power {
 
         // Apply stun
         target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, 35, 0, false, false, true));
-        vState.dampenedTicks = 45;
+
+        // cd after stun
+        vState.immuneTicks = 140;
+        vState.score = 0;
 
         if (target instanceof ServerPlayerEntity targetPlayer) {
             CameraShake.shakeNearby(targetPlayer, 3, 15, 0.08f);
@@ -247,6 +251,9 @@ public class SoundPower implements Power {
             caster.trailStep = RES_TRAIL_INTERVAL;
             int sent = 0;
             for (LivingEntity e : nearby) {
+                // Skip sending trails if the target is currently on cooldown
+                if (getVictimState(e).immuneTicks > 0) continue;
+
                 if (sent >= MAX_TRAIL_TARGETS) break;
                 RenderPackets.sendResonanceTrail(player, e.getId(), 2, 1.0f);
                 sent++;
@@ -263,12 +270,28 @@ public class SoundPower implements Power {
             // Decouple ticking from the 4-tick scan loop to ensure accurate countdowns
             if (vState.lastTickTime != nowTick) {
                 long delta = nowTick - vState.lastTickTime;
-                if (delta > 20) delta = 20; // prevent massive jumps
+                // Increased cap to 100 so timers still properly wear off if they briefly leave the radius
+                if (delta > 100) delta = 100;
                 vState.lastTickTime = nowTick;
 
+                boolean wasResonated = vState.resonatedTicks > 0;
+
                 if (vState.resonatedTicks > 0) vState.resonatedTicks -= delta;
-                if (vState.dampenedTicks > 0) vState.dampenedTicks -= delta;
+                if (vState.immuneTicks > 0) vState.immuneTicks -= delta;
                 if (vState.hbStep > 0) vState.hbStep -= delta;
+
+                // If resonance naturally expired this tick, apply the 7 second cooldown
+                if (wasResonated && vState.resonatedTicks <= 0) {
+                    vState.immuneTicks = 140; // 7 seconds
+                    vState.score = 0;
+                    e.removeStatusEffect(StatusEffects.GLOWING);
+                }
+            }
+
+            // If they are on cooldown, keep score at 0 and skip resonance logic entirely
+            if (vState.immuneTicks > 0) {
+                vState.score = 0;
+                continue;
             }
 
             vState.score = Math.max(0, vState.score - RES_DECAY_PER_SCAN);
@@ -502,7 +525,10 @@ public class SoundPower implements Power {
             vState.resonatedTicks = 0;
             target.removeStatusEffect(StatusEffects.GLOWING);
             target.addStatusEffect(new StatusEffectInstance(ModEffects.STUN, stunTicks, 0, false, false, true));
-            vState.dampenedTicks = Math.max(20, stunTicks);
+
+            // 7 second cooldown after Bass Drop stun
+            vState.immuneTicks = 140;
+            vState.score = 0;
 
             if (target instanceof ServerPlayerEntity spTarget) {
                 spTarget.playSound(ModSounds.EARRING, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);

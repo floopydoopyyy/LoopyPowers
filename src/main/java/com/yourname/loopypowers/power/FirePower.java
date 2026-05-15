@@ -150,6 +150,7 @@ public class FirePower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         FireState state = getState(player);
 
         // PASSIVES

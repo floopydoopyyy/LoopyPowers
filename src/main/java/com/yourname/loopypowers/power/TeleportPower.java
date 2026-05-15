@@ -117,6 +117,7 @@ public class TeleportPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         TeleportState state = getState(player);
 
         // Primary Charges

@@ -133,14 +133,17 @@ public class FlightPower implements Power {
 
     @Override
     public void onTick(ServerPlayerEntity player) {
+        if (!player.isAlive()) return;
         FlightState state = getState(player);
 
-        // EGG
-        if (state.funnyTimer > 0) {
-            state.funnyTimer--;
-        } else if (!player.getCommandTags().contains("fl_hecanfly_done")) {
-            // lock egg
-            player.getCommandTags().add("fl_hecanfly_done");
+        // FUNNY EGG
+        if (player.isFallFlying() && !player.getCommandTags().contains("fl_hecanfly_done")) {
+            // 25% chance to play when used
+            if (RNG.nextFloat() < 0.25f) {
+                player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
+                // Lock it
+                player.getCommandTags().add("fl_hecanfly_done");
+            }
         }
 
         // timers
@@ -176,25 +179,28 @@ public class FlightPower implements Power {
 
         if (state.boomInvuln) return false; // Invulnerable during boom dash
 
-        // Force them downward + lock re-glide
-        Vec3d v = victim.getVelocity();
-        victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
-        victim.velocityModified = true;
+        // Only apply the grounded effect and pulldown if they are actually flying
+        if (victim.isFallFlying()) {
+            // Force them downward + lock re-glide
+            Vec3d v = victim.getVelocity();
+            victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
+            victim.velocityModified = true;
 
-        // Apply visual Grounded effect
-        victim.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
+            // Apply visual Grounded effect
+            victim.addStatusEffect(new StatusEffectInstance(ModEffects.GROUNDED, HURT_LOCK_DURATION, 0, false, false, true));
 
-        // Clear flight states
-        state.flightActive = false;
-        state.trailStep = 0;
-        state.soundStep = 0;
+            // Clear flight states
+            state.flightActive = false;
+            state.trailStep = 0;
+            state.soundStep = 0;
 
-        // particles
-        ServerWorld w = victim.getServerWorld();
-        w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
-                8, 0.35, 0.35, 0.35, 0.02);
-        w.playSound(null, victim.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
-                victim.getSoundCategory(), 0.7f, 0.9f);
+            // particles
+            ServerWorld w = victim.getServerWorld();
+            w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
+                    8, 0.35, 0.35, 0.35, 0.02);
+            w.playSound(null, victim.getBlockPos(), SoundEvents.ENTITY_PHANTOM_FLAP,
+                    victim.getSoundCategory(), 0.7f, 0.9f);
+        }
 
         return true;
     }
@@ -227,11 +233,9 @@ public class FlightPower implements Power {
 
         // FUNNY EGG
         if (player.isFallFlying() && !player.getCommandTags().contains("fl_hecanfly_done")) {
-            // % chance to play when used
+            // 25% chance to play when used
             if (RNG.nextFloat() < 0.25f) {
                 player.getServerWorld().playSound(null, player.getBlockPos(), ModSounds.HECANFLY, player.getSoundCategory(), 1.2f, 1.0f);
-                // mark em
-                player.getCommandTags().add("fl_hecanfly_done");
             }
         }
 
@@ -426,6 +430,7 @@ public class FlightPower implements Power {
 
             return;
         }
+
         // BIG PUSH
         if (state.boomDash > 0) {
             state.boomDash--;
@@ -456,18 +461,27 @@ public class FlightPower implements Power {
             List<LivingEntity> nearby = world.getEntitiesByClass(LivingEntity.class, box,
                     e -> e.isAlive() && e != player);
 
+            boolean hitEntity = false;
+            Box myBox = player.getBoundingBox().expand(0.2); // Tight collision box
+
             for (LivingEntity e : nearby) {
-                Vec3d away = e.getPos().subtract(player.getPos());
-                if (away.lengthSquared() < 0.0001) continue;
-                Vec3d knock = away.normalize().multiply(0.9).add(0, 0.15, 0);
-                e.addVelocity(knock.x, knock.y, knock.z);
-                e.velocityModified = true;
+                if (e.getBoundingBox().intersects(myBox)) {
+                    hitEntity = true; // Direct collision triggers the explosion
+                } else {
+                    // Push away entities that are nearby but not directly hit
+                    Vec3d away = e.getPos().subtract(player.getPos());
+                    if (away.lengthSquared() < 0.0001) continue;
+                    Vec3d knock = away.normalize().multiply(0.9).add(0, 0.15, 0);
+                    e.addVelocity(knock.x, knock.y, knock.z);
+                    e.velocityModified = true;
+                }
             }
 
             boolean collided =
                     player.horizontalCollision
                             || player.verticalCollision
                             || player.isOnGround()
+                            || hitEntity
                             || boomHitsBlock(world, player);
 
             if (collided) {
