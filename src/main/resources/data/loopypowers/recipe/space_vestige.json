@@ -1,23 +1,23 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    " F ",
+    " E ",
     " P ",
-    " L "
+    " F "
   ],
   "key": {
-    "F": {
-      "item": "minecraft:feather"
+    "E": {
+      "item": "minecraft:ender_pearl"
     },
     "P": {
       "item": "loopypowers:power_vestige"
     },
-    "L": {
-      "item": "minecraft:lapis_lazuli"
+    "F": {
+      "item": "minecraft:fire_charge"
     }
   },
   "result": {
-    "item": "loopypowers:motion_vestige",
+    "id": "loopypowers:space_vestige",
     "count": 1
   }
 }

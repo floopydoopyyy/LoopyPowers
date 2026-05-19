@@ -2,7 +2,7 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     " N ",
-    "NSN",
+    "SRS",
     " N "
   ],
   "key": {
@@ -11,10 +11,13 @@
     },
     "S": {
       "item": "loopypowers:celestial_shard"
+    },
+    "R": {
+      "item": "loopypowers:refined_celestial_core"
     }
   },
   "result": {
-    "item": "loopypowers:severance_stone",
+    "id": "loopypowers:perfected_celestial_core",
     "count": 1
   }
 }

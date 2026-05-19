@@ -1,23 +1,23 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
+    " F ",
     " P ",
-    " V ",
-    " B "
+    " E "
   ],
   "key": {
-    "P": {
-      "item": "minecraft:phantom_membrane"
+    "F": {
+      "item": "minecraft:fermented_spider_eye"
     },
-    "V": {
+    "P": {
       "item": "loopypowers:power_vestige"
     },
-    "B": {
-      "item": "minecraft:blaze_rod"
+    "E": {
+      "item": "minecraft:echo_shard"
     }
   },
   "result": {
-    "item": "loopypowers:elemental_vestige",
+    "id": "loopypowers:ruin_vestige",
     "count": 1
   }
 }

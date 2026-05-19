@@ -1,23 +1,23 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    " E ",
+    " F ",
     " P ",
-    " A "
+    " L "
   ],
   "key": {
-    "E": {
-      "item": "minecraft:ender_eye"
+    "F": {
+      "item": "minecraft:feather"
     },
     "P": {
       "item": "loopypowers:power_vestige"
     },
-    "A": {
-      "item": "minecraft:amethyst_shard"
+    "L": {
+      "item": "minecraft:lapis_lazuli"
     }
   },
   "result": {
-    "item": "loopypowers:mind_vestige",
+    "id": "loopypowers:motion_vestige",
     "count": 1
   }
 }

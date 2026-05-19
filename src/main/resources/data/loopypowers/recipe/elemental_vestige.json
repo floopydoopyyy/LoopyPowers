@@ -1,23 +1,23 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    " E ",
     " P ",
-    " G "
+    " V ",
+    " B "
   ],
   "key": {
-    "E": {
-      "item": "minecraft:emerald"
-    },
     "P": {
+      "item": "minecraft:phantom_membrane"
+    },
+    "V": {
       "item": "loopypowers:power_vestige"
     },
-    "G": {
-      "item": "minecraft:golden_apple"
+    "B": {
+      "item": "minecraft:blaze_rod"
     }
   },
   "result": {
-    "item": "loopypowers:life_vestige",
+    "id": "loopypowers:elemental_vestige",
     "count": 1
   }
 }

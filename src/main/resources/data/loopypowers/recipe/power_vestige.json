@@ -2,19 +2,19 @@
   "type": "minecraft:crafting_shaped",
   "pattern": [
     " S ",
-    "SNS",
+    "SES",
     " S "
   ],
   "key": {
     "S": {
       "item": "loopypowers:celestial_shard"
     },
-    "N": {
-      "item": "minecraft:diamond_block"
+    "E": {
+      "item": "loopypowers:empty_vestige"
     }
   },
   "result": {
-    "item": "loopypowers:refined_celestial_core",
+    "id": "loopypowers:power_vestige",
     "count": 1
   }
 }

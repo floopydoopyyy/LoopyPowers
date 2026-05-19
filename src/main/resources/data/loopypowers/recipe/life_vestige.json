@@ -1,23 +1,23 @@
 {
   "type": "minecraft:crafting_shaped",
   "pattern": [
-    " F ",
+    " E ",
     " P ",
-    " E "
+    " G "
   ],
   "key": {
-    "F": {
-      "item": "minecraft:fermented_spider_eye"
+    "E": {
+      "item": "minecraft:emerald"
     },
     "P": {
       "item": "loopypowers:power_vestige"
     },
-    "E": {
-      "item": "minecraft:echo_shard"
+    "G": {
+      "item": "minecraft:golden_apple"
     }
   },
   "result": {
-    "item": "loopypowers:ruin_vestige",
+    "id": "loopypowers:life_vestige",
     "count": 1
   }
 }
