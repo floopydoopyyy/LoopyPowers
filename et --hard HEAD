@@ -1,0 +1,38 @@
+[33m59404a0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32m1.21.1-port[m[33m, [m[1;31morigin/1.21.1-port[m[33m)[m HEAD@{0}: checkout: moving from 1.19.4-port to 1.21.1-port
+[33m90c04ba[m[33m ([m[1;31morigin/1.19.4-port[m[33m, [m[1;32m1.19.4-port[m[33m)[m HEAD@{1}: checkout: moving from 1.21.1-port to 1.19.4-port
+[33m59404a0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32m1.21.1-port[m[33m, [m[1;31morigin/1.21.1-port[m[33m)[m HEAD@{2}: checkout: moving from 1.19.4-port to 1.21.1-port
+[33m90c04ba[m[33m ([m[1;31morigin/1.19.4-port[m[33m, [m[1;32m1.19.4-port[m[33m)[m HEAD@{3}: checkout: moving from 1.21.1-port to 1.19.4-port
+[33m59404a0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32m1.21.1-port[m[33m, [m[1;31morigin/1.21.1-port[m[33m)[m HEAD@{4}: checkout: moving from 1.19.4-port to 1.21.1-port
+[33m90c04ba[m[33m ([m[1;31morigin/1.19.4-port[m[33m, [m[1;32m1.19.4-port[m[33m)[m HEAD@{5}: checkout: moving from 1.20.4-port to 1.19.4-port
+[33m53b8a36[m[33m ([m[1;31morigin/1.20.4-port[m[33m, [m[1;32m1.20.4-port[m[33m)[m HEAD@{6}: commit: 1.0.1 build
+[33m83fa654[m HEAD@{7}: checkout: moving from 1.21.1-port to 1.20.4-port
+[33m59404a0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32m1.21.1-port[m[33m, [m[1;31morigin/1.21.1-port[m[33m)[m HEAD@{8}: checkout: moving from 1.20.1-main to 1.21.1-port
+[33mbe6fe45[m[33m ([m[1;31morigin/1.20.1-main[m[33m, [m[1;32m1.20.1-main[m[33m)[m HEAD@{9}: checkout: moving from 1.19.4-port to 1.20.1-main
+[33m90c04ba[m[33m ([m[1;31morigin/1.19.4-port[m[33m, [m[1;32m1.19.4-port[m[33m)[m HEAD@{10}: checkout: moving from 1.20.1-main to 1.19.4-port
+[33mbe6fe45[m[33m ([m[1;31morigin/1.20.1-main[m[33m, [m[1;32m1.20.1-main[m[33m)[m HEAD@{11}: commit: 1.0.1 build
+[33m0159344[m HEAD@{12}: checkout: moving from 1.21.1-port to 1.20.1-main
+[33m59404a0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32m1.21.1-port[m[33m, [m[1;31morigin/1.21.1-port[m[33m)[m HEAD@{13}: commit: slight edge case fix
+[33m3ebcea5[m HEAD@{14}: commit: 1.21.1 functional build
+[33m0159344[m HEAD@{15}: checkout: moving from 1.20.1-main to 1.21.1-port
+[33m0159344[m HEAD@{16}: checkout: moving from 1.20.4-port to 1.20.1-main
+[33m83fa654[m HEAD@{17}: checkout: moving from 1.19.4-port to 1.20.4-port
+[33m90c04ba[m[33m ([m[1;31morigin/1.19.4-port[m[33m, [m[1;32m1.19.4-port[m[33m)[m HEAD@{18}: checkout: moving from 1.20.1-main to 1.19.4-port
+[33m0159344[m HEAD@{19}: checkout: moving from 1.19.4-port to 1.20.1-main
+[33m90c04ba[m[33m ([m[1;31morigin/1.19.4-port[m[33m, [m[1;32m1.19.4-port[m[33m)[m HEAD@{20}: commit: 1.19.4 implementation
+[33m0159344[m HEAD@{21}: checkout: moving from 1.20.1-main to 1.19.4-port
+[33m0159344[m HEAD@{22}: commit: forgot description lol
+[33m7087682[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{23}: checkout: moving from 1.20.4-port to 1.20.1-main
+[33m83fa654[m HEAD@{24}: checkout: moving from 1.20.1-main to 1.20.4-port
+[33m7087682[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{25}: checkout: moving from 1.20.4-port to 1.20.1-main
+[33m83fa654[m HEAD@{26}: commit: 1.20.4 port!!
+[33m7087682[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{27}: checkout: moving from 1.20.1-main to 1.20.4-port
+[33m7087682[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{28}: checkout: moving from 1.20.4-port to 1.20.1-main
+[33m7087682[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{29}: checkout: moving from 1.20.1-main to 1.20.4-port
+[33m7087682[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{30}: checkout: moving from master to 1.20.1-main
+[33m7087682[m[33m ([m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmaster[m[33m)[m HEAD@{31}: commit: minor tweaks
+[33m96ce9b3[m HEAD@{32}: merge origin/master: Merge made by the 'ort' strategy.
+[33m6bb407d[m HEAD@{33}: commit: adjustment to egg
+[33m0006cf0[m HEAD@{34}: commit: easter eggs and fixes
+[33m0497900[m HEAD@{35}: commit: rituals, sounds
+[33mbacd3b4[m HEAD@{36}: commit: damage types, effects, descriptions
+[33m37f1032[m HEAD@{37}: clone: from https://github.com/oliverdavies1/LoopyPowers.git
