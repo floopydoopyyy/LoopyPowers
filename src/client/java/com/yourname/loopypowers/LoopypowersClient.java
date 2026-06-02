@@ -2,6 +2,18 @@ package com.yourname.loopypowers;
 
 import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.client.HiddenPlayersClient;
+import com.yourname.loopypowers.client.fx.BloodFxClient;
+import com.yourname.loopypowers.client.fx.CosmicFxClient;
+import com.yourname.loopypowers.client.fx.DarknessFxClient;
+import com.yourname.loopypowers.client.fx.DimensionalFxClient;
+import com.yourname.loopypowers.client.fx.ExplosionFxClient;
+import com.yourname.loopypowers.client.fx.FireFxClient;
+import com.yourname.loopypowers.client.fx.FlightFxClient;
+import com.yourname.loopypowers.client.fx.FortuneFxClient;
+import com.yourname.loopypowers.client.fx.HealingFxClient;
+import com.yourname.loopypowers.client.fx.IceFxClient;
+import com.yourname.loopypowers.client.fx.LightningFxClient;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.entity.ModEntities;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
@@ -77,6 +89,133 @@ public class LoopypowersClient implements ClientModInitializer {
 				(payload, context) -> context.client().execute(() ->
 						StunAudioClient.setStun(payload.ticks()))
 		);
+
+		// BloodPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(BloodBleedApplyPayload.ID, BloodFxClient::handleBleedApply);
+		ClientPlayNetworking.registerGlobalReceiver(BloodBleedTickPayload.ID, BloodFxClient::handleBleedTick);
+		ClientPlayNetworking.registerGlobalReceiver(BloodWhipBeamPayload.ID, BloodFxClient::handleWhipBeam);
+		ClientPlayNetworking.registerGlobalReceiver(BloodWhipHitPayload.ID, BloodFxClient::handleWhipHit);
+		ClientPlayNetworking.registerGlobalReceiver(BloodClotCastPayload.ID, BloodFxClient::handleClotCast);
+		ClientPlayNetworking.registerGlobalReceiver(BloodPopPayload.ID, BloodFxClient::handlePop);
+		ClientPlayNetworking.registerGlobalReceiver(BloodChainPayload.ID, BloodFxClient::handleChain);
+		ClientPlayNetworking.registerGlobalReceiver(BloodBindTickPayload.ID, BloodFxClient::handleBindTick);
+		ClientPlayNetworking.registerGlobalReceiver(BloodBindDamageFxPayload.ID, BloodFxClient::handleBindDamageFx);
+
+		// CosmicPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(CosmicFateAuraPayload.ID, CosmicFxClient::handleFateAura);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicDetonateStartPayload.ID, CosmicFxClient::handleDetonateStart);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicDetonateTickPayload.ID, CosmicFxClient::handleDetonateTick);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicFateCapPayload.ID, CosmicFxClient::handleFateCap);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicRayPayload.ID, CosmicFxClient::handleRay);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicRayHitPayload.ID, CosmicFxClient::handleRayHit);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicRayImpactPayload.ID, CosmicFxClient::handleRayImpact);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicStarTrailPayload.ID, CosmicFxClient::handleStarTrail);
+		ClientPlayNetworking.registerGlobalReceiver(CosmicSlamPayload.ID, CosmicFxClient::handleSlam);
+
+		// DarknessPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(DarknessBackstabFxPayload.ID, DarknessFxClient::handleBackstabFx);
+		ClientPlayNetworking.registerGlobalReceiver(DarknessExposedFxPayload.ID,  DarknessFxClient::handleExposedFx);
+		ClientPlayNetworking.registerGlobalReceiver(DarknessComboFxPayload.ID,    DarknessFxClient::handleComboFx);
+		ClientPlayNetworking.registerGlobalReceiver(DarknessMistEnterPayload.ID,  DarknessFxClient::handleMistEnter);
+		ClientPlayNetworking.registerGlobalReceiver(DarknessMistTrailPayload.ID,  DarknessFxClient::handleMistTrail);
+		ClientPlayNetworking.registerGlobalReceiver(DarknessUltActivatePayload.ID, DarknessFxClient::handleUltActivate);
+		ClientPlayNetworking.registerGlobalReceiver(DarknessBlackoutFxPayload.ID,  DarknessFxClient::handleBlackoutFx);
+		ClientPlayNetworking.registerGlobalReceiver(DarknessBlackoutEndPayload.ID, DarknessFxClient::handleBlackoutEnd);
+
+		// DimensionalPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalFlickerPayload.ID,       DimensionalFxClient::handleFlicker);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalSituationalFxPayload.ID,  DimensionalFxClient::handleSituationalFx);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalPhaseEnterPayload.ID,     DimensionalFxClient::handlePhaseEnter);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalPhaseTrailPayload.ID,     DimensionalFxClient::handlePhaseTrail);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalPhaseExitPayload.ID,      DimensionalFxClient::handlePhaseExit);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalDisplaceFxPayload.ID,     DimensionalFxClient::handleDisplaceFx);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalRiftOpenPayload.ID,       DimensionalFxClient::handleRiftOpen);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalRiftTickPayload.ID,       DimensionalFxClient::handleRiftTick);
+		ClientPlayNetworking.registerGlobalReceiver(DimensionalRiftEndPayload.ID,        DimensionalFxClient::handleRiftEnd);
+
+		// ExplosionPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(ExplosionIgniteStartPayload.ID,     ExplosionFxClient::handleIgniteStart);
+		ClientPlayNetworking.registerGlobalReceiver(ExplosionIgniteTickPayload.ID,      ExplosionFxClient::handleIgniteTick);
+		ClientPlayNetworking.registerGlobalReceiver(ExplosionBurstPayload.ID,           ExplosionFxClient::handleBurst);
+		ClientPlayNetworking.registerGlobalReceiver(ExplosionUltCancelPayload.ID,       ExplosionFxClient::handleUltCancel);
+		ClientPlayNetworking.registerGlobalReceiver(ExplosionDropZonePayload.ID,        ExplosionFxClient::handleDropZone);
+		ClientPlayNetworking.registerGlobalReceiver(ExplosionUltAmbientPayload.ID,      ExplosionFxClient::handleUltAmbient);
+		ClientPlayNetworking.registerGlobalReceiver(ExplosionFinisherChargePayload.ID,  ExplosionFxClient::handleFinisherCharge);
+
+		// FirePower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(FireHoverPayload.ID,     FireFxClient::handleHover);
+		ClientPlayNetworking.registerGlobalReceiver(FireUltChargePayload.ID, FireFxClient::handleUltCharge);
+
+		// FlightPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(FlightKnockPayload.ID,       FlightFxClient::handleKnock);
+		ClientPlayNetworking.registerGlobalReceiver(FlightGustPayload.ID,        FlightFxClient::handleGust);
+		ClientPlayNetworking.registerGlobalReceiver(FlightGustTrailPayload.ID,   FlightFxClient::handleGustTrail);
+		ClientPlayNetworking.registerGlobalReceiver(FlightUpdraftPayload.ID,     FlightFxClient::handleUpdraft);
+		ClientPlayNetworking.registerGlobalReceiver(FlightBoomStartPayload.ID,   FlightFxClient::handleBoomStart);
+		ClientPlayNetworking.registerGlobalReceiver(FlightBoomWindupPayload.ID,  FlightFxClient::handleBoomWindup);
+		ClientPlayNetworking.registerGlobalReceiver(FlightBoomTunnelPayload.ID,  FlightFxClient::handleBoomTunnel);
+		ClientPlayNetworking.registerGlobalReceiver(FlightBoomImpactPayload.ID,  FlightFxClient::handleBoomImpact);
+		ClientPlayNetworking.registerGlobalReceiver(FlightTrailPayload.ID,       FlightFxClient::handleTrail);
+
+		// LightningPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(LightningChargeReadyPayload.ID,       LightningFxClient::handleChargeReady);
+		ClientPlayNetworking.registerGlobalReceiver(LightningHitBasicPayload.ID,           LightningFxClient::handleHitBasic);
+		ClientPlayNetworking.registerGlobalReceiver(LightningHitTierPayload.ID,            LightningFxClient::handleHitTier);
+		ClientPlayNetworking.registerGlobalReceiver(LightningChainTrailPayload.ID,         LightningFxClient::handleChainTrail);
+		ClientPlayNetworking.registerGlobalReceiver(LightningChainHitPayload.ID,           LightningFxClient::handleChainHit);
+		ClientPlayNetworking.registerGlobalReceiver(LightningClapConePayload.ID,           LightningFxClient::handleClapCone);
+		ClientPlayNetworking.registerGlobalReceiver(LightningClapHitPayload.ID,            LightningFxClient::handleClapHit);
+		ClientPlayNetworking.registerGlobalReceiver(LightningConfettiPayload.ID,           LightningFxClient::handleConfetti);
+		ClientPlayNetworking.registerGlobalReceiver(LightningTargetConfettiPayload.ID,     LightningFxClient::handleTargetConfetti);
+		ClientPlayNetworking.registerGlobalReceiver(LightningSuperchargeAuraPayload.ID,    LightningFxClient::handleSuperchargeAura);
+		ClientPlayNetworking.registerGlobalReceiver(LightningSuperchargeBurstPayload.ID,   LightningFxClient::handleSuperchargeBurst);
+		ClientPlayNetworking.registerGlobalReceiver(LightningMaelstromOpenPayload.ID,      LightningFxClient::handleMaelstromOpen);
+		ClientPlayNetworking.registerGlobalReceiver(LightningStormTargetAuraPayload.ID,    LightningFxClient::handleStormTargetAura);
+		ClientPlayNetworking.registerGlobalReceiver(LightningStormCloudsPayload.ID,        LightningFxClient::handleStormClouds);
+		ClientPlayNetworking.registerGlobalReceiver(LightningStormStrikePayload.ID,        LightningFxClient::handleStormStrike);
+
+		// IcePower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(IceShatterPayload.ID,          IceFxClient::handleShatter);
+		ClientPlayNetworking.registerGlobalReceiver(IceFreezeStagePayload.ID,       IceFxClient::handleFreezeStage);
+		ClientPlayNetworking.registerGlobalReceiver(IceShatterReadyPayload.ID,      IceFxClient::handleShatterReady);
+		ClientPlayNetworking.registerGlobalReceiver(IceSpikeTrailPayload.ID,        IceFxClient::handleSpikeTrail);
+		ClientPlayNetworking.registerGlobalReceiver(IceWaterFreezePayload.ID,       IceFxClient::handleWaterFreeze);
+		ClientPlayNetworking.registerGlobalReceiver(IceSpikePuffPayload.ID,         IceFxClient::handleSpikePuff);
+		ClientPlayNetworking.registerGlobalReceiver(IceBeamChargePayload.ID,        IceFxClient::handleBeamCharge);
+		ClientPlayNetworking.registerGlobalReceiver(IceBeamLinePayload.ID,          IceFxClient::handleBeamLine);
+		ClientPlayNetworking.registerGlobalReceiver(IceSnowPayload.ID,              IceFxClient::handleSnow);
+		ClientPlayNetworking.registerGlobalReceiver(IceBlizzardPayload.ID,          IceFxClient::handleBlizzard);
+		ClientPlayNetworking.registerGlobalReceiver(IceWaveRingPayload.ID,          IceFxClient::handleWaveRing);
+		ClientPlayNetworking.registerGlobalReceiver(IceSnowAroundEntityPayload.ID,  IceFxClient::handleSnowAroundEntity);
+
+		// HealingPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(HealingPassivePayload.ID,     HealingFxClient::handlePassive);
+		ClientPlayNetworking.registerGlobalReceiver(HealingAbsorbHitPayload.ID,   HealingFxClient::handleAbsorbHit);
+		ClientPlayNetworking.registerGlobalReceiver(HealingAbsorbTickPayload.ID,  HealingFxClient::handleAbsorbTick);
+		ClientPlayNetworking.registerGlobalReceiver(HealingCleansePayload.ID,     HealingFxClient::handleCleanse);
+		ClientPlayNetworking.registerGlobalReceiver(HealingBurstPayload.ID,       HealingFxClient::handleBurst);
+		ClientPlayNetworking.registerGlobalReceiver(HealingExpelledPayload.ID,    HealingFxClient::handleExpelled);
+		ClientPlayNetworking.registerGlobalReceiver(HealingUltTickPayload.ID,     HealingFxClient::handleUltTick);
+		ClientPlayNetworking.registerGlobalReceiver(HealingUltPhasePayload.ID,    HealingFxClient::handleUltPhase);
+
+		// FortunePower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(FortuneProcEnemyPayload.ID,    FortuneFxClient::handleProcEnemy);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneProcSelfPayload.ID,     FortuneFxClient::handleProcSelf);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneAllInPayload.ID,        FortuneFxClient::handleAllIn);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneJackpotPayload.ID,      FortuneFxClient::handleJackpot);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneDuelBeamPayload.ID,     FortuneFxClient::handleDuelBeam);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneDuelTetherPayload.ID,   FortuneFxClient::handleDuelTether);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneDuelAuraPayload.ID,     FortuneFxClient::handleDuelAura);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneUltCastPayload.ID,      FortuneFxClient::handleUltCast);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneHouseBuiltPayload.ID,   FortuneFxClient::handleHouseBuilt);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneHouseRoofPayload.ID,    FortuneFxClient::handleHouseRoof);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneHouseDestroyPayload.ID, FortuneFxClient::handleHouseDestroy);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneCenterFxPayload.ID,     FortuneFxClient::handleCenterFx);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneEntityFxPayload.ID,     FortuneFxClient::handleEntityFx);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneHotSeatPassPayload.ID,  FortuneFxClient::handleHotSeatPass);
+		ClientPlayNetworking.registerGlobalReceiver(FortunePoofAtPayload.ID,       FortuneFxClient::handlePoofAt);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneJackpotHitPayload.ID,   FortuneFxClient::handleJackpotHit);
+		ClientPlayNetworking.registerGlobalReceiver(FortuneCeilingBreakPayload.ID, FortuneFxClient::handleCeilingBreak);
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			if (client.player == null) return;

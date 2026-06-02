@@ -2,12 +2,14 @@ package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -197,10 +199,8 @@ public class FlightPower implements Power {
             state.soundStep = 0;
             victim.stopFallFlying();
 
-            // particles
             ServerWorld w = victim.getServerWorld();
-            w.spawnParticles(ParticleTypes.CLOUD, victim.getX(), victim.getY() + 1.0, victim.getZ(),
-                    8, 0.35, 0.35, 0.35, 0.02);
+            sendToViewers(w, victim, new FlightKnockPayload(victim.getX(), victim.getY(), victim.getZ()));
             w.playSound(null, victim.getX(), victim.getY(), victim.getZ(), SoundEvents.ENTITY_PHANTOM_FLAP,
                     victim.getSoundCategory(), 0.7f, 0.9f);
         }
@@ -268,10 +268,7 @@ public class FlightPower implements Power {
         getState(player).gustEmpowermentTicks = GUST_EMPOWERMENT_DURATION;
 
         ServerWorld w = player.getServerWorld();
-        w.spawnParticles(ParticleTypes.EXPLOSION,
-                player.getX(), player.getY() + 0.8, player.getZ(),
-                12, 0.25, 0.15, 0.25, 0.02
-        );
+        sendToViewers(w, player, new FlightGustPayload(player.getX(), player.getY(), player.getZ()));
         w.playSound(null, player.getX(), player.getY(), player.getZ(),
                 ModSounds.GUST,
                 player.getSoundCategory(),
@@ -304,11 +301,8 @@ public class FlightPower implements Power {
         player.velocityModified = true;
 
         if (state.gustEmpowermentTicks % 3 == 0) {
-            player.getServerWorld().spawnParticles(
-                    ParticleTypes.FIREWORK,
-                    player.getX(), player.getY() + 0.6, player.getZ(),
-                    2, 0.10, 0.06, 0.10, 0.005
-            );
+            ServerWorld gustW = player.getServerWorld();
+            sendToViewers(gustW, player, new FlightGustTrailPayload(player.getX(), player.getY(), player.getZ()));
         }
     }
 
@@ -326,11 +320,7 @@ public class FlightPower implements Power {
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
-        w.spawnParticles(
-                ParticleTypes.EXPLOSION,
-                player.getX(), player.getY() + 0.3, player.getZ(),
-                20, 0.35, 0.25, 0.35, 0.03
-        );
+        sendToViewers(w, player, new FlightUpdraftPayload(player.getX(), player.getY(), player.getZ()));
         w.playSound(
                 null,
                 player.getX(), player.getY(), player.getZ(),
@@ -388,9 +378,7 @@ public class FlightPower implements Power {
                 SoundEvents.ENTITY_WARDEN_SONIC_CHARGE,
                 player.getSoundCategory(), 1.5f, 1.0f);
 
-        w.spawnParticles(ParticleTypes.ENCHANTED_HIT,
-                player.getX(), player.getY() + 1.0, player.getZ(),
-                1, 0, 0, 0, 0);
+        sendToViewers(w, player, new FlightBoomStartPayload(player.getX(), player.getY(), player.getZ()));
     }
 
     private void tickSonicBoomUltimate(ServerPlayerEntity player, FlightState state) {
@@ -409,12 +397,7 @@ public class FlightPower implements Power {
             player.fallDistance = 0;
 
             if (state.boomWindup % 2 == 0) {
-                world.spawnParticles(ParticleTypes.CLOUD,
-                        player.getX(), player.getY() + 1.0, player.getZ(),
-                        6, 0.35, 0.45, 0.35, 0.01);
-                world.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                        player.getX(), player.getY() + 1.0, player.getZ(),
-                        8, 0.45, 0.55, 0.45, 0.02);
+                sendToViewers(world, player, new FlightBoomWindupPayload(player.getX(), player.getY(), player.getZ()));
             }
 
             if (state.boomWindup <= 0) {
@@ -460,7 +443,8 @@ public class FlightPower implements Power {
             player.fallDistance = 0;
             player.startFallFlying();
 
-            spawnBoomTunnel(world, player, dir);
+            sendToViewers(world, player, new FlightBoomTunnelPayload(
+                    player.getX(), player.getY() + 1.0, player.getZ(), dir.x, dir.y, dir.z));
 
             Box box = player.getBoundingBox().expand(BOOM_RADIUS);
             List<LivingEntity> nearby = world.getEntitiesByClass(LivingEntity.class, box,
@@ -557,8 +541,7 @@ public class FlightPower implements Power {
             double y = player.getY() + 0.6;
             double z = player.getZ() + back.z;
 
-            w.spawnParticles(ParticleTypes.CLOUD, x, y, z,
-                    2, 0.08, 0.06, 0.08, 0.005);
+            sendToViewers(w, player, new FlightTrailPayload(x, y, z));
         }
 
         state.soundStep--;
@@ -581,23 +564,12 @@ public class FlightPower implements Power {
        HELPERS
        ============================================================ */
 
-    private void spawnBoomTunnel(ServerWorld w, ServerPlayerEntity p, Vec3d dir) {
-        Vec3d pos = p.getPos().add(0, 1.0, 0);
-        Vec3d back = dir.multiply(-1.0);
-
-        for (int i = 0; i < 3; i++) {
-            Vec3d pt = pos.add(back.multiply(i * 1.5));
-
-            w.spawnParticles(ParticleTypes.CLOUD,
-                    pt.x, pt.y, pt.z,
-                    3, 0.4, 0.4, 0.4, 0.02);
-
-            if (RNG.nextFloat() < 0.25f) {
-                w.spawnParticles(ParticleTypes.SWEEP_ATTACK,
-                        pt.x, pt.y, pt.z,
-                        1, 0, 0, 0, 0);
-            }
-        }
+    private static <T extends net.minecraft.network.packet.CustomPayload> void sendToViewers(
+            ServerWorld w, ServerPlayerEntity player, T payload) {
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(p -> ServerPlayNetworking.send(p, payload));
     }
 
     private boolean boomHitsBlock(ServerWorld world, ServerPlayerEntity player) {
@@ -620,8 +592,7 @@ public class FlightPower implements Power {
     private void doBoomImpact(ServerWorld world, ServerPlayerEntity player) {
         Vec3d c = player.getPos();
 
-        world.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
-                c.x, c.y + 1.0, c.z, 1, 0, 0, 0, 0);
+        sendToViewers(world, player, new FlightBoomImpactPayload(c.x, c.y, c.z));
         world.playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE,
                 player.getSoundCategory(), 1.2f, 0.9f);

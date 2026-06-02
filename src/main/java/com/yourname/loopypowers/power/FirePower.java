@@ -7,7 +7,11 @@ import com.yourname.loopypowers.manager.AbilityTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.network.payload.FireHoverPayload;
+import com.yourname.loopypowers.network.payload.FireUltChargePayload;
 import com.yourname.loopypowers.damage.ModDamageTypes;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -15,7 +19,6 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -26,7 +29,9 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class FirePower implements Power {
@@ -387,38 +392,15 @@ public class FirePower implements Power {
 
         player.fallDistance = 0;
 
-        spawnHoverParticles(player);
+        // hover jets → client
+        ServerWorld hoverWorld = player.getServerWorld();
+        FireHoverPayload hoverPay = new FireHoverPayload(player.getX(), player.getY(), player.getZ());
+        Set<ServerPlayerEntity> hoverViewers = new HashSet<>();
+        PlayerLookup.tracking(hoverWorld, player.getBlockPos()).forEach(hoverViewers::add);
+        hoverViewers.add(player);
+        hoverViewers.forEach(p -> ServerPlayNetworking.send(p, hoverPay));
 
         state.hoverTicks--;
-    }
-
-    private void spawnHoverParticles(ServerPlayerEntity player) {
-
-        var world = player.getServerWorld();
-
-        world.spawnParticles(
-                ParticleTypes.FLAME,
-                player.getX(),
-                player.getY() - 0.4,
-                player.getZ(),
-                8,
-                0.25,
-                0.1,
-                0.25,
-                0.02
-        );
-
-        world.spawnParticles(
-                ParticleTypes.SMOKE,
-                player.getX(),
-                player.getY() - 0.4,
-                player.getZ(),
-                4,
-                0.2,
-                0.05,
-                0.2,
-                0.01
-        );
     }
 
     /* ============================================================
@@ -477,43 +459,14 @@ public class FirePower implements Power {
 
         player.fallDistance = 0;
 
-        double intensity = 0.5 + progress * 2.5;
-
-        world.spawnParticles(
-                ParticleTypes.FLAME,
-                player.getX(),
-                player.getY(),
-                player.getZ(),
-                (int)(10 * intensity),
-                0.4 * intensity,
-                1.2 * intensity,
-                0.4 * intensity,
-                0.02 * intensity
-        );
-
-        world.spawnParticles(
-                ParticleTypes.LAVA,
-                player.getX(),
-                player.getY() + 0.5,
-                player.getZ(),
-                (int)(2 + progress * 10),
-                0.6,
-                0.8,
-                0.6,
-                0.03
-        );
-
-        world.spawnParticles(
-                ParticleTypes.LARGE_SMOKE,
-                player.getX(),
-                player.getY(),
-                player.getZ(),
-                (int)(5 * intensity),
-                0.5,
-                1.5,
-                0.5,
-                0.01
-        );
+        // ult charge build-up → client
+        boolean nearEnd = ticksRemaining < 20;
+        FireUltChargePayload chargePay = new FireUltChargePayload(
+                player.getX(), player.getY(), player.getZ(), progress, nearEnd);
+        Set<ServerPlayerEntity> chargeViewers = new HashSet<>();
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(chargeViewers::add);
+        chargeViewers.add(player);
+        chargeViewers.forEach(p -> ServerPlayNetworking.send(p, chargePay));
 
         CameraShake.shakeNearby(
                 player,
@@ -539,18 +492,6 @@ public class FirePower implements Power {
         }
 
         if (ticksRemaining < 20) {
-            world.spawnParticles(
-                    ParticleTypes.SOUL_FIRE_FLAME,
-                    player.getX(),
-                    player.getY() + 1,
-                    player.getZ(),
-                    40,
-                    1.2,
-                    1.5,
-                    1.2,
-                    0.08
-            );
-
             CameraShake.shakeNearby(player, 60, 3, 1.2f);
         }
     }

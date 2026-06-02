@@ -3,13 +3,15 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -199,37 +201,16 @@ public class FortunePower implements Power {
     }
 
     private static void spawnProcParticlesEnemy(ServerWorld w, LivingEntity target) {
-        w.spawnParticles(
-                ParticleTypes.ENCHANT,
-                target.getX(), target.getY() + target.getHeight() * 0.60, target.getZ(),
-                14,
-                0.25, 0.30, 0.25,
-                0.0
-        );
-        w.spawnParticles(
-                ParticleTypes.CRIT,
-                target.getX(), target.getY() + target.getHeight() * 0.55, target.getZ(),
-                10,
-                0.20, 0.20, 0.20,
-                0.04
-        );
+        FortuneProcEnemyPayload payload = new FortuneProcEnemyPayload(target.getId());
+        PlayerLookup.tracking(w, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void spawnProcParticlesSelf(ServerWorld w, ServerPlayerEntity player) {
-        w.spawnParticles(
-                ParticleTypes.ENCHANT,
-                player.getX(), player.getY() + 1.0, player.getZ(),
-                18,
-                0.35, 0.45, 0.35,
-                0.0
-        );
-        w.spawnParticles(
-                ParticleTypes.FIREWORK,
-                player.getX(), player.getY() + 1.0, player.getZ(),
-                1,
-                0.0, 0.0, 0.0,
-                0.0
-        );
+        FortuneProcSelfPayload payload = new FortuneProcSelfPayload(player.getId());
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
 
@@ -272,9 +253,11 @@ public class FortunePower implements Power {
                 player.getSoundCategory(),
                 0.6f, 1.0f);
 
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                player.getX(), player.getY() + 1.0, player.getZ(),
-                18, 0.35, 0.45, 0.35, 0.0);
+        FortuneAllInPayload allInFx = new FortuneAllInPayload(player.getX(), player.getY(), player.getZ());
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, allInFx));
 
         // JACKPOT
         if (tryAllInJackpot(player, w)) {
@@ -293,13 +276,8 @@ public class FortunePower implements Power {
                     player.getSoundCategory(),
                     0.5f, 1.0f);
 
-            w.spawnParticles(ParticleTypes.FIREWORK,
-                    player.getX(), player.getY() + 1.0, player.getZ(),
-                    1, 0.0, 0.0, 0.0, 0.0);
-
-            w.spawnParticles(ParticleTypes.ENCHANT,
-                    player.getX(), player.getY() + 1.1, player.getZ(),
-                    60, 0.65, 0.55, 0.65, 0.0);
+            FortuneJackpotPayload jackpotFx = new FortuneJackpotPayload(player.getX(), player.getY(), player.getZ());
+            viewers.forEach(sp -> ServerPlayNetworking.send(sp, jackpotFx));
 
         }
         player.swingHand(Hand.MAIN_HAND, true);
@@ -534,70 +512,19 @@ public class FortunePower implements Power {
     }
 
     private static void spawnDuelBeam(ServerWorld w, Vec3d start, Vec3d end) {
-        Vec3d delta = end.subtract(start);
-        double len = delta.length();
-        if (len < 0.01) return;
-
-        Vec3d dir = delta.multiply(1.0 / len);
-        int steps = MathHelper.clamp((int)(len / 0.35), 8, 120);
-
-        Vec3d p = start;
-        for (int i = 0; i <= steps; i++) {
-            w.spawnParticles(ParticleTypes.ENCHANT,
-                    p.x, p.y, p.z,
-                    1,
-                    0.02, 0.02, 0.02,
-                    0.0);
-
-            if ((i & 3) == 0) {
-                w.spawnParticles(ParticleTypes.CRIT,
-                        p.x, p.y, p.z,
-                        1,
-                        0.02, 0.02, 0.02,
-                        0.02);
-            }
-
-            p = p.add(dir.multiply(len / steps));
-        }
+        FortuneDuelBeamPayload payload = new FortuneDuelBeamPayload(start.x, start.y, start.z, end.x, end.y, end.z);
+        BlockPos mid = new BlockPos((int)((start.x + end.x) * 0.5), (int)((start.y + end.y) * 0.5), (int)((start.z + end.z) * 0.5));
+        PlayerLookup.tracking(w, mid).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void spawnDuelTether(ServerWorld w, LivingEntity a, LivingEntity b) {
-        Vec3d start = a.getPos().add(0, a.getHeight() * 0.65, 0);
-        Vec3d end   = b.getPos().add(0, b.getHeight() * 0.65, 0);
-
-        Vec3d delta = end.subtract(start);
-        double len = delta.length();
-        if (len < 0.01) return;
-
-        Vec3d dir = delta.multiply(1.0 / len);
-        int steps = MathHelper.clamp((int)(len / 0.45), 10, 90);
-
-        Vec3d p = start;
-        for (int i = 0; i <= steps; i++) {
-            w.spawnParticles(ParticleTypes.ENCHANT,
-                    p.x, p.y, p.z,
-                    1,
-                    0.03, 0.03, 0.03,
-                    0.0);
-            p = p.add(dir.multiply(len / steps));
-        }
-
-        // endpoints
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                start.x, start.y, start.z,
-                3, 0.15, 0.15, 0.15, 0.0);
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                end.x, end.y, end.z,
-                3, 0.15, 0.15, 0.15, 0.0);
+        FortuneDuelTetherPayload payload = new FortuneDuelTetherPayload(a.getId(), b.getId());
+        PlayerLookup.tracking(w, a.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void spawnDuelAura(ServerWorld w, LivingEntity e) {
-        Vec3d p = e.getPos().add(0, e.getHeight() * 0.65, 0);
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                p.x, p.y, p.z,
-                2,
-                0.18, 0.25, 0.18,
-                0.0);
+        FortuneDuelAuraPayload payload = new FortuneDuelAuraPayload(e.getId());
+        PlayerLookup.tracking(w, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static float getDuelMultiplier(LivingEntity victim, LivingEntity attacker) {
@@ -768,9 +695,11 @@ public class FortunePower implements Power {
         w.playSound(null, center, SoundEvents.BLOCK_END_PORTAL_FRAME_FILL,
                 net.minecraft.sound.SoundCategory.PLAYERS, 0.9f, 0.9f);
 
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                center.getX() + 0.5, center.getY() + 1.2, center.getZ() + 0.5,
-                35, 0.9, 0.4, 0.9, 0.0);
+        FortuneUltCastPayload ultFx = new FortuneUltCastPayload(center.getX(), center.getY(), center.getZ());
+        Set<ServerPlayerEntity> ultViewers = new HashSet<>();
+        PlayerLookup.tracking(w, center).forEach(ultViewers::add);
+        ultViewers.add(player);
+        ultViewers.forEach(sp -> ServerPlayNetworking.send(sp, ultFx));
 
         player.swingHand(Hand.MAIN_HAND, true);
     }
@@ -817,9 +746,8 @@ public class FortunePower implements Power {
                         w.playSound(null, st.center, SoundEvents.BLOCK_ANVIL_LAND,
                                 net.minecraft.sound.SoundCategory.PLAYERS, 0.75f, 1.1f);
 
-                        w.spawnParticles(ParticleTypes.POOF,
-                                st.center.getX() + 0.5, st.baseY + 0.2, st.center.getZ() + 0.5,
-                                16, 0.6, 0.2, 0.6, 0.04);
+                        FortuneHouseBuiltPayload builtFx = new FortuneHouseBuiltPayload(st.center.getX(), st.baseY, st.center.getZ());
+                        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, builtFx));
 
                         forceNewRule(w, st);
                     } else {
@@ -855,9 +783,8 @@ public class FortunePower implements Power {
             if ((w.getTime() % RULE_LIGHTNING_EVERY_TICKS) == 0L) {
                 Entity owner = w.getEntity(st.owner);
                 for (LivingEntity e : getHouseLiving(w, st)) {
-                    w.spawnParticles(ParticleTypes.ELECTRIC_SPARK,
-                            e.getX(), e.getY() + e.getHeight() * 0.6, e.getZ(),
-                            6, 0.25, 0.25, 0.25, 0.0);
+                    FortuneEntityFxPayload lightFx = new FortuneEntityFxPayload(e.getId(), 12);
+                    PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, lightFx));
                     e.damage(ModDamageTypes.house(w, owner), RULE_LIGHTNING_DAMAGE); // house deals damage
                 }
             }
@@ -916,9 +843,10 @@ public class FortunePower implements Power {
 
             // other
 
-            case DOUBLE_OR_NOTHING -> w.spawnParticles(ParticleTypes.ENCHANT,
-                    st.center.getX() + 0.5, st.baseY + 1.2, st.center.getZ() + 0.5,
-                    18, 0.9, 0.35, 0.9, 0.0);
+            case DOUBLE_OR_NOTHING -> {
+                FortuneCenterFxPayload donFx = new FortuneCenterFxPayload(st.center.getX(), st.baseY, st.center.getZ(), 0);
+                PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, donFx));
+            }
 
             case SHUFFLE -> doShuffle(w, st);
 
@@ -935,9 +863,8 @@ public class FortunePower implements Power {
 
             case SMOKE_MACHINE -> {
                 applyToAll(w, st, new StatusEffectInstance(StatusEffects.BLINDNESS, ruleEffectDurationTicks(), 0, true, false));
-                w.spawnParticles(ParticleTypes.LARGE_SMOKE,
-                        st.center.getX() + 0.5, st.baseY + 1.2, st.center.getZ() + 0.5,
-                        25, 1.2, 0.6, 1.2, 0.02);
+                FortuneCenterFxPayload smokeCenterFx = new FortuneCenterFxPayload(st.center.getX(), st.baseY, st.center.getZ(), 1);
+                PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, smokeCenterFx));
             }
 
             case SPOTLIGHT -> startSpotlight(w, st);
@@ -1039,9 +966,8 @@ public class FortunePower implements Power {
             float pitch = pitches.get(idx[i]);
             teleportEntity(w, e, p, yaw, pitch);
 
-            w.spawnParticles(ParticleTypes.POOF,
-                    p.x, p.y + e.getHeight() * 0.5, p.z,
-                    8, 0.25, 0.25, 0.25, 0.02);
+            FortunePoofAtPayload shuffleFx = new FortunePoofAtPayload(p.x, p.y + e.getHeight() * 0.5, p.z, 8);
+            PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, shuffleFx));
         }
 
         w.playSound(null, st.center, SoundEvents.BLOCK_END_PORTAL_SPAWN,
@@ -1057,9 +983,8 @@ public class FortunePower implements Power {
 
         LivingEntity pick = ents.get(w.random.nextInt(ents.size()));
 
-        w.spawnParticles(ParticleTypes.CRIT,
-                pick.getX(), pick.getY() + pick.getHeight() * 0.6, pick.getZ(),
-                16, 0.35, 0.35, 0.35, 0.08);
+        FortuneEntityFxPayload roulFx = new FortuneEntityFxPayload(pick.getId(), 4);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, roulFx));
 
         Entity owner = w.getEntity(st.owner);
         pick.damage(ModDamageTypes.house(w, owner), RULE_ROULETTE_DAMAGE); // house deals damage
@@ -1081,9 +1006,8 @@ public class FortunePower implements Power {
         st.hotSeatHolder = pick.getUuid();
         st.hotSeatFuse = RULE_HOTSEAT_FUSE_TICKS;
 
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                pick.getX(), pick.getY() + pick.getHeight() * 0.7, pick.getZ(),
-                18, 0.35, 0.35, 0.35, 0.0);
+        FortuneEntityFxPayload hotFx = new FortuneEntityFxPayload(pick.getId(), 1);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, hotFx));
     }
 
     private static void tickHotSeat(ServerWorld w, HouseState st) {
@@ -1101,20 +1025,15 @@ public class FortunePower implements Power {
         }
 
         if ((w.getTime() % RULE_HOTSEAT_PARTICLES_EVERY_TICKS) == 0L) {
-            w.spawnParticles(ParticleTypes.ENCHANT,
-                    holder.getX(), holder.getY() + holder.getHeight() * 0.6, holder.getZ(),
-                    10, 0.25, 0.35, 0.25, 0.0);
-            w.spawnParticles(ParticleTypes.CRIT,
-                    holder.getX(), holder.getY() + holder.getHeight() * 0.6, holder.getZ(),
-                    2, 0.15, 0.15, 0.15, 0.02);
+            FortuneEntityFxPayload tickFx = new FortuneEntityFxPayload(holder.getId(), 2);
+            PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, tickFx));
         }
 
         st.hotSeatFuse--;
         if (st.hotSeatFuse > 0) return;
 
-        w.spawnParticles(ParticleTypes.CLOUD,
-                holder.getX(), holder.getY() + holder.getHeight() * 0.5, holder.getZ(),
-                18, 0.35, 0.25, 0.35, 0.03);
+        FortuneEntityFxPayload detFx = new FortuneEntityFxPayload(holder.getId(), 3);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, detFx));
 
         Entity owner = w.getEntity(st.owner);
         holder.damage(ModDamageTypes.house(w, owner), RULE_HOTSEAT_DAMAGE); // house deals damage
@@ -1145,12 +1064,8 @@ public class FortunePower implements Power {
         st.hotSeatHolder = newHolder.getUuid();
         st.hotSeatFuse = RULE_HOTSEAT_FUSE_TICKS;
 
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                attacker.getX(), attacker.getY() + attacker.getHeight() * 0.6, attacker.getZ(),
-                10, 0.25, 0.25, 0.25, 0.0);
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                newHolder.getX(), newHolder.getY() + newHolder.getHeight() * 0.6, newHolder.getZ(),
-                14, 0.25, 0.25, 0.25, 0.0);
+        FortuneHotSeatPassPayload passFx = new FortuneHotSeatPassPayload(attacker.getId(), newHolder.getId());
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, passFx));
 
         w.playSound(null, newHolder.getBlockPos(), SoundEvents.BLOCK_CHAIN_PLACE,
                 net.minecraft.sound.SoundCategory.PLAYERS, 0.6f, 1.35f);
@@ -1177,14 +1092,12 @@ public class FortunePower implements Power {
             e.addVelocity(sx, up, sz);
             e.velocityDirty = true;
 
-            w.spawnParticles(ParticleTypes.CRIT,
-                    e.getX(), e.getY() + e.getHeight() * 0.5, e.getZ(),
-                    10, 0.25, 0.35, 0.25, 0.10);
+            FortuneEntityFxPayload chipFx = new FortuneEntityFxPayload(e.getId(), 11);
+            PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, chipFx));
         }
 
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                st.center.getX() + 0.5, st.baseY + 1.2, st.center.getZ() + 0.5,
-                18, 1.0, 0.35, 1.0, 0.0);
+        FortuneCenterFxPayload chipCenterFx = new FortuneCenterFxPayload(st.center.getX(), st.baseY, st.center.getZ(), 2);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, chipCenterFx));
     }
 
     // spawns random entities
@@ -1212,9 +1125,8 @@ public class FortunePower implements Power {
 
             w.spawnEntity(mob);
 
-            w.spawnParticles(ParticleTypes.POOF,
-                    mob.getX(), mob.getY() + mob.getHeight() * 0.5, mob.getZ(),
-                    10, 0.25, 0.25, 0.25, 0.02);
+            FortunePoofAtPayload wildFx = new FortunePoofAtPayload(mob.getX(), mob.getY() + mob.getHeight() * 0.5, mob.getZ(), 10);
+            PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, wildFx));
         }
     }
 
@@ -1228,7 +1140,8 @@ public class FortunePower implements Power {
                 sheep.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
                 sheep.setCustomName(Text.translatable("power.loopypowers.fortune.wooliam"));
                 w.spawnEntity(sheep);
-                w.spawnParticles(ParticleTypes.POOF, sheep.getX(), sheep.getY() + 0.5, sheep.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
+                FortunePoofAtPayload sheepFx = new FortunePoofAtPayload(sheep.getX(), sheep.getY() + 0.5, sheep.getZ(), 5);
+                PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, sheepFx));
             }
         }
         // 1 hamuel
@@ -1238,7 +1151,8 @@ public class FortunePower implements Power {
             pig.refreshPositionAndAngles(p.getX() + 0.5, st.baseY + 0.1, p.getZ() + 0.5, w.random.nextFloat() * 360f, 0f);
             pig.setCustomName(Text.translatable("power.loopypowers.fortune.hamuel"));
             w.spawnEntity(pig);
-            w.spawnParticles(ParticleTypes.POOF, pig.getX(), pig.getY() + 0.5, pig.getZ(), 5, 0.2, 0.2, 0.2, 0.02);
+            FortunePoofAtPayload pigFx = new FortunePoofAtPayload(pig.getX(), pig.getY() + 0.5, pig.getZ(), 5);
+            PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, pigFx));
         }
         w.playSound(null, st.center, SoundEvents.ENTITY_SHEEP_AMBIENT, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);
     }
@@ -1258,11 +1172,8 @@ public class FortunePower implements Power {
     // smoke particles
     private static void spawnSmokeMachineFx(ServerWorld w, HouseState st) {
         for (LivingEntity e : getHouseLiving(w, st)) {
-            w.spawnParticles(ParticleTypes.SMOKE,
-                    e.getX(), e.getY() + e.getHeight() * 0.6, e.getZ(),
-                    RULE_SMOKE_PARTICLES_PER_ENTITY,
-                    0.45, 0.35, 0.45,
-                    0.01);
+            FortuneEntityFxPayload smokeFx = new FortuneEntityFxPayload(e.getId(), 10);
+            PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, smokeFx));
         }
     }
 
@@ -1277,9 +1188,8 @@ public class FortunePower implements Power {
         st.spotlightTarget = target.getUuid();
         target.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, ruleEffectDurationTicks(), 0, true, false));
 
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                target.getX(), target.getY() + target.getHeight() * 0.7, target.getZ(),
-                18, 0.35, 0.35, 0.35, 0.0);
+        FortuneEntityFxPayload spotFx = new FortuneEntityFxPayload(target.getId(), 5);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, spotFx));
     }
 
     private static void tickSpotlight(ServerWorld w, HouseState st) {
@@ -1295,9 +1205,8 @@ public class FortunePower implements Power {
             return;
         }
 
-        w.spawnParticles(ParticleTypes.CRIT,
-                le.getX(), le.getY() + le.getHeight() * 0.8, le.getZ(),
-                2, 0.25, 0.25, 0.25, 0.02);
+        FortuneEntityFxPayload spotTickFx = new FortuneEntityFxPayload(le.getId(), 6);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, spotTickFx));
     }
 
     private static LivingEntity pickSpotlightTarget(ServerWorld w, HouseState st) {
@@ -1310,9 +1219,8 @@ public class FortunePower implements Power {
     // start jackpot
     private static void armJackpot(ServerWorld w, HouseState st) {
         st.jackpotArmed = true;
-        w.spawnParticles(ParticleTypes.ENCHANT,
-                st.center.getX() + 0.5, st.baseY + 1.2, st.center.getZ() + 0.5,
-                22, 0.8, 0.35, 0.8, 0.0);
+        FortuneCenterFxPayload jpArmFx = new FortuneCenterFxPayload(st.center.getX(), st.baseY, st.center.getZ(), 3);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, jpArmFx));
     }
 
     // set passive luck to max
@@ -1323,9 +1231,8 @@ public class FortunePower implements Power {
             state.luck = LUCK_MAX;
             state.luckDecayTicks = LUCK_DECAY_DELAY_TICKS;
 
-            w.spawnParticles(ParticleTypes.ENCHANT,
-                    sp.getX(), sp.getY() + 1.0, sp.getZ(),
-                    22, 0.45, 0.55, 0.45, 0.0);
+            FortuneEntityFxPayload ccFx = new FortuneEntityFxPayload(sp.getId(), 9);
+            PlayerLookup.tracking(w, st.center).forEach(recipient -> ServerPlayNetworking.send(recipient, ccFx));
         }
     }
 
@@ -1378,12 +1285,8 @@ public class FortunePower implements Power {
                 hs.jackpotArmed = false;
                 finalSource = ModDamageTypes.house(w, attacker); // uses house damage type for jackpot
 
-                w.spawnParticles(ParticleTypes.FIREWORK,
-                        victim.getX(), victim.getY() + victim.getHeight() * 0.6, victim.getZ(),
-                        1, 0, 0, 0, 0);
-                w.spawnParticles(ParticleTypes.CRIT,
-                        victim.getX(), victim.getY() + victim.getHeight() * 0.6, victim.getZ(),
-                        RULE_JACKPOT_FX_PARTICLES, 0.35, 0.35, 0.35, 0.12);
+                FortuneJackpotHitPayload jpHitFx = new FortuneJackpotHitPayload(victim.getId());
+                PlayerLookup.tracking(w, victim.getBlockPos()).forEach(sp2 -> ServerPlayNetworking.send(sp2, jpHitFx));
 
                 net.minecraft.sound.SoundEvent jpSound = w.random.nextInt(FUNNY_CHANCE) == 0 ? ModSounds.JACKPOTFUNNY : ModSounds.JACKPOT;
                 w.playSound(null, victim.getBlockPos(), jpSound, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
@@ -1529,10 +1432,8 @@ public class FortunePower implements Power {
                     float hardness = bs.getHardness(w, p);
                     if (hardness < 0) continue;
 
-                    w.spawnParticles(ParticleTypes.ENCHANT,
-                            p.getX() + 0.5, p.getY() + 0.6, p.getZ() + 0.5,
-                            HOUSE_BREAK_ENCHANT_PARTICLES,
-                            0.25, 0.25, 0.25, 0.0);
+                    FortuneCeilingBreakPayload breakFx = new FortuneCeilingBreakPayload(p.getX() + 0.5, p.getY() + 0.6, p.getZ() + 0.5);
+                    PlayerLookup.tracking(w, p).forEach(sp -> ServerPlayNetworking.send(sp, breakFx));
 
                     w.syncWorldEvent(2001, p, net.minecraft.block.Block.getRawIdFromState(bs));
                     w.setBlockState(p, net.minecraft.block.Blocks.AIR.getDefaultState(), 3);
@@ -1564,25 +1465,18 @@ public class FortunePower implements Power {
                 // If they aren't on the list yet, add them. - list not cleared now
                 if (!st.inside.contains(ent.getUuid())) {
                     st.inside.add(ent.getUuid());
-                    w.spawnParticles(ParticleTypes.ENCHANT,
-                            ent.getX(), ent.getY() + ent.getHeight() * 0.6, ent.getZ(),
-                            8, 0.25, 0.25, 0.25, 0.0);
+                    FortuneEntityFxPayload joinFx = new FortuneEntityFxPayload(ent.getId(), 0);
+                    PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, joinFx));
                 }
             }
         }
     }
 
     private static void spawnHouseRoofFx(ServerWorld w, HouseState st) {
-        int cx = st.center.getX();
-        int cz = st.center.getZ();
-
         double y = st.baseY + (HOUSE_WALL_LAYERS - 1) + HOUSE_ROOF_FX_Y_OFFSET;
-
-        for (int i = 0; i < HOUSE_ROOF_FX_PARTICLES; i++) {
-            double x = cx + 0.5 + (w.random.nextDouble() * 2 - 1) * HOUSE_RADIUS;
-            double z = cz + 0.5 + (w.random.nextDouble() * 2 - 1) * HOUSE_RADIUS;
-            w.spawnParticles(ParticleTypes.ENCHANT, x, y, z, 1, 0, 0, 0, 0);
-        }
+        FortuneHouseRoofPayload payload = new FortuneHouseRoofPayload(
+                st.center.getX() + 0.5, y, st.center.getZ() + 0.5, HOUSE_RADIUS);
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void teleportEntity(ServerWorld w, Entity e, Vec3d pos, float yaw, float pitch) {
@@ -1615,9 +1509,8 @@ public class FortunePower implements Power {
         w.playSound(null, st.center, SoundEvents.BLOCK_CHAIN_BREAK,
                 net.minecraft.sound.SoundCategory.PLAYERS, 0.85f, 1.0f);
 
-        w.spawnParticles(ParticleTypes.CLOUD,
-                st.center.getX() + 0.5, st.baseY + 1.0, st.center.getZ() + 0.5,
-                40, 0.9, 0.45, 0.9, 0.05);
+        FortuneHouseDestroyPayload destroyFx = new FortuneHouseDestroyPayload(st.center.getX(), st.baseY, st.center.getZ());
+        PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, destroyFx));
     }
 
     private static void setBlockForced(ServerWorld w, BlockPos pos, BlockState state, HouseState st) {
@@ -1681,14 +1574,16 @@ public class FortunePower implements Power {
                 // feedback
                 if (w.getTime() % 5 == 0) {
                     w.playSound(null, le.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_HIT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 0.5f);
-                    w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, le.getX(), le.getY() + 1.0, le.getZ(), 10, 0.2, 0.4, 0.2, 0.05);
+                    FortuneEntityFxPayload pushFx = new FortuneEntityFxPayload(le.getId(), 7);
+                    PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, pushFx));
                 }
             }
             // yank if too far central
             else if (distSq > (HOUSE_RADIUS + 2) * (HOUSE_RADIUS + 2) || le.getY() > st.baseY + HOUSE_WALL_LAYERS + 2 || le.getY() < st.baseY - 1) {
                 teleportEntity(w, le, center, le.getYaw(), le.getPitch());
                 w.playSound(null, le.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.2f);
-                w.spawnParticles(ParticleTypes.ENCHANTED_HIT, le.getX(), le.getY() + 1.0, le.getZ(), 30, 0.5, 0.5, 0.5, 0.05);
+                FortuneEntityFxPayload yankFx = new FortuneEntityFxPayload(le.getId(), 8);
+                PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, yankFx));
             }
         }
     }

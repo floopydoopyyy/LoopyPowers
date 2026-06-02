@@ -3,13 +3,14 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.particle.DustParticleEffect;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -17,11 +18,12 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.entity.damage.DamageSource;
-import org.joml.Vector3f;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.yourname.loopypowers.power.BloodPower.ACTIVE_BLEEDS;
@@ -48,9 +50,6 @@ public class HealingPower implements Power {
     private static HealingState getState(Entity player) {
         return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new HealingState());
     }
-
-    // Bio-energy healing particles (Pinkish-Red)
-    private static final DustParticleEffect HEAL_DUST = new DustParticleEffect(new Vector3f(0.9f, 0.2f, 0.4f), 1.2f);
 
     /* ============================================================
        BASIC
@@ -125,14 +124,10 @@ public class HealingPower implements Power {
             float pitch = 0.8f + (intensity * 1.2f);
             victim.getServerWorld().playSound(null, victim.getX(), victim.getY(), victim.getZ(), SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, pitch);
 
-            int fxCount = 5 + (int)(intensity * 15);
-            victim.getServerWorld().spawnParticles(
-                    ParticleTypes.TOTEM_OF_UNDYING,
-                    victim.getX(), victim.getBodyY(0.5), victim.getZ(),
-                    fxCount,
-                    0.2 + intensity * 0.2, 0.3 + intensity * 0.2, 0.2 + intensity * 0.2,
-                    0.01 + intensity * 0.05
-            );
+            ServerWorld sw = victim.getServerWorld();
+            HealingAbsorbHitPayload absorbHitFx = new HealingAbsorbHitPayload(
+                    victim.getX(), victim.getBodyY(0.5), victim.getZ(), intensity);
+            PlayerLookup.tracking(sw, victim.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, absorbHitFx));
 
             return false; // Cancel original damage
         }
@@ -166,13 +161,12 @@ public class HealingPower implements Power {
 
             // Only emit particles if health is actually going up
             if (player.getHealth() < maxHeal) {
-                player.getServerWorld().spawnParticles(
-                        HEAL_DUST,
-                        player.getX(),
-                        player.getBodyY(0.5),
-                        player.getZ(),
-                        2, 0.3, 0.5, 0.3, 0.01
-                );
+                HealingPassivePayload passFx = new HealingPassivePayload(
+                        player.getX(), player.getBodyY(0.5), player.getZ());
+                Set<ServerPlayerEntity> passViewers = new HashSet<>();
+                PlayerLookup.tracking(player.getServerWorld(), player.getBlockPos()).forEach(passViewers::add);
+                passViewers.add(player);
+                passViewers.forEach(sp -> ServerPlayNetworking.send(sp, passFx));
             }
 
             // small continuous heal
@@ -227,35 +221,12 @@ public class HealingPower implements Power {
         player.heal(healAmount);
 
         // particles
-        w.spawnParticles(
-                ParticleTypes.ELECTRIC_SPARK,
-                player.getX(),
-                player.getBodyY(0.5),
-                player.getZ(),
-                40,
-                0.6, 0.8, 0.6,
-                0.05
-        );
-
-        w.spawnParticles(
-                ParticleTypes.FLASH,
-                player.getX(),
-                player.getBodyY(0.5),
-                player.getZ(),
-                3,
-                0.7, 0.9, 0.7,
-                0.1
-        );
-
-        w.spawnParticles(
-                HEAL_DUST,
-                player.getX(),
-                player.getBodyY(0.5),
-                player.getZ(),
-                30,
-                0.6, 0.8, 0.6,
-                0.05
-        );
+        HealingCleansePayload cleanseFx = new HealingCleansePayload(
+                player.getX(), player.getBodyY(0.5), player.getZ());
+        Set<ServerPlayerEntity> cleanseViewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(cleanseViewers::add);
+        cleanseViewers.add(player);
+        cleanseViewers.forEach(sp -> ServerPlayNetworking.send(sp, cleanseFx));
 
         // sound
         w.playSound(null, player.getX(), player.getY(), player.getZ(),
@@ -359,22 +330,13 @@ public class HealingPower implements Power {
         float capped = Math.min(state.absorbStored, BURST_MAX_SCALING);
         float intensity = capped / BURST_MAX_SCALING; // 0.0 to 1.0 scaling
 
-        int sparkCount = 2 + (int)(intensity * 5); // 2 to 7 sparks per tick
-
-        w.spawnParticles(
-                ParticleTypes.ELECTRIC_SPARK,
-                player.getX(),
-                player.getBodyY(0.5),
-                player.getZ(),
-                sparkCount,
-                0.5, 0.6, 0.5,
-                0.02 + (intensity * 0.05) // speed ramps up
-        );
-
-        // extra fx when higher charges
-        if (intensity > 0.5f && w.getTime() % 5 == 0) {
-            w.spawnParticles(ParticleTypes.END_ROD, player.getX(), player.getBodyY(0.5), player.getZ(), 1, 0.5, 0.6, 0.5, 0.01);
-        }
+        boolean endRod = intensity > 0.5f && w.getTime() % 5 == 0;
+        HealingAbsorbTickPayload absorbTickFx = new HealingAbsorbTickPayload(
+                player.getX(), player.getBodyY(0.5), player.getZ(), intensity, endRod);
+        Set<ServerPlayerEntity> absorbViewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(absorbViewers::add);
+        absorbViewers.add(player);
+        absorbViewers.forEach(sp -> ServerPlayNetworking.send(sp, absorbTickFx));
 
         if (state.absorbTicks <= 0) {
             releaseBurst(player, state);
@@ -407,70 +369,13 @@ public class HealingPower implements Power {
 
         double radius = BURST_RADIUS;
 
-        // VISUAL SCALING
-
-        int particleCount = VFX_BASE_PARTICLES + (int)(capped * VFX_PARTICLES_PER_STORED);
-        if (particleCount > VFX_MAX_PARTICLES) particleCount = VFX_MAX_PARTICLES;
-
-        // main explosion
-        double px = player.getX();
-        double py = player.getBodyY(0.5);
-        double pz = player.getZ();
-
-        int emitterCount = 1 + (int)(capped * 0.25f); // how many - should be rounded
-        if (emitterCount > 6) emitterCount = 6;       // cap
-        double spread = 0.5 + (capped * 0.1); // spread
-
-        // main explosion
-        for (int i = 0; i < emitterCount; i++) {
-
-            double ox = (w.random.nextDouble() * 2 - 1) * spread;
-            double oy = (w.random.nextDouble() * 2 - 1) * spread * 0.6; // less vertical
-            double oz = (w.random.nextDouble() * 2 - 1) * spread;
-
-            w.spawnParticles(
-                    ParticleTypes.EXPLOSION_EMITTER,
-                    px + ox,
-                    py + oy,
-                    pz + oz,
-                    1,      // always 1 for emitter
-                    0, 0, 0,
-                    0
-            );
-
-            w.spawnParticles(
-                    HEAL_DUST,
-                    px + ox,
-                    py + oy,
-                    pz + oz,
-                    15,
-                    0.4, 0.4, 0.4,
-                    0.05
-            );
-        }
-
-        // mid-tier shine
-        if (capped >= VFX_SHINE_THRESHOLD) {
-            spawnBurst(w, px, py, pz,
-                    40,
-                    0.25,
-                    0.8,
-                    ParticleTypes.END_ROD);
-        }
-
-        if (capped >= VFX_SUPER_SHINE_THRESHOLD) {
-            spawnBurst(w, px, py, pz,
-                    10,
-                    0.35,
-                    0.8,
-                    ParticleTypes.FLASH);
-
-            spawnBurst(w, px, py, pz,
-                    20,
-                    0.3,
-                    0.5,
-                    ParticleTypes.TOTEM_OF_UNDYING);
-        }
+        // send burst FX to nearby players
+        HealingBurstPayload burstFx = new HealingBurstPayload(
+                player.getX(), player.getBodyY(0.5), player.getZ(), stored);
+        Set<ServerPlayerEntity> burstViewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(burstViewers::add);
+        burstViewers.add(player);
+        burstViewers.forEach(sp -> ServerPlayNetworking.send(sp, burstFx));
 
         // DAMAGE + KNOCKBACK
         for (LivingEntity e : w.getEntitiesByClass(
@@ -527,6 +432,9 @@ public class HealingPower implements Power {
 
     private void applyAndCleanse(ServerPlayerEntity player, LivingEntity target) {
         ServerWorld w = player.getServerWorld();
+        Set<ServerPlayerEntity> expViewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(expViewers::add);
+        expViewers.add(player);
 
         // fetch active effects safely
         java.util.List<StatusEffectInstance> effects =
@@ -558,82 +466,23 @@ public class HealingPower implements Power {
                 dy /= len;
                 dz /= len;
 
-                for (int i = 0; i < EXPELLED_PARTICLES; i++) {
-                    w.spawnParticles(
-                            ParticleTypes.SMOKE,
-                            player.getX(),
-                            player.getBodyY(0.5),
-                            player.getZ(),
-                            0,
-                            dx * 0.4,
-                            dy * 0.4,
-                            dz * 0.4,
-                            1.0
-                    );
-                }
+                double fdx = dx, fdy = dy, fdz = dz;
+                HealingExpelledPayload smokeFx = new HealingExpelledPayload(
+                        player.getX(), player.getBodyY(0.5), player.getZ(),
+                        fdx, fdy, fdz, false);
+                expViewers.forEach(sp -> ServerPlayNetworking.send(sp, smokeFx));
             }
         }
 
         // also treat fire like an effect
         if (player.isOnFire()) {
             player.extinguish();
-
             target.setOnFireFor(2);
 
-            w.spawnParticles(
-                    ParticleTypes.FLAME,
-                    player.getX(),
-                    player.getBodyY(0.5),
-                    player.getZ(),
-                    8,
-                    0.3, 0.4, 0.3,
-                    0.02
-            );
-        }
-    }
-
-    private void spawnBurst(ServerWorld w,
-                            double x, double y, double z,
-                            int count,
-                            double speed,
-                            double spread,
-                            net.minecraft.particle.ParticleEffect particle) {
-
-        for (int i = 0; i < count; i++) {
-
-            // random direction (biased outward)
-            double dx = w.random.nextGaussian();
-            double dy = w.random.nextGaussian() * 0.6; // less vertical clustering
-            double dz = w.random.nextGaussian();
-
-            double len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (len < 0.0001) continue;
-
-            dx /= len;
-            dy /= len;
-            dz /= len;
-
-            // offset
-            double distance = spread * (0.5 + w.random.nextDouble()); // should avoid clustering
-
-            double px = x + dx * distance;
-            double py = y + dy * distance;
-            double pz = z + dz * distance;
-
-            // velocity variation below:
-            double velocityScale = speed * (0.8 + w.random.nextDouble() * 0.7);
-
-            double vx = dx * velocityScale;
-            double vy = dy * velocityScale;
-            double vz = dz * velocityScale;
-
-            w.spawnParticles(
-                    particle,
-                    px, py, pz,
-                    0,
-                    vx, vy, vz,
-                    1.0
-            );
+            HealingExpelledPayload fireFx = new HealingExpelledPayload(
+                    player.getX(), player.getBodyY(0.5), player.getZ(),
+                    0, 0, 0, true);
+            expViewers.forEach(sp -> ServerPlayNetworking.send(sp, fireFx));
         }
     }
 
@@ -681,38 +530,13 @@ public class HealingPower implements Power {
         ServerWorld w = player.getServerWorld();
 
         // constant particles
-        w.spawnParticles(
-                ParticleTypes.FIREWORK,
-                player.getX(),
-                player.getBodyY(0.5),
-                player.getZ(),
-                2,              // low count
-                0.4, 0.6, 0.4,  // spread
-                0.01
-        );
-
-        w.spawnParticles(
-                HEAL_DUST,
-                player.getX(),
-                player.getBodyY(0.5),
-                player.getZ(),
-                3,
-                0.5, 0.6, 0.5,
-                0.02
-        );
-
-        // occasional other
-        if (state.ultTicks % 10 == 0) {
-            w.spawnParticles(
-                    ParticleTypes.END_ROD,
-                    player.getX(),
-                    player.getBodyY(0.5),
-                    player.getZ(),
-                    8,
-                    0.6, 0.8, 0.6,
-                    0.05
-            );
-        }
+        boolean ultEndRod = state.ultTicks % 10 == 0;
+        Set<ServerPlayerEntity> ultViewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(ultViewers::add);
+        ultViewers.add(player);
+        HealingUltTickPayload ultTickFx = new HealingUltTickPayload(
+                player.getX(), player.getBodyY(0.5), player.getZ(), ultEndRod);
+        ultViewers.forEach(sp -> ServerPlayNetworking.send(sp, ultTickFx));
 
         if (state.ultTicks <= 0) {
             // FULL CLEANUP
@@ -739,15 +563,9 @@ public class HealingPower implements Power {
                         true, false, true
                 ));
 
-                w.spawnParticles(
-                        ParticleTypes.FLASH,
-                        player.getX(),
-                        player.getBodyY(0.5),
-                        player.getZ(),
-                        10,
-                        0.5, 0.6, 0.5,
-                        0.1
-                );
+                HealingUltPhasePayload phaseFx = new HealingUltPhasePayload(
+                        player.getX(), player.getBodyY(0.5), player.getZ());
+                ultViewers.forEach(sp -> ServerPlayNetworking.send(sp, phaseFx));
 
                 net.minecraft.sound.SoundEvent sound = w.random.nextFloat() < MEDIC_SOUND_CHANCE ? ModSounds.MEDIC : SoundEvents.ENTITY_ENDER_DRAGON_FLAP;
 

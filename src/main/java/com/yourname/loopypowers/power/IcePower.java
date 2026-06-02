@@ -1,10 +1,14 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.block.ModBlocks;
+import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.SnowBlock;
@@ -14,8 +18,6 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.fluid.Fluids;
-import net.minecraft.particle.DustParticleEffect;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -31,8 +33,6 @@ import net.minecraft.util.math.*;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
-import org.joml.Vector3f;
-import com.yourname.loopypowers.damage.ModDamageTypes;
 
 import java.util.*;
 
@@ -166,12 +166,6 @@ public class IcePower implements Power {
     // How many points abilities add
     private static final int FRZ_POINTS_MELEE = 7;  // melee hits
 
-    // particles
-    private static final DustParticleEffect FRZ_BLUE_DUST =
-            new DustParticleEffect(new Vector3f(0.25f, 0.65f, 1.00f), 0.75f);
-    private static final DustParticleEffect FRZ_SHIMMER_DUST =
-            new DustParticleEffect(new Vector3f(0.75f, 0.95f, 1.00f), 0.45f);
-
     private static final Map<RegistryKey<World>, Long> FROZEN_LAST_TICK = new HashMap<>();
 
     private static int getFreezeStage(int points) {
@@ -250,12 +244,8 @@ public class IcePower implements Power {
     }
 
     private static void doShatterFX(ServerWorld w, LivingEntity target) {
-        Vec3d p = target.getPos().add(0, target.getHeight() * 0.55, 0);
-
-        w.spawnParticles(ParticleTypes.SNOWFLAKE, p.x, p.y, p.z, 60, 0.35, 0.35, 0.35, 0.00);
-        w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, p.x, p.y, p.z, 18, 0.25, 0.20, 0.25, 0.00);
-        w.spawnParticles(FRZ_BLUE_DUST, p.x, p.y, p.z, 24, 0.25, 0.20, 0.25, 0.00);
-        w.spawnParticles(FRZ_SHIMMER_DUST, p.x, p.y, p.z, 16, 0.22, 0.18, 0.22, 0.00);
+        IceShatterPayload payload = new IceShatterPayload(target.getId());
+        PlayerLookup.tracking(w, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
 
         w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_GLASS_BREAK, SoundCategory.PLAYERS, 0.9f, 1.15f);
         w.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_RESONATE, SoundCategory.PLAYERS, 0.9f, 1.55f);
@@ -361,74 +351,19 @@ public class IcePower implements Power {
 
     private static void spawnFreezeStageParticles(ServerWorld w, LivingEntity e, int stage) {
         if (stage <= 0) return;
-
-        Vec3d p = e.getPos().add(0, e.getHeight() * 0.55, 0);
-
-        // keep it cheap: stage 1/2 spawn less often
         if (stage <= 2 && (w.getTime() & 1) == 1) return;
-
-        int snow = switch (stage) {
-            case 1 -> 1;
-            case 2 -> 3;
-            case 3 -> 5;
-            case 4 -> 7;
-            default -> 12; // stage 5
-        };
-
-        w.spawnParticles(ParticleTypes.SNOWFLAKE, p.x, p.y, p.z, snow, 0.18, 0.22, 0.18, 0.00);
-
-        if (stage >= 2) {
-            w.spawnParticles(ParticleTypes.WHITE_ASH, p.x, p.y, p.z, 1, 0.15, 0.18, 0.15, 0.00);
-        }
-        if (stage >= 3 && (w.getTime() % 3) == 0) {
-            w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, p.x, p.y, p.z, 1, 0.12, 0.12, 0.12, 0.00);
-        }
-        if (stage >= 4) {
-            w.spawnParticles(FRZ_BLUE_DUST, p.x, p.y, p.z, 1, 0.10, 0.10, 0.10, 0.00);
-        }
-        if (stage >= 5) {
-            // IMPORTANT: very clear “ready to shatter” indicator
-            spawnShatterReadyParticles(w, e);
-        }
+        boolean spark = stage >= 3 && (w.getTime() % 3) == 0;
+        IceFreezeStagePayload payload = new IceFreezeStagePayload(e.getId(), stage, spark);
+        PlayerLookup.tracking(w, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        if (stage >= 5) spawnShatterReadyParticles(w, e);
     }
 
     private static void spawnShatterReadyParticles(ServerWorld w, LivingEntity e) {
-        // pulse every other tick
         if ((w.getTime() & 1) == 1) return;
-
-        Vec3d c = e.getPos().add(0, e.getHeight() * 0.72, 0);
-
-        // rotating halo ring around the upper body
         double baseAng = w.getTime() * 0.35;
-        double pulse = 0.06 * Math.sin(w.getTime() * 0.45);
-        double r = 0.55 + pulse;
-
-        int points = 14;
-        for (int i = 0; i < points; i++) {
-            double a = baseAng + (i * (Math.PI * 2.0 / points));
-            double x = c.x + Math.cos(a) * r;
-            double z = c.z + Math.sin(a) * r;
-            double y = c.y + (Math.sin(a * 2.0) * 0.05);
-
-            // bright “shatter ready” sparkles
-            w.spawnParticles(ParticleTypes.END_ROD, x, y, z, 1, 0, 0, 0, 0.0);
-
-            // shimmer + blue crackle mixed in
-            if ((i % 2) == 0) {
-                w.spawnParticles(FRZ_SHIMMER_DUST, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
-            }
-            if ((i % 3) == 0) {
-                w.spawnParticles(FRZ_BLUE_DUST, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
-            }
-            if ((i % 4) == 0) {
-                w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
-            }
-        }
-
-        if ((w.getTime() % 6) == 0) {
-            w.spawnParticles(ParticleTypes.ENCHANT, c.x, c.y - 0.15, c.z, 6, 0.25, 0.22, 0.25, 0.0);
-            w.spawnParticles(ParticleTypes.SNOWFLAKE, c.x, c.y - 0.15, c.z, 10, 0.28, 0.22, 0.28, 0.0);
-        }
+        boolean enchant = (w.getTime() % 6) == 0;
+        IceShatterReadyPayload payload = new IceShatterReadyPayload(e.getId(), baseAng, enchant);
+        PlayerLookup.tracking(w, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     /* ============================================================
@@ -455,12 +390,6 @@ public class IcePower implements Power {
     private static final double SPIKES_TRAVEL_SPEED = 0.9;
     private static final int SPIKES_TRAVEL_MIN_TICKS = 6;
     private static final int SPIKES_TRAVEL_MAX_TICKS = 16;
-
-    private static final DustParticleEffect SPIKE_TRAIL_DUST =
-            new DustParticleEffect(new Vector3f(0.55f, 0.85f, 1.00f), 1.10f);
-
-    private static final DustParticleEffect SPIKE_PUFF_DUST =
-            new DustParticleEffect(new Vector3f(0.35f, 0.80f, 1.00f), 1.35f);
 
     private static final List<SpikeCast> SPIKE_CASTS = new ArrayList<>();
     private static final Map<RegistryKey<World>, Long> SPIKES_LAST_TICK = new HashMap<>();
@@ -613,48 +542,12 @@ public class IcePower implements Power {
 
     private static void spawnGroundTrail(ServerWorld w, Vec3d startXZ, Vec3d targetXZ,
                                          float progress, int seed, int yHint) {
-
-        double sx = startXZ.x;
-        double sz = startXZ.z;
-        double ex = targetXZ.x;
-        double ez = targetXZ.z;
-
-        double fx = MathHelper.lerp(progress, sx, ex);
-        double fz = MathHelper.lerp(progress, sz, ez);
-
-        double back = 0.18;
-        double px0 = MathHelper.lerp(MathHelper.clamp(progress - back, 0.0f, 1.0f), sx, ex);
-        double pz0 = MathHelper.lerp(MathHelper.clamp(progress - back, 0.0f, 1.0f), sz, ez);
-
-        int steps = 10;
-        for (int i = 0; i <= steps; i++) {
-            double a = i / (double) steps;
-            double x = MathHelper.lerp(a, px0, fx);
-            double z = MathHelper.lerp(a, pz0, fz);
-
-            int bx = MathHelper.floor(x);
-            int bz = MathHelper.floor(z);
-
-            BlockPos surf = findSurfaceAirAboveSolid(w, bx, bz, yHint, false); // do NOT freeze water for trail
-            int y = surf.getY();
-
-            double jx = ((seed * 31L + i * 17L) % 100) / 100.0 - 0.5;
-            double jz = ((seed * 13L + i * 29L) % 100) / 100.0 - 0.5;
-
-            w.spawnParticles(
-                    SPIKE_TRAIL_DUST,
-                    x + (jx * 0.08),
-                    y + 0.06,
-                    z + (jz * 0.08),
-                    1,
-                    0.0, 0.0, 0.0,
-                    0.0
-            );
-
-            if ((i & 1) == 0) {
-                w.spawnParticles(ParticleTypes.SNOWFLAKE, x, y + 0.08, z, 1, 0.05, 0.01, 0.05, 0.0);
-            }
-        }
+        double fx = MathHelper.lerp(progress, startXZ.x, targetXZ.x);
+        double fz = MathHelper.lerp(progress, startXZ.z, targetXZ.z);
+        BlockPos mid = BlockPos.ofFloored(fx, yHint, fz);
+        IceSpikeTrailPayload payload = new IceSpikeTrailPayload(
+                startXZ.x, startXZ.z, targetXZ.x, targetXZ.z, progress, seed, yHint);
+        PlayerLookup.tracking(w, mid).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void buildSpikeBases(ServerWorld w, SpikeCast sc, int yHint) {
@@ -811,9 +704,8 @@ public class IcePower implements Power {
         // frosted ice melts naturally
         w.scheduleBlockTick(pos, Blocks.FROSTED_ICE, MathHelper.nextInt(w.random, 60, 120));
 
-        w.spawnParticles(ParticleTypes.SNOWFLAKE,
-                pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5,
-                6, 0.22, 0.10, 0.22, 0.0);
+        IceWaterFreezePayload freezeFx = new IceWaterFreezePayload(pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, 6, false);
+        PlayerLookup.tracking(w, pos).forEach(sp -> ServerPlayNetworking.send(sp, freezeFx));
     }
 
     private static void growAllSpikesToHeight(ServerWorld w, SpikeCast sc, int height) {
@@ -827,17 +719,8 @@ public class IcePower implements Power {
 
             BlockPos top = sb.base.up(desired - 1);
 
-            w.spawnParticles(
-                    SPIKE_PUFF_DUST,
-                    top.getX() + 0.5, top.getY() + 0.35, top.getZ() + 0.5,
-                    18,
-                    0.22, 0.25, 0.22,
-                    0.02
-            );
-            w.spawnParticles(ParticleTypes.SNOWFLAKE,
-                    top.getX() + 0.5, top.getY() + 0.45, top.getZ() + 0.5,
-                    10, 0.25, 0.20, 0.25, 0.0
-            );
+            IceSpikePuffPayload puffFx = new IceSpikePuffPayload(top.getX() + 0.5, top.getY() + 0.35, top.getZ() + 0.5);
+            PlayerLookup.tracking(w, top).forEach(sp -> ServerPlayNetworking.send(sp, puffFx));
 
             hitEntitiesForSpikeStep(w, sc.owner, top);
         }
@@ -1008,7 +891,7 @@ public class IcePower implements Power {
                     : maxEnd;
 
             // particles
-            spawnBeamLineParticles(w, muzzle, end);
+            spawnBeamLineParticles(w, player, muzzle, end);
 
             // leave snow
             if (blockHit.getType() == HitResult.Type.BLOCK && (player.age % BEAM_SNOW_PLACE_EVERY) == 0) {
@@ -1073,9 +956,8 @@ public class IcePower implements Power {
         w.setBlockState(place, Blocks.SNOW.getDefaultState(), 2);
 
         // tiny puff so it feels responsive
-        w.spawnParticles(ParticleTypes.SNOWFLAKE,
-                place.getX() + 0.5, place.getY() + 0.05, place.getZ() + 0.5,
-                8, 0.25, 0.03, 0.25, 0.0);
+        IceSnowPayload snowFx = new IceSnowPayload(place.getX() + 0.5, place.getY() + 0.05, place.getZ() + 0.5, 8);
+        PlayerLookup.tracking(w, place).forEach(sp -> ServerPlayNetworking.send(sp, snowFx));
     }
 
     private static void freezeWaterAlongBeam(ServerWorld w, Vec3d start, Vec3d end) {
@@ -1111,9 +993,8 @@ public class IcePower implements Power {
                             w.setBlockState(pos, Blocks.FROSTED_ICE.getDefaultState(), 2);
                             w.scheduleBlockTick(pos, Blocks.FROSTED_ICE, MathHelper.nextInt(w.random, 60, 120));
 
-                            w.spawnParticles(ParticleTypes.SNOWFLAKE,
-                                    pos.getX() + 0.5, pos.getY() + 0.85, pos.getZ() + 0.5,
-                                    6, 0.25, 0.15, 0.25, 0.0);
+                            IceWaterFreezePayload beamFreezeFx = new IceWaterFreezePayload(pos.getX() + 0.5, pos.getY() + 0.85, pos.getZ() + 0.5, 6, false);
+                            PlayerLookup.tracking(w, pos).forEach(sp -> ServerPlayNetworking.send(sp, beamFreezeFx));
 
                             froze++;
                         }
@@ -1126,66 +1007,20 @@ public class IcePower implements Power {
     private static void spawnBeamChargeParticles(ServerWorld w, ServerPlayerEntity player) {
         Vec3d dir = player.getRotationVec(1.0f).normalize();
         Vec3d muzzle = getBeamMuzzlePos(player, dir);
-
-        int points = 14;
-        double r = 0.22;
-
-        for (int i = 0; i < points; i++) {
-            double a = (player.age * 0.45) + (i * (Math.PI * 2.0 / points));
-            double x = muzzle.x + Math.cos(a) * r;
-            double z = muzzle.z + Math.sin(a) * r;
-            double y = muzzle.y + (w.random.nextDouble() - 0.5) * 0.12;
-
-            w.spawnParticles(ParticleTypes.END_ROD, x, y, z, 1, 0, 0, 0, 0.0);
-
-            if ((i % 3) == 0) {
-                w.spawnParticles(ParticleTypes.ENCHANT, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
-            }
-            if ((i & 1) == 0) {
-                w.spawnParticles(ParticleTypes.SNOWFLAKE, x, y, z, 1, 0.02, 0.02, 0.02, 0.0);
-            }
-        }
+        IceBeamChargePayload payload = new IceBeamChargePayload(muzzle.x, muzzle.y, muzzle.z, player.age);
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
-    private static void spawnBeamLineParticles(ServerWorld w, Vec3d start, Vec3d end) {
-        Vec3d delta = end.subtract(start);
-        double len = delta.length();
-        if (len < 0.001) return;
-
-        Vec3d dir = delta.multiply(1.0 / len);
-
-        Vec3d up = new Vec3d(0, 1, 0);
-        Vec3d right = up.crossProduct(dir);
-        if (right.lengthSquared() < 1.0e-6) right = new Vec3d(1, 0, 0);
-        right = right.normalize();
-
-        Vec3d up2 = dir.crossProduct(right).normalize();
-
-        int steps = MathHelper.clamp((int) (len * BEAM_PARTICLE_DENSITY), 24, 140);
-
-        for (int i = 0; i <= steps; i++) {
-            double t = i / (double) steps;
-            Vec3d p = start.add(delta.multiply(t));
-
-            // core shimmer line
-            w.spawnParticles(ParticleTypes.WHITE_ASH, p.x, p.y, p.z, 1, 0, 0, 0, 0.0);
-
-            // spiral around beam
-            double ang = (w.getTime() * 0.45) + (i * 0.65);
-            double rx = Math.cos(ang) * BEAM_SPIRAL_RADIUS;
-            double ry = Math.sin(ang) * BEAM_SPIRAL_RADIUS;
-
-            Vec3d swirl = p.add(right.multiply(rx)).add(up2.multiply(ry));
-            w.spawnParticles(ParticleTypes.SNOWFLAKE, swirl.x, swirl.y, swirl.z, 1, 0.0, 0.0, 0.0, 0.0);
-
-            // sparkles
-            if ((i % 10) == 0) {
-                w.spawnParticles(ParticleTypes.ELECTRIC_SPARK, p.x, p.y, p.z, 1, 0.03, 0.03, 0.03, 0.0);
-            }
-            if ((i % 14) == 0) {
-                w.spawnParticles(ParticleTypes.END_ROD, p.x, p.y, p.z, 1, 0.0, 0.0, 0.0, 0.0);
-            }
-        }
+    private static void spawnBeamLineParticles(ServerWorld w, ServerPlayerEntity player, Vec3d start, Vec3d end) {
+        IceBeamLinePayload payload = new IceBeamLinePayload(
+                start.x, start.y, start.z, end.x, end.y, end.z, w.getTime());
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void applyBeamToEntities(ServerWorld w, ServerPlayerEntity caster, Vec3d start, Vec3d end) {
@@ -1297,13 +1132,6 @@ public class IcePower implements Power {
 
     // egg
     private static final double ULT_SNOWMAN_CHANCE = 0.002; // chance per tick
-
-    // Extra FX
-    private static final DustParticleEffect ULT_BLUE_DUST =
-            new DustParticleEffect(new Vector3f(0.20f, 0.55f, 1.00f), 0.90f);
-
-    private static final DustParticleEffect ULT_SHIMMER_DUST =
-            new DustParticleEffect(new Vector3f(0.70f, 0.95f, 1.00f), 0.55f);
 
     private static final List<UltWave> ULT_WAVES = new ArrayList<>();
     private static final Map<RegistryKey<World>, Long> ULTW_LAST_TICK = new HashMap<>();
@@ -1419,13 +1247,8 @@ public class IcePower implements Power {
                         w.setBlockState(p, Blocks.FROSTED_ICE.getDefaultState(), 2);
                         w.scheduleBlockTick(p, Blocks.FROSTED_ICE, MathHelper.nextInt(w.random, 60, 120));
 
-                        // tiny sparkle
-                        w.spawnParticles(ParticleTypes.SNOWFLAKE, p.getX() + 0.5, p.getY() + 1.0, p.getZ() + 0.5,
-                                4, 0.20, 0.10, 0.20, 0.0);
-                        if ((froze & 1) == 0) {
-                            w.spawnParticles(ParticleTypes.ENCHANT, p.getX() + 0.5, p.getY() + 1.05, p.getZ() + 0.5,
-                                    1, 0.02, 0.02, 0.02, 0.0);
-                        }
+                        IceWaterFreezePayload casterFreezeFx = new IceWaterFreezePayload(p.getX() + 0.5, p.getY() + 1.0, p.getZ() + 0.5, 4, (froze & 1) == 0);
+                        PlayerLookup.tracking(w, p).forEach(sp -> ServerPlayNetworking.send(sp, casterFreezeFx));
 
                         froze++;
                     }
@@ -1435,43 +1258,11 @@ public class IcePower implements Power {
     }
 
     private static void spawnBlizzard(ServerWorld w, ServerPlayerEntity caster) {
-        Vec3d c = caster.getPos();
-
-        for (int i = 0; i < ULT_SNOW_PER_TICK; i++) {
-            double r = Math.sqrt(w.random.nextDouble()) * ULT_BLIZZARD_RADIUS;
-            double a = w.random.nextDouble() * Math.PI * 2.0;
-
-            double x = c.x + Math.cos(a) * r;
-            double z = c.z + Math.sin(a) * r;
-            double y = c.y + 6.0 + w.random.nextDouble() * 3.0;
-
-            w.spawnParticles(ParticleTypes.SNOWFLAKE,
-                    x, y, z,
-                    1,
-                    0.25, 0.15, 0.25,
-                    0.00);
-
-            // extra shimmer sometimes
-            if ((i % 12) == 0) {
-                w.spawnParticles(ParticleTypes.END_ROD, x, y - 0.4, z, 1, 0, 0, 0, 0.0);
-            }
-        }
-
-        for (int i = 0; i < ULT_GUST_PER_TICK; i++) {
-            double r = Math.sqrt(w.random.nextDouble()) * (ULT_BLIZZARD_RADIUS * 0.9);
-            double a = w.random.nextDouble() * Math.PI * 2.0;
-
-            double x = c.x + Math.cos(a) * r;
-            double z = c.z + Math.sin(a) * r;
-            double y = c.y + 1.0 + w.random.nextDouble() * 2.0;
-
-            w.spawnParticles(ParticleTypes.WHITE_ASH, x, y, z, 1, 0.22, 0.18, 0.22, 0.00);
-
-            // blue “cold” tint in the air
-            if ((i & 3) == 0) {
-                w.spawnParticles(ULT_BLUE_DUST, x, y, z, 1, 0.10, 0.08, 0.10, 0.0);
-            }
-        }
+        IceBlizzardPayload payload = new IceBlizzardPayload(caster.getX(), caster.getY(), caster.getZ());
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, caster.getBlockPos()).forEach(viewers::add);
+        viewers.add(caster);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void spreadSnowCover(ServerWorld w, ServerPlayerEntity caster) {
@@ -1508,9 +1299,8 @@ public class IcePower implements Power {
             w.setBlockState(place, Blocks.SNOW.getDefaultState(), 2);
 
             if ((i % 10) == 0) {
-                w.spawnParticles(ParticleTypes.SNOWFLAKE,
-                        place.getX() + 0.5, place.getY() + 0.05, place.getZ() + 0.5,
-                        6, 0.22, 0.03, 0.22, 0.0);
+                IceSnowPayload coverFx = new IceSnowPayload(place.getX() + 0.5, place.getY() + 0.05, place.getZ() + 0.5, 6);
+                PlayerLookup.tracking(w, place).forEach(sp -> ServerPlayNetworking.send(sp, coverFx));
             }
         }
     }
@@ -1559,34 +1349,10 @@ public class IcePower implements Power {
     }
 
     private static void spawnWaveRingParticles(ServerWorld w, UltWave wave) {
-        double r = wave.radius;
-        int points = MathHelper.clamp((int) (r * 14.0), 28, 180);
-
-        double y = wave.waveY;
-
-        for (int i = 0; i < points; i++) {
-            double a = (i / (double) points) * (Math.PI * 2.0);
-
-            double x = wave.centerXZ.x + Math.cos(a) * r;
-            double z = wave.centerXZ.z + Math.sin(a) * r;
-
-            w.spawnParticles(ParticleTypes.SNOWFLAKE, x, y, z, 1, 0.02, 0.01, 0.02, 0.0);
-
-            // dust
-            if ((i % 5) == 0) {
-                w.spawnParticles(ULT_BLUE_DUST, x, y + 0.02, z, 1, 0.02, 0.01, 0.02, 0.0);
-            }
-            if ((i % 9) == 0) {
-                w.spawnParticles(ULT_SHIMMER_DUST, x, y + 0.06, z, 1, 0.02, 0.01, 0.02, 0.0);
-            }
-
-            if ((i % 8) == 0) {
-                w.spawnParticles(ParticleTypes.END_ROD, x, y + 0.05, z, 1, 0, 0, 0, 0.0);
-            }
-            if ((i % 11) == 0) {
-                w.spawnParticles(ParticleTypes.ENCHANT, x, y + 0.08, z, 1, 0.02, 0.02, 0.02, 0.0);
-            }
-        }
+        IceWaveRingPayload payload = new IceWaveRingPayload(
+                wave.centerXZ.x, wave.centerXZ.z, wave.waveY, wave.radius);
+        BlockPos center = BlockPos.ofFloored(wave.centerXZ.x, wave.waveY, wave.centerXZ.z);
+        PlayerLookup.tracking(w, center).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static void applyWaveHits(ServerWorld w, UltWave wave) {
@@ -1662,20 +1428,8 @@ public class IcePower implements Power {
         List<LivingEntity> targets = w.getEntitiesByClass(LivingEntity.class, area, e -> e.isAlive() && e != caster);
 
         for (LivingEntity e : targets) {
-            Vec3d p = e.getPos();
-            // Blowing gusts swirling around the entity
-            for (int i = 0; i < 3; i++) {
-                double ox = (w.random.nextDouble() - 0.5) * 1.5;
-                double oz = (w.random.nextDouble() - 0.5) * 1.5;
-                double oy = w.random.nextDouble() * e.getHeight();
-
-                // Wind-blown particles with horizontal velocity
-                w.spawnParticles(ParticleTypes.SNOWFLAKE, p.x + ox, p.y + oy, p.z + oz, 1, 0.5, 0.1, 0.5, 0.05);
-
-                if (w.random.nextBoolean()) {
-                    w.spawnParticles(ParticleTypes.WHITE_ASH, p.x + ox, p.y + oy, p.z + oz, 1, 0.2, 0.0, 0.2, 0.02);
-                }
-            }
+            IceSnowAroundEntityPayload payload = new IceSnowAroundEntityPayload(e.getId());
+            PlayerLookup.tracking(w, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
         }
     }
 
@@ -1712,7 +1466,8 @@ public class IcePower implements Power {
                     build.delay = 15;
                 } else if (build.step == 3) { // Place pumpkin (Vanilla triggers golem spawn)
                     w.setBlockState(build.pos.up(2), Blocks.CARVED_PUMPKIN.getDefaultState());
-                    w.spawnParticles(ParticleTypes.SNOWFLAKE, build.pos.getX()+0.5, build.pos.getY()+2, build.pos.getZ()+0.5, 20, 0.5, 0.5, 0.5, 0.05);
+                    IceSnowPayload snowmanFx = new IceSnowPayload(build.pos.getX() + 0.5, build.pos.getY() + 2, build.pos.getZ() + 0.5, 20);
+                    PlayerLookup.tracking(w, build.pos.up(2)).forEach(sp -> ServerPlayNetworking.send(sp, snowmanFx));
                     it.remove();
                 }
             }

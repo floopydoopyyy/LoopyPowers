@@ -6,13 +6,14 @@ import com.yourname.loopypowers.entity.BlackHoleEntity;
 import com.yourname.loopypowers.entity.ModEntities;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.particle.DustParticleEffect;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -21,10 +22,11 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
-import org.joml.Vector3f;
-import java.util.Iterator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class CosmicPower implements Power {
@@ -32,7 +34,6 @@ public class CosmicPower implements Power {
     /* ============================================================
        STATE STORAGE
        ============================================================ */
-    // Map structure: Attacker UUID -> (Target UUID -> FateInstance)
     private static final Map<UUID, Map<UUID, FateInstance>> ACTIVE_FATES = new HashMap<>();
     private static final Map<UUID, Integer> ACTIVE_STARS = new HashMap<>();
 
@@ -83,7 +84,7 @@ public class CosmicPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        player.getCommandTags().removeIf(tag -> tag.startsWith("cos_")); // Clean old tags
+        player.getCommandTags().removeIf(tag -> tag.startsWith("cos_"));
     }
 
     @Override
@@ -95,7 +96,6 @@ public class CosmicPower implements Power {
 
         ACTIVE_STARS.remove(player.getUuid());
 
-        // Instantly remove all targets owned by this player
         Map<UUID, FateInstance> myTargets = ACTIVE_FATES.remove(player.getUuid());
         if (myTargets != null && player.getServer() != null) {
             for (ServerWorld w : player.getServer().getWorlds()) {
@@ -106,7 +106,6 @@ public class CosmicPower implements Power {
             }
         }
 
-        // Despawn active black holes
         if (player.getServer() != null) {
             for (ServerWorld w : player.getServer().getWorlds()) {
                 for (BlackHoleEntity bh : w.getEntitiesByClass(BlackHoleEntity.class, player.getBoundingBox().expand(150), Entity::isAlive)) {
@@ -130,10 +129,8 @@ public class CosmicPower implements Power {
         ServerWorld world = player.getServerWorld();
         UUID playerId = player.getUuid();
 
-        // 1. Get ONLY the targets owned by this specific player
         Map<UUID, FateInstance> myTargets = ACTIVE_FATES.get(playerId);
 
-        // If the player has targets, process them
         if (myTargets != null && !myTargets.isEmpty()) {
             Iterator<Map.Entry<UUID, FateInstance>> it = myTargets.entrySet().iterator();
 
@@ -148,58 +145,75 @@ public class CosmicPower implements Power {
                     continue;
                 }
 
-                // Tick Immunity
                 if (fate.immuneTicks > 0) {
                     fate.immuneTicks--;
-                    if (fate.immuneTicks <= 0 && fate.storedDamage <= 0) it.remove(); // fully expired
+                    if (fate.immuneTicks <= 0 && fate.storedDamage <= 0) it.remove();
                     continue;
                 }
 
-                // Tick Melee CD
                 if (fate.meleeTimerCdTicks > 0) {
                     fate.meleeTimerCdTicks--;
                 }
 
-                // Tick Detonation
                 if (fate.detonateTicks > 0) {
                     if (fate.storedDamage > 0 && target.age % FATE_DETONATE_INTERVAL == 0) {
                         int ticks = FATE_DETONATE_TICKS / FATE_DETONATE_INTERVAL;
                         float damagePerTick = fate.storedDamage / ticks;
 
                         target.damage(ModDamageTypes.fate(world, player), damagePerTick);
-                        spawnDetonateParticles(world, target);
+
+                        // detonate tick visuals → client
+                        CosmicDetonateTickPayload dtPayload = new CosmicDetonateTickPayload(target.getId());
+                        PlayerLookup.tracking(world, target.getBlockPos()).forEach(p ->
+                                ServerPlayNetworking.send(p, dtPayload));
+
+                        if (target instanceof ServerPlayerEntity targetPlayer) {
+                            CameraShake.shakeNearby(targetPlayer, 5, 10, 0.06f);
+                        }
                     }
 
                     fate.detonateTicks--;
                     if (fate.detonateTicks <= 0) {
                         fate.storedDamage = 0;
                         fate.immuneTicks = FATE_IMMUNE_TICKS;
-                        // 1.21.1 FIXED: Wrapped in RegistryEntry
                         target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
                     }
                     continue;
                 }
 
-                // Tick Timer
                 if (fate.timerTicks > 0) {
                     fate.timerTicks--;
                     if (fate.timerTicks <= 0) {
                         fate.detonateTicks = FATE_DETONATE_TICKS;
-                        spawnDetonateStartParticles(world, target);
-                        // 1.21.1 FIXED: Wrapped in RegistryEntry
+
+                        // detonate start visuals → client
+                        double tx = target.getX(), ty = target.getY(), tz = target.getZ();
+                        CosmicDetonateStartPayload startPayload = new CosmicDetonateStartPayload(tx, ty, tz);
+                        PlayerLookup.tracking(world, target.getBlockPos()).forEach(p ->
+                                ServerPlayNetworking.send(p, startPayload));
+
+                        world.playSound(null, target.getBlockPos(),
+                                SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST,
+                                target.getSoundCategory(), 0.8f, 0.6f);
+
                         target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
                     } else {
-                        spawnFateAuraParticles(world, target, fate);
+                        // fate aura visuals → client
+                        CosmicFateAuraPayload auraPayload = new CosmicFateAuraPayload(
+                                target.getId(), fate.storedDamage, fate.timerTicks);
+                        Set<ServerPlayerEntity> auraViewers = new HashSet<>();
+                        PlayerLookup.tracking(world, target.getBlockPos()).forEach(auraViewers::add);
+                        auraViewers.add(player);
+                        auraViewers.forEach(p -> ServerPlayNetworking.send(p, auraPayload));
+
                         syncFateEffect(target, fate.timerTicks);
                     }
                 } else if (fate.storedDamage <= 0) {
-                    // If it has no timer, no immunity, no detonation, and no damage, clean it up
                     it.remove();
                 }
             }
         }
 
-        // Shooting star logic
         if (ACTIVE_STARS.containsKey(playerId)) {
             int ticks = ACTIVE_STARS.get(playerId) - 1;
             if (ticks <= 0) {
@@ -236,7 +250,6 @@ public class CosmicPower implements Power {
         float fatePortion = damageDealt * MELEE_FATE_RATIO;
         addFate(target, fatePortion, 0, attacker.getUuid());
 
-        // check if melee CD allows us to add timer
         Map<UUID, FateInstance> playerFates = ACTIVE_FATES.get(attacker.getUuid());
         if (playerFates != null) {
             FateInstance fate = playerFates.get(target.getUuid());
@@ -252,7 +265,6 @@ public class CosmicPower implements Power {
         FateInstance fate = null;
         UUID previousOwner = null;
 
-        // Find if this target already has fate applied by ANY player
         for (Map.Entry<UUID, Map<UUID, FateInstance>> entry : ACTIVE_FATES.entrySet()) {
             if (entry.getValue().containsKey(targetId)) {
                 fate = entry.getValue().get(targetId);
@@ -265,12 +277,10 @@ public class CosmicPower implements Power {
             fate = new FateInstance();
         }
 
-        // Handle ownership transfer (if a new attacker hits an already-afflicted target)
         if (attackerUuid != null && !attackerUuid.equals(previousOwner)) {
             if (previousOwner != null) {
-                ACTIVE_FATES.get(previousOwner).remove(targetId); // Remove from old owner
+                ACTIVE_FATES.get(previousOwner).remove(targetId);
             }
-            // Add to new owner
             ACTIVE_FATES.computeIfAbsent(attackerUuid, k -> new HashMap<>()).put(targetId, fate);
             fate.ownerUuid = attackerUuid;
         }
@@ -280,13 +290,18 @@ public class CosmicPower implements Power {
         float currentDmg = fate.storedDamage;
         float newDmg = Math.min(currentDmg + fateDmg, FATE_DAMAGE_CAP);
 
-        boolean hitCapNow = currentDmg < FATE_DAMAGE_CAP && newDmg >= FATE_DAMAGE_CAP;
+        boolean hitCapNow   = currentDmg < FATE_DAMAGE_CAP && newDmg >= FATE_DAMAGE_CAP;
         boolean alreadyAtCap = currentDmg >= FATE_DAMAGE_CAP && fateDmg > 0;
 
         fate.storedDamage = newDmg;
 
         if ((hitCapNow || alreadyAtCap) && target.getWorld() instanceof ServerWorld world) {
-            spawnFateCapParticles(world, target);
+            // fate cap burst → client (position already includes height offset)
+            double ex = target.getX();
+            double ey = target.getY() + target.getHeight() * 0.6;
+            double ez = target.getZ();
+            PlayerLookup.tracking(world, target.getBlockPos()).forEach(p ->
+                    ServerPlayNetworking.send(p, new CosmicFateCapPayload(ex, ey, ez)));
             playFateCapSound(world, target);
         }
 
@@ -303,7 +318,6 @@ public class CosmicPower implements Power {
         UUID targetId = target.getUuid();
         FateInstance fate = null;
 
-        // Find fate instance regardless of who owns it
         for (Map<UUID, FateInstance> playerFates : ACTIVE_FATES.values()) {
             fate = playerFates.get(targetId);
             if (fate != null) break;
@@ -315,124 +329,15 @@ public class CosmicPower implements Power {
         syncFateEffect(target, fate.timerTicks);
     }
 
-    // ── Status-effect sync ────────────────────────────────────────────────────
     private static void syncFateEffect(LivingEntity entity, int timerTicks) {
-        // 1.21.1 FIXED: Wrapped in RegistryEntry
         entity.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
         if (timerTicks <= 0) return;
-
-        // 1.21.1 FIXED: Wrapped in RegistryEntry
         entity.addStatusEffect(new StatusEffectInstance(
                 Registries.STATUS_EFFECT.getEntry(ModEffects.FATE),
-                timerTicks,
-                0,
-                false,
-                false,      // hide particles
-                true        // show icon in hotbar / inventory HUD
-        ));
-    }
-
-    // ── Particle helpers ─────────────────────────────────────────────────────
-
-    private void spawnFateAuraParticles(ServerWorld world, LivingEntity entity, FateInstance fate) {
-        int starCount = MathHelper.clamp((int)fate.storedDamage, 0, 19);
-        long time     = entity.getWorld().getTime();
-
-        float  timerFraction = (float) fate.timerTicks / FATE_TIMER_MAX;
-        double speed         = 0.05 + (1.0 - timerFraction) * 0.35;
-        double angle         = time * speed;
-        double orbitRadius   = 0.8 + 0.35;
-        int    trailPoints   = (int)(3 + speed * 10);
-
-        for (int t = 0; t < trailPoints; t++) {
-            double trailAngle = angle - (t * 0.15);
-            double cx   = entity.getX() + Math.cos(trailAngle) * orbitRadius;
-            double cz   = entity.getZ() + Math.sin(trailAngle) * orbitRadius;
-            double cy   = entity.getBodyY(0.55);
-            float  size = 1.2f - (t * 0.08f);
-
-            world.spawnParticles(
-                    new DustParticleEffect(new Vector3f(1.0f, 0.5f, 0.1f), Math.max(0.4f, size)),
-                    cx, cy, cz, 1, 0, 0, 0, 0);
-        }
-
-        if (timerFraction < 0.3f) {
-            int flameCount = (int)((0.3f - timerFraction) * 20);
-            for (int i = 0; i < flameCount; i++) {
-                double randAngle = world.random.nextDouble() * Math.PI * 2;
-                double r  = orbitRadius + 0.1 + world.random.nextDouble() * 0.2;
-                double fx = entity.getX() + Math.cos(randAngle) * r;
-                double fz = entity.getZ() + Math.sin(randAngle) * r;
-                double fy = entity.getBodyY(0.55) + world.random.nextDouble() * 0.3;
-                world.spawnParticles(ParticleTypes.FLAME, fx, fy, fz, 1,
-                        0.01, 0.02, 0.01, 0.01);
-            }
-        }
-
-        if (entity.age % 3 != 0) return;
-
-        for (int i = 0; i < starCount; i++) {
-            long seed      = entity.getId() * 341873128712L + i * 132897987541L;
-            double offsetX = ((seed >> 16) & 0xFF) / 255.0 * 2.0 - 1.0;
-            double offsetY = ((seed >> 8)  & 0xFF) / 255.0;
-            double offsetZ = ((seed)       & 0xFF) / 255.0 * 2.0 - 1.0;
-            world.spawnParticles(ParticleTypes.WHITE_ASH,
-                    entity.getX() + offsetX * 0.8,
-                    entity.getBodyY(offsetY * 1.2),
-                    entity.getZ() + offsetZ * 0.8,
-                    1, 0.01, 0.02, 0.01, 0.001);
-        }
-    }
-
-    private void spawnDetonateStartParticles(ServerWorld world, LivingEntity entity) {
-        Vec3d pos = entity.getPos();
-        world.spawnParticles(ParticleTypes.FLASH,
-                pos.x, pos.y + 1, pos.z, 3, 0.2, 0.2, 0.2, 0);
-        for (int i = 0; i < 25; i++) {
-            double vx = (world.random.nextDouble() - 0.5) * 0.6;
-            double vy = world.random.nextDouble() * 0.6;
-            double vz = (world.random.nextDouble() - 0.5) * 0.6;
-            world.spawnParticles(ParticleTypes.END_ROD,
-                    pos.x, pos.y + 1, pos.z, 1, vx, vy, vz, 0.1);
-        }
-
-        // FIXED: Reverted back to just SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST
-        world.playSound(null, entity.getBlockPos(),
-                SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST,
-                entity.getSoundCategory(), 0.8f, 0.6f);
-    }
-
-    private void spawnDetonateParticles(ServerWorld world, LivingEntity entity) {
-        if (entity.age % 2 != 0) return;
-        Vec3d pos = entity.getPos();
-        for (int i = 0; i < 6; i++) {
-            double a = world.getTime() * 0.3 + i;
-            double x = pos.x + Math.cos(a) * 0.8;
-            double z = pos.z + Math.sin(a) * 0.8;
-            double y = pos.y + 0.8;
-            world.spawnParticles(ParticleTypes.ELECTRIC_SPARK, x, y, z, 1,
-                    (pos.x - x) * 0.2, 0.02, (pos.z - z) * 0.2, 0);
-        }
-
-        if (entity instanceof ServerPlayerEntity targetPlayer) {
-            CameraShake.shakeNearby(targetPlayer, 5, 10, 0.06f);
-        }
-    }
-
-    private static void spawnFateCapParticles(ServerWorld world, LivingEntity entity) {
-        Vec3d pos = entity.getPos().add(0, entity.getHeight() * 0.6, 0);
-        for (int i = 0; i < 40; i++) {
-            double a     = world.random.nextDouble() * Math.PI * 2;
-            double speed = 0.4 + world.random.nextDouble() * 0.6;
-            world.spawnParticles(ParticleTypes.END_ROD, pos.x, pos.y, pos.z, 1,
-                    Math.cos(a) * speed,
-                    (world.random.nextDouble() - 0.3) * 0.6,
-                    Math.sin(a) * speed, 0.05);
-        }
+                timerTicks, 0, false, false, true));
     }
 
     private static void playFateCapSound(ServerWorld world, LivingEntity entity) {
-        // FIXED: Reverted back to just SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE
         world.playSound(null, entity.getBlockPos(),
                 SoundEvents.BLOCK_RESPAWN_ANCHOR_CHARGE,
                 entity.getSoundCategory(), 0.8f, 1.8f);
@@ -459,7 +364,16 @@ public class CosmicPower implements Power {
             end = blockHit.getPos();
         }
 
-        spawnCosmicRayParticles(world, origin, end);
+        // ray beam → client
+        {
+            double sx = origin.x, sy = origin.y, sz = origin.z;
+            double ex = end.x, ey = end.y, ez = end.z;
+            CosmicRayPayload rayPayload = new CosmicRayPayload(sx, sy, sz, ex, ey, ez);
+            Set<ServerPlayerEntity> viewers = new HashSet<>();
+            PlayerLookup.tracking(world, player.getBlockPos()).forEach(viewers::add);
+            viewers.add(player);
+            viewers.forEach(p -> ServerPlayNetworking.send(p, rayPayload));
+        }
 
         LivingEntity firstTarget = getEntityOnBeam(world, player, origin, end);
 
@@ -474,14 +388,13 @@ public class CosmicPower implements Power {
             e.damage(ModDamageTypes.cosmicRay(world, player), RAY_DIRECT_DAMAGE);
             addFate(e, RAY_FATE_STORE, RAY_TIMER_ADD, player.getUuid());
 
+            // per-entity hit spark → client
             Vec3d hitPos = hit.get();
-            world.spawnParticles(ParticleTypes.FLASH,
-                    hitPos.x, hitPos.y, hitPos.z, 1, 0.05, 0.05, 0.05, 0);
-            world.spawnParticles(ParticleTypes.END_ROD,
-                    hitPos.x, hitPos.y, hitPos.z, 3, 0.2, 0.2, 0.2, 0.02);
+            double hx = hitPos.x, hy = hitPos.y, hz = hitPos.z;
+            PlayerLookup.tracking(world, e.getBlockPos()).forEach(p ->
+                    ServerPlayNetworking.send(p, new CosmicRayHitPayload(hx, hy, hz)));
         }
 
-        // FIXED: Reverted back to just SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_FIREWORK_ROCKET_BLAST,
                 player.getSoundCategory(), 0.4f, 1.6f);
@@ -492,47 +405,14 @@ public class CosmicPower implements Power {
         player.swingHand(Hand.MAIN_HAND, true);
 
         if (firstTarget != null) {
+            // first-target impact → client
             Vec3d hitPos = firstTarget.getBoundingBox().getCenter();
-            world.spawnParticles(ParticleTypes.FLASH,
-                    hitPos.x, hitPos.y, hitPos.z, 2, 0.1, 0.1, 0.1, 0);
-            for (int i = 0; i < 8; i++) {
-                world.spawnParticles(ParticleTypes.END_ROD,
-                        hitPos.x, hitPos.y, hitPos.z, 1,
-                        (world.random.nextDouble() - 0.5) * 0.4,
-                        world.random.nextDouble() * 0.3,
-                        (world.random.nextDouble() - 0.5) * 0.4, 0.05);
-            }
-        }
-    }
-
-    private void spawnCosmicRayParticles(ServerWorld world, Vec3d from, Vec3d to) {
-        Vec3d dir  = to.subtract(from);
-        double len = dir.length();
-        Vec3d step = dir.normalize().multiply(0.25);
-        int count  = (int)(len / 0.25);
-        Vec3d pos  = from;
-
-        for (int i = 0; i < count; i++) {
-            double angle  = i * 0.4;
-            double spiral = 0.08;
-            double x = pos.x + Math.cos(angle) * spiral;
-            double y = pos.y;
-            double z = pos.z + Math.sin(angle) * spiral;
-
-            world.spawnParticles(
-                    new DustParticleEffect(new Vector3f(0.4f, 0.0f, 0.6f), 1.1f),
-                    x, y, z, 1, 0, 0, 0, 0);
-
-            if (i % 2 == 0) {
-                world.spawnParticles(ParticleTypes.SMOKE, x, y, z, 1,
-                        0.01, 0.01, 0.01, 0.01);
-            }
-            if (world.random.nextFloat() < 0.25f) {
-                world.spawnParticles(ParticleTypes.END_ROD, x, y, z, 1,
-                        0.02, 0.02, 0.02, 0.01);
-            }
-
-            pos = pos.add(step);
+            double hx = hitPos.x, hy = hitPos.y, hz = hitPos.z;
+            CosmicRayImpactPayload impactPayload = new CosmicRayImpactPayload(hx, hy, hz);
+            Set<ServerPlayerEntity> impactViewers = new HashSet<>();
+            PlayerLookup.tracking(world, firstTarget.getBlockPos()).forEach(impactViewers::add);
+            impactViewers.add(player);
+            impactViewers.forEach(p -> ServerPlayNetworking.send(p, impactPayload));
         }
     }
 
@@ -559,7 +439,16 @@ public class CosmicPower implements Power {
 
     private void handleShootingStar(ServerPlayerEntity player) {
         ServerWorld world = player.getServerWorld();
-        spawnStarTrailParticles(world, player);
+
+        // trail → client
+        {
+            double px = player.getX(), py = player.getY(), pz = player.getZ();
+            CosmicStarTrailPayload trailPayload = new CosmicStarTrailPayload(px, py, pz);
+            Set<ServerPlayerEntity> viewers = new HashSet<>();
+            PlayerLookup.tracking(world, player.getBlockPos()).forEach(viewers::add);
+            viewers.add(player);
+            viewers.forEach(p -> ServerPlayNetworking.send(p, trailPayload));
+        }
 
         Vec3d velocity = player.getVelocity();
 
@@ -590,7 +479,15 @@ public class CosmicPower implements Power {
             reduceFateTimer(e, STAR_TIMER_REDUCTION);
         }
 
-        spawnSlamParticles(world, slamPos);
+        // slam impact → client
+        {
+            double sx = slamPos.x, sy = slamPos.y, sz = slamPos.z;
+            CosmicSlamPayload slamPayload = new CosmicSlamPayload(sx, sy, sz);
+            Set<ServerPlayerEntity> viewers = new HashSet<>();
+            PlayerLookup.tracking(world, player.getBlockPos()).forEach(viewers::add);
+            viewers.add(player);
+            viewers.forEach(p -> ServerPlayNetworking.send(p, slamPayload));
+        }
 
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.ENTITY_GENERIC_EXPLODE.value(),
@@ -599,29 +496,6 @@ public class CosmicPower implements Power {
         player.setVelocity(0, 0, 0);
         player.velocityModified = true;
         ACTIVE_STARS.remove(player.getUuid());
-    }
-
-    private void spawnStarTrailParticles(ServerWorld world, ServerPlayerEntity player) {
-        Vec3d pos = player.getPos();
-        for (int i = 0; i < 3; i++) {
-            world.spawnParticles(ParticleTypes.END_ROD,
-                    pos.x, pos.y + 0.5, pos.z, 1,
-                    (world.random.nextDouble() - 0.5) * 0.2,
-                    0.05,
-                    (world.random.nextDouble() - 0.5) * 0.2,
-                    0.02);
-        }
-    }
-
-    private void spawnSlamParticles(ServerWorld world, Vec3d pos) {
-        for (int i = 0; i < 30; i++) {
-            double angle = (Math.PI * 2) * i / 30;
-            world.spawnParticles(ParticleTypes.END_ROD,
-                    pos.x, pos.y + 0.1, pos.z, 1,
-                    Math.cos(angle) * 0.4, 0.1, Math.sin(angle) * 0.4, 0.05);
-        }
-        world.spawnParticles(ParticleTypes.FLASH,
-                pos.x, pos.y + 0.5, pos.z, 3, 0.2, 0.2, 0.2, 0);
     }
 
     /* ============================================================
@@ -641,7 +515,6 @@ public class CosmicPower implements Power {
         bh.setTravelDirection(lookDir);
         world.spawnEntity(bh);
 
-        // FIXED: Reverted back to just SoundEvents.BLOCK_PORTAL_AMBIENT
         world.playSound(null, player.getBlockPos(),
                 SoundEvents.BLOCK_PORTAL_AMBIENT,
                 player.getSoundCategory(), 1.2f, 0.4f);
