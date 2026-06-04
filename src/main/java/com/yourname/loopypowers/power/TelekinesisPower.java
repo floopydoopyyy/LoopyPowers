@@ -2,32 +2,26 @@ package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.FallingBlockEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.particle.DustParticleEffect;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
-import org.joml.Vector3f;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.FallingBlockEntity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.server.world.ServerWorld;
-import java.util.ArrayList;
-import java.util.Set;
-import java.util.HashSet;
+
+import java.util.*;
 
 public class TelekinesisPower implements Power {
 
@@ -72,193 +66,70 @@ public class TelekinesisPower implements Power {
        CONSTANTS
        ============================================================ */
 
-    // ── Passive — Forceful Strikes ──────────────────────────────
+    // ── Passive ──────────────────────────────────────────────────
     private static final double PASSIVE_KB_MULT     = 1.8;
     private static final double PASSIVE_KB_VERTICAL = 0.2;
 
     // ── Primary — Yank ──────────────────────────────────────────
-    private static final double YANK_RANGE          = 12.0;
-    private static final double YANK_CONE_DOT       = 0.6;
-    private static final double YANK_STRENGTH       = 0.9;
-    private static final double YANK_VERTICAL       = 0.3;
+    private static final double YANK_RANGE    = 12.0;
+    private static final double YANK_CONE_DOT = 0.6;
+    private static final double YANK_STRENGTH = 0.9;
+    private static final double YANK_VERTICAL = 0.3;
 
-    // ── Secondary Suspend / throw phase ─────────────────────────────
-    private static final int    SUSPEND_TICKS         = 50;
-    private static final double SUSPEND_FLOAT_VEL     = 0.05;
-    private static final int    THROW_READY_TICKS     = 45;
-    private static final double THROW_SCAN_RANGE      = 14.0;
-    private static final double THROW_SCAN_WIDTH      = 2.5;
-    private static final double THROW_SPEED_H         = 1.5;
-    private static final double THROW_SPEED_V         = 0.6;
-    private static final double THROW_RELEASE_RANGE   = 12.0;
+    // ── Secondary ────────────────────────────────────────────────
+    private static final int    SUSPEND_TICKS      = 50;
+    private static final double SUSPEND_FLOAT_VEL  = 0.05;
+    private static final int    THROW_READY_TICKS  = 45;
+    private static final double THROW_SCAN_RANGE   = 14.0;
+    private static final double THROW_SCAN_WIDTH   = 2.5;
+    private static final double THROW_SPEED_H      = 1.5;
+    private static final double THROW_SPEED_V      = 0.6;
+    private static final double THROW_RELEASE_RANGE = 12.0;
 
-    // ── Choke phase ──────────────────────
-    private static final int    CHOKE_TICKS           = 60;
-    private static final int    CHOKE_DAMAGE_INTERVAL = 10;
-    private static final float  CHOKE_DAMAGE_PER_TICK = 2.0f;
-    private static final double CHOKE_SQUEEZE_VEL     = -0.01;
+    // ── Choke ────────────────────────────────────────────────────
+    private static final int    CHOKE_TICKS            = 60;
+    private static final int    CHOKE_DAMAGE_INTERVAL  = 10;
+    private static final float  CHOKE_DAMAGE_PER_TICK  = 2.0f;
+    private static final double CHOKE_SQUEEZE_VEL      = -0.01;
     private static final double CHOKE_ORBIT_RADIUS_START = 0.5;
     private static final double CHOKE_ORBIT_RADIUS_END   = 0.2;
 
     // EGG
-    private static final int    QUOTE_CHANCE           = 450;
+    private static final int QUOTE_CHANCE = 450;
 
-    // ── Impact system ──
-    private static final int    TK_AIRBORNE_TICKS   = 40;
-
-    private static final double IMPACT_MIN_SPEED_H  = 0.6;
-    private static final double IMPACT_MIN_SPEED_V  = 0.7;
-
+    // ── Impact ───────────────────────────────────────────────────
+    private static final int    TK_AIRBORNE_TICKS  = 40;
+    private static final double IMPACT_MIN_SPEED_H = 0.6;
+    private static final double IMPACT_MIN_SPEED_V = 0.7;
     private static final float  IMPACT_WALL_DAMAGE  = 16.0f;
     private static final float  IMPACT_WALL_SCALE   = 2.5f;
-
     private static final float  IMPACT_FLOOR_DAMAGE = 9.5f;
     private static final float  IMPACT_FLOOR_SCALE  = 1.8f;
 
-    // ── Ultimate ──────────────────────────────────
-    private static final int    DEBRIS_MAX_BLOCKS            = 10;
-    private static final double DEBRIS_HARVEST_RADIUS        = 10.0;
-    private static final int    DEBRIS_ORBIT_TICKS           = 260;
-    private static final double DEBRIS_ORBIT_RADIUS          = 4.5;
-    private static final double DEBRIS_ORBIT_RADIUS_INNER    = 2.5;
-    private static final double DEBRIS_ORBIT_SPEED           = 0.045;
-    private static final double DEBRIS_ORBIT_SPEED_INNER     = 0.08;
-    private static final double DEBRIS_PULL_RADIUS           = 12.0;
-    private static final double DEBRIS_PULL_STRENGTH         = 0.07;
-    private static final float  DEBRIS_PULL_DAMAGE           = 0.1f;
-    private static final int    DEBRIS_THROW_COOLDOWN        = 8;
-    private static final int    DEBRIS_THROW_COUNT           = 5;
-    private static final float  DEBRIS_THROW_DAMAGE          = 13.0f;
-    private static final double DEBRIS_THROW_SPEED           = 2.4;
-    private static final double DEBRIS_THROW_SPREAD          = 0.3;
+    // ── Ultimate ─────────────────────────────────────────────────
+    private static final int    DEBRIS_MAX_BLOCKS           = 10;
+    private static final double DEBRIS_HARVEST_RADIUS       = 10.0;
+    private static final int    DEBRIS_ORBIT_TICKS          = 260;
+    private static final double DEBRIS_ORBIT_RADIUS         = 4.5;
+    private static final double DEBRIS_ORBIT_RADIUS_INNER   = 2.5;
+    private static final double DEBRIS_ORBIT_SPEED          = 0.045;
+    private static final double DEBRIS_ORBIT_SPEED_INNER    = 0.08;
+    private static final double DEBRIS_PULL_RADIUS          = 12.0;
+    private static final double DEBRIS_PULL_STRENGTH        = 0.07;
+    private static final float  DEBRIS_PULL_DAMAGE          = 0.1f;
+    private static final int    DEBRIS_THROW_COOLDOWN       = 8;
+    private static final int    DEBRIS_THROW_COUNT          = 5;
+    private static final float  DEBRIS_THROW_DAMAGE         = 13.0f;
+    private static final double DEBRIS_THROW_SPEED          = 2.4;
+    private static final double DEBRIS_THROW_SPREAD         = 0.3;
     private static final double DEBRIS_THROW_EXPLOSION_RADIUS = 4.0;
 
-    // block regen
-    private static final int    DEBRIS_REGEN_DELAY_TICKS = 15;
-    private static final int    DEBRIS_REGEN_INTERVAL    = 20;
-    private static final int    DEBRIS_REGEN_AMOUNT      = 5;
+    private static final int DEBRIS_REGEN_DELAY_TICKS = 15;
+    private static final int DEBRIS_REGEN_INTERVAL    = 20;
+    private static final int DEBRIS_REGEN_AMOUNT      = 5;
 
     // EGG
-    private static final int    WOOLLIAM_CHANCE            = 70;
-
-    /* ============================================================
-       PARTICLE STUFF
-       ============================================================ */
-
-    private static final DustParticleEffect TK_PINK =
-            new DustParticleEffect(new Vector3f(1.0f, 0.2f, 0.7f), 1.2f);
-    private static final DustParticleEffect TK_LIGHT_PINK =
-            new DustParticleEffect(new Vector3f(1.0f, 0.55f, 0.85f), 0.9f);
-    private static final DustParticleEffect TK_MAGENTA =
-            new DustParticleEffect(new Vector3f(0.85f, 0.0f, 0.5f), 1.5f);
-    private static final DustParticleEffect TK_PINK_LARGE =
-            new DustParticleEffect(new Vector3f(1.0f, 0.35f, 0.75f), 2.2f);
-    private static final DustParticleEffect TK_DARK_PINK =
-            new DustParticleEffect(new Vector3f(0.6f, 0.0f, 0.35f), 1.8f);
-
-    private static void spawnImpactRing(ServerWorld world, Vec3d pos, int count, double radius) {
-        for (int i = 0; i < count; i++) {
-            double angle = Math.PI * 2.0 * i / count;
-            world.spawnParticles(TK_MAGENTA,
-                    pos.x, pos.y + 0.1, pos.z,
-                    1, Math.cos(angle) * radius, 0.08, Math.sin(angle) * radius, 0.04);
-        }
-        world.spawnParticles(TK_PINK, pos.x, pos.y + 0.5, pos.z, 6, 0.3, 0.3, 0.3, 0.05);
-    }
-
-    private static void spawnSuspendAura(ServerWorld world, LivingEntity entity, long time) {
-        double radius = 0.7;
-        for (int i = 0; i < 6; i++) {
-            double angle = (time * 0.12) + (i * Math.PI * 2.0 / 6);
-            world.spawnParticles(TK_PINK,
-                    entity.getX() + Math.cos(angle) * radius,
-                    entity.getBodyY(0.6),
-                    entity.getZ() + Math.sin(angle) * radius,
-                    1, 0, 0.02, 0, 0);
-        }
-        if (time % 3 == 0) {
-            world.spawnParticles(TK_LIGHT_PINK,
-                    entity.getX(), entity.getBodyY(0.5), entity.getZ(),
-                    2, 0.25, 0.1, 0.25, 0.01);
-        }
-    }
-
-    private static void spawnChokeAura(ServerWorld world, LivingEntity entity, long time, float chokeProgress) {
-        double radius = CHOKE_ORBIT_RADIUS_START
-                + (CHOKE_ORBIT_RADIUS_END - CHOKE_ORBIT_RADIUS_START) * chokeProgress;
-        double spinSpeed = 0.12 + chokeProgress * 0.30;
-        int points = 8;
-
-        for (int i = 0; i < points; i++) {
-            double angle = (time * spinSpeed) + (i * Math.PI * 2.0 / points);
-            double x = entity.getX() + Math.cos(angle) * radius;
-            double z = entity.getZ() + Math.sin(angle) * radius;
-            double y = entity.getBodyY(0.3 + chokeProgress * 0.4);
-
-            world.spawnParticles(TK_DARK_PINK, x, y, z, 1, 0, 0.01, 0, 0);
-        }
-
-        if (chokeProgress > 0.5f) {
-            double innerRadius = radius * 0.4;
-            for (int i = 0; i < 4; i++) {
-                double angle = -(time * spinSpeed * 1.5) + (i * Math.PI / 2.0);
-                world.spawnParticles(TK_MAGENTA,
-                        entity.getX() + Math.cos(angle) * innerRadius,
-                        entity.getBodyY(0.5),
-                        entity.getZ() + Math.sin(angle) * innerRadius,
-                        1, 0, 0.02, 0, 0);
-            }
-        }
-
-        if (time % 2 == 0) {
-            world.spawnParticles(TK_DARK_PINK,
-                    entity.getX(), entity.getBodyY(0.8), entity.getZ(),
-                    2, 0.15, 0.08, 0.15, 0.03);
-        }
-    }
-
-    private static void spawnBeam(ServerWorld world, Vec3d from, Vec3d to) {
-        Vec3d dir = to.subtract(from);
-        int steps = (int)(dir.length() / 0.35);
-        Vec3d step = dir.normalize().multiply(0.35);
-        Vec3d pos = from;
-        for (int i = 0; i < steps; i++) {
-            if (i % 2 == 0) world.spawnParticles(TK_PINK, pos.x, pos.y, pos.z, 1, 0.03, 0.03, 0.03, 0);
-            if (world.random.nextFloat() < 0.2f) world.spawnParticles(TK_LIGHT_PINK, pos.x, pos.y, pos.z, 1, 0.05, 0.05, 0.05, 0.01);
-            pos = pos.add(step);
-        }
-    }
-
-    private static void spawnSlamImpact(ServerWorld world, Vec3d pos) {
-        spawnImpactRing(world, pos, 24, 0.5);
-        for (int i = 0; i < 20; i++) {
-            double angle = Math.PI * 2.0 * i / 20;
-            world.spawnParticles(TK_PINK_LARGE,
-                    pos.x + Math.cos(angle) * 1.5, pos.y + 0.1, pos.z + Math.sin(angle) * 1.5,
-                    1, Math.cos(angle) * 0.15, 0.05, Math.sin(angle) * 0.15, 0.02);
-        }
-        world.spawnParticles(TK_MAGENTA, pos.x, pos.y + 0.3, pos.z, 12, 0.5, 0.4, 0.5, 0.08);
-        world.spawnParticles(ParticleTypes.END_ROD, pos.x, pos.y + 0.5, pos.z, 8, 0.4, 0.3, 0.4, 0.06);
-    }
-
-    private static void spawnWallImpact(ServerWorld world, Vec3d pos) {
-        spawnImpactRing(world, pos, 18, 0.4);
-        world.spawnParticles(TK_MAGENTA, pos.x, pos.y + 0.5, pos.z, 10, 0.4, 0.4, 0.4, 0.07);
-        world.spawnParticles(TK_PINK_LARGE, pos.x, pos.y + 0.3, pos.z, 5, 0.3, 0.3, 0.3, 0.04);
-
-        for (int i = 0; i < 12; i++) {
-            double angle = world.random.nextDouble() * Math.PI * 2;
-            double speed = 0.1 + world.random.nextDouble() * 0.2;
-            world.spawnParticles(TK_DARK_PINK,
-                    pos.x, pos.y + 0.5, pos.z,
-                    1, Math.cos(angle) * speed, (world.random.nextDouble() - 0.3) * speed, Math.sin(angle) * speed, 0.01);
-        }
-    }
-
-    private static void spawnFloorImpact(ServerWorld world, Vec3d pos) {
-        spawnImpactRing(world, pos, 12, 0.35);
-        world.spawnParticles(TK_PINK, pos.x, pos.y + 0.2, pos.z, 5, 0.3, 0.1, 0.3, 0.04);
-    }
+    private static final int WOOLLIAM_CHANCE = 70;
 
     /* ============================================================
        ESSENTIAL
@@ -350,17 +221,17 @@ public class TelekinesisPower implements Power {
             TKVictimState vState = entry.getValue();
 
             boolean ownsSuspend = player.getUuid().equals(vState.suspendOwner);
-            boolean ownsImpact = player.getUuid().equals(vState.impactOwner);
+            boolean ownsImpact  = player.getUuid().equals(vState.impactOwner);
 
             if (!ownsSuspend && !ownsImpact) continue;
 
             Entity ent = world.getEntity(entry.getKey());
             if (!(ent instanceof LivingEntity le) || !le.isAlive()) {
                 if (ownsSuspend) { vState.suspendTicks = 0; vState.chokeTicks = 0; vState.suspendOwner = null; }
-                if (ownsImpact) { vState.airborneTicks = 0; vState.impactOwner = null; vState.prevVelocity = null; }
+                if (ownsImpact)  { vState.airborneTicks = 0; vState.impactOwner = null; vState.prevVelocity = null; }
             } else {
-                if (ownsSuspend) handleSuspendAndChoke(le, world, vState);
-                if (ownsImpact) handleImpactDamage(le, world, vState);
+                if (ownsSuspend) handleSuspendAndChoke(player, le, world, vState);
+                if (ownsImpact)  handleImpactDamage(player, le, world, vState);
             }
 
             if (vState.suspendTicks <= 0 && vState.chokeTicks <= 0 && vState.airborneTicks <= 0) {
@@ -385,9 +256,8 @@ public class TelekinesisPower implements Power {
 
         markForImpactTracking(target, target.getVelocity(), attacker.getUuid());
 
-        ServerWorld world = attacker.getServerWorld();
-        spawnImpactRing(world, target.getPos(), 10, 0.3);
-        world.spawnParticles(TK_LIGHT_PINK, target.getX(), target.getBodyY(0.7), target.getZ(), 4, 0.2, 0.3, 0.2, 0.03);
+        TKPassiveHitPayload fx = new TKPassiveHitPayload(target.getId());
+        PlayerLookup.tracking(attacker.getServerWorld(), target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
     }
 
     private void markForImpactTracking(LivingEntity entity, Vec3d launchVelocity, UUID attackerUuid) {
@@ -397,7 +267,7 @@ public class TelekinesisPower implements Power {
         vState.prevVelocity = launchVelocity;
     }
 
-    private void handleImpactDamage(LivingEntity entity, ServerWorld world, TKVictimState vState) {
+    private void handleImpactDamage(ServerPlayerEntity player, LivingEntity entity, ServerWorld world, TKVictimState vState) {
         if (vState.airborneTicks <= 0) return;
 
         vState.airborneTicks--;
@@ -410,31 +280,31 @@ public class TelekinesisPower implements Power {
             double currH = Math.sqrt(curr.x * curr.x + curr.z * curr.z);
 
             boolean wallStopped = prevH > IMPACT_MIN_SPEED_H && currH < prevH * 0.35 && entity.horizontalCollision;
-            boolean floorHit = prev.y < -IMPACT_MIN_SPEED_V && entity.isOnGround();
+            boolean floorHit    = prev.y < -IMPACT_MIN_SPEED_V && entity.isOnGround();
 
             Entity attacker = resolveOwner(vState.impactOwner, world);
 
             if (wallStopped) {
                 float damage = IMPACT_WALL_DAMAGE + (float)(prevH - IMPACT_MIN_SPEED_H) * IMPACT_WALL_SCALE;
                 entity.damage(ModDamageTypes.wallCollision(world, attacker), damage);
-                spawnWallImpact(world, entity.getPos().add(0, 0.8, 0));
-                world.playSound(null, entity.getBlockPos(), SoundEvents.BLOCK_STONE_HIT, entity.getSoundCategory(), 0.9f, 0.7f);
 
-                vState.airborneTicks = 0;
-                vState.prevVelocity = null;
-                vState.impactOwner = null;
+                TKWallImpactPayload fx = new TKWallImpactPayload(entity.getId());
+                PlayerLookup.tracking(world, entity.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
+
+                world.playSound(null, entity.getBlockPos(), SoundEvents.BLOCK_STONE_HIT, entity.getSoundCategory(), 0.9f, 0.7f);
+                vState.airborneTicks = 0; vState.prevVelocity = null; vState.impactOwner = null;
                 return;
             }
 
             if (floorHit) {
                 float damage = IMPACT_FLOOR_DAMAGE + (float)(-prev.y - IMPACT_MIN_SPEED_V) * IMPACT_FLOOR_SCALE;
                 entity.damage(ModDamageTypes.wallCollision(world, attacker), damage);
-                spawnFloorImpact(world, entity.getPos());
-                world.playSound(null, entity.getBlockPos(), SoundEvents.BLOCK_STONE_FALL, entity.getSoundCategory(), 0.8f, 0.9f);
 
-                vState.airborneTicks = 0;
-                vState.prevVelocity = null;
-                vState.impactOwner = null;
+                TKFloorImpactPayload fx = new TKFloorImpactPayload(entity.getId());
+                PlayerLookup.tracking(world, entity.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
+
+                world.playSound(null, entity.getBlockPos(), SoundEvents.BLOCK_STONE_FALL, entity.getSoundCategory(), 0.8f, 0.9f);
+                vState.airborneTicks = 0; vState.prevVelocity = null; vState.impactOwner = null;
                 return;
             }
         }
@@ -456,8 +326,10 @@ public class TelekinesisPower implements Power {
         ServerWorld world = player.getServerWorld();
         Vec3d origin = player.getEyePos();
         Vec3d look   = player.getRotationVec(1.0f);
+        Vec3d end    = origin.add(look.multiply(YANK_RANGE));
 
-        spawnBeam(world, origin, origin.add(look.multiply(YANK_RANGE)));
+        TKBeamPayload beam = new TKBeamPayload(origin.x, origin.y, origin.z, end.x, end.y, end.z);
+        sendToViewers(world, player, beam);
 
         boolean hitAnything = false;
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class,
@@ -473,14 +345,14 @@ public class TelekinesisPower implements Power {
             e.velocityModified = true;
 
             markForImpactTracking(e, launchVel, player.getUuid());
-            spawnImpactRing(world, e.getPos(), 8, 0.25);
+
+            TKYankTargetPayload fx = new TKYankTargetPayload(e.getId());
+            PlayerLookup.tracking(world, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
             hitAnything = true;
         }
 
-        world.playSound(null, player.getBlockPos(),
-                ModSounds.YANK, player.getSoundCategory(), 0.6f, 1.2f);
-        if (hitAnything) world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_ILLUSIONER_CAST_SPELL, player.getSoundCategory(), 0.4f, 1.5f);
+        world.playSound(null, player.getBlockPos(), ModSounds.YANK, player.getSoundCategory(), 0.6f, 1.2f);
+        if (hitAnything) world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ILLUSIONER_CAST_SPELL, player.getSoundCategory(), 0.4f, 1.5f);
 
         player.swingHand(Hand.MAIN_HAND, true);
     }
@@ -496,7 +368,8 @@ public class TelekinesisPower implements Power {
         Vec3d look   = player.getRotationVec(1.0f);
         Vec3d end    = origin.add(look.multiply(THROW_SCAN_RANGE));
 
-        spawnBeam(world, origin, end);
+        TKBeamPayload beam = new TKBeamPayload(origin.x, origin.y, origin.z, end.x, end.y, end.z);
+        sendToViewers(world, player, beam);
 
         int grabbed = 0;
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class,
@@ -508,7 +381,8 @@ public class TelekinesisPower implements Power {
             vState.chokeTicks = 0;
             vState.suspendOwner = player.getUuid();
 
-            spawnImpactRing(world, e.getPos(), 10, 0.3);
+            TKGrabTargetPayload fx = new TKGrabTargetPayload(e.getId());
+            PlayerLookup.tracking(world, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
             grabbed++;
         }
 
@@ -517,17 +391,18 @@ public class TelekinesisPower implements Power {
             caster.readyThrowTicks = THROW_READY_TICKS;
         }
 
-        world.playSound(null, player.getBlockPos(),
-                ModSounds.SUSPEND, player.getSoundCategory(), 0.7f, 0.9f);
+        world.playSound(null, player.getBlockPos(), ModSounds.SUSPEND, player.getSoundCategory(), 0.7f, 0.9f);
     }
 
-    private void handleSuspendAndChoke(LivingEntity e, ServerWorld world, TKVictimState vState) {
+    private void handleSuspendAndChoke(ServerPlayerEntity player, LivingEntity e, ServerWorld world, TKVictimState vState) {
         if (vState.suspendTicks > 0) {
             vState.suspendTicks--;
             e.setVelocity(e.getVelocity().x * 0.3, SUSPEND_FLOAT_VEL, e.getVelocity().z * 0.3);
             e.velocityModified = true;
             e.addStatusEffect(new StatusEffectInstance(net.minecraft.entity.effect.StatusEffects.SLOWNESS, 5, 4, true, false, false));
-            spawnSuspendAura(world, e, world.getTime());
+
+            TKSuspendAuraPayload fx = new TKSuspendAuraPayload(e.getId(), world.getTime());
+            PlayerLookup.tracking(world, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
 
             if (vState.suspendTicks <= 0) {
                 vState.chokeTicks = CHOKE_TICKS;
@@ -536,10 +411,8 @@ public class TelekinesisPower implements Power {
                 if (e instanceof ServerPlayerEntity && world.random.nextInt(QUOTE_CHANCE) == 0) {
                     Entity owner = resolveOwner(vState.suspendOwner, world);
                     if (owner instanceof ServerPlayerEntity attacker) {
-                        net.minecraft.text.Text message = net.minecraft.text.Text.literal(
-                                "<" + attacker.getName().getString() + "> I find your lack of faith... disturbing..."
-                        );
-                        world.getServer().getPlayerManager().broadcast(message, false);
+                        world.getServer().getPlayerManager().broadcast(Text.literal(
+                                "<" + attacker.getName().getString() + "> I find your lack of faith... disturbing..."), false);
                     }
                 }
             }
@@ -557,7 +430,9 @@ public class TelekinesisPower implements Power {
                 e.damage(ModDamageTypes.strangle(world, attacker), CHOKE_DAMAGE_PER_TICK * (0.5f + chokeProgress));
                 world.playSound(null, e.getBlockPos(), SoundEvents.ENTITY_PLAYER_HURT_SWEET_BERRY_BUSH, e.getSoundCategory(), 0.4f + chokeProgress * 0.3f, 0.9f);
             }
-            spawnChokeAura(world, e, world.getTime(), chokeProgress);
+
+            TKChokeAuraPayload fx = new TKChokeAuraPayload(e.getId(), world.getTime(), chokeProgress);
+            PlayerLookup.tracking(world, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
 
             if (vState.chokeTicks <= 0) {
                 vState.suspendOwner = null;
@@ -572,11 +447,7 @@ public class TelekinesisPower implements Power {
         Vec3d look = player.getRotationVec(1.0f);
         ServerWorld world = player.getServerWorld();
 
-        Vec3d throwVel = new Vec3d(
-                look.x * THROW_SPEED_H,
-                THROW_SPEED_V,
-                look.z * THROW_SPEED_H
-        );
+        Vec3d throwVel = new Vec3d(look.x * THROW_SPEED_H, THROW_SPEED_V, look.z * THROW_SPEED_H);
 
         boolean thrown = false;
 
@@ -595,19 +466,15 @@ public class TelekinesisPower implements Power {
 
                     markForImpactTracking(le, throwVel, player.getUuid());
 
-                    spawnImpactRing(world, le.getPos(), 14, 0.4);
-                    world.spawnParticles(TK_MAGENTA,
-                            le.getX(), le.getBodyY(0.5), le.getZ(),
-                            8, 0.3, 0.3, 0.3, 0.06);
+                    TKThrowPayload fx = new TKThrowPayload(le.getId());
+                    PlayerLookup.tracking(world, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
                     thrown = true;
                 }
             }
         }
 
         if (thrown) {
-            world.playSound(null, player.getBlockPos(),
-                    SoundEvents.ENTITY_ENDER_DRAGON_FLAP,
-                    player.getSoundCategory(), 0.6f, 1.4f);
+            world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDER_DRAGON_FLAP, player.getSoundCategory(), 0.6f, 1.4f);
         }
     }
 
@@ -633,39 +500,12 @@ public class TelekinesisPower implements Power {
 
         int harvested = tryHarvestBlocks(player, world, field);
 
-        for (int ring = 0; ring < 3; ring++) {
-            double ringRadius = 1.5 + ring * 2.5;
-            int points = 12 + ring * 6;
-            for (int i = 0; i < points; i++) {
-                double angle = Math.PI * 2.0 * i / points;
-                world.spawnParticles(ring % 2 == 0 ? TK_PINK_LARGE : TK_MAGENTA,
-                        player.getX() + Math.cos(angle) * ringRadius,
-                        player.getBodyY(0.5),
-                        player.getZ() + Math.sin(angle) * ringRadius,
-                        1, 0, 0.12, 0, 0.03);
-            }
-        }
+        TKDebrisActivatePayload fx = new TKDebrisActivatePayload(player.getX(), player.getBodyY(0.5), player.getZ());
+        sendToViewers(world, player, fx);
 
-        for (int i = 0; i < 20; i++) {
-            double a = world.random.nextDouble() * Math.PI * 2;
-            double r = world.random.nextDouble() * 1.5;
-            world.spawnParticles(TK_DARK_PINK,
-                    player.getX() + Math.cos(a) * r,
-                    player.getBodyY(0.3) + world.random.nextDouble() * 2.0,
-                    player.getZ() + Math.sin(a) * r,
-                    1, 0, 0.15, 0, 0.04);
-        }
-
-        world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_WARDEN_SONIC_BOOM, player.getSoundCategory(), 1.2f, 0.4f);
-
-        if (harvested > 0) {
-            world.playSound(null, player.getBlockPos(),
-                    SoundEvents.BLOCK_STONE_BREAK, player.getSoundCategory(), 1.5f, 0.6f);
-        }
-
-        world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_GENERIC_EXPLODE.value(), player.getSoundCategory(), 0.6f, 0.5f);
+        world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_WARDEN_SONIC_BOOM, player.getSoundCategory(), 1.2f, 0.4f);
+        if (harvested > 0) world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_STONE_BREAK, player.getSoundCategory(), 1.5f, 0.6f);
+        world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE.value(), player.getSoundCategory(), 0.6f, 0.5f);
     }
 
     private int tryHarvestBlocks(ServerPlayerEntity player, ServerWorld world, DebrisField field) {
@@ -701,7 +541,7 @@ public class TelekinesisPower implements Power {
             if (!wooliamSpawned && world.random.nextInt(WOOLLIAM_CHANCE) == 0) {
                 net.minecraft.entity.passive.SheepEntity sheep = net.minecraft.entity.EntityType.SHEEP.create(world);
                 if (sheep != null) {
-                    sheep.setCustomName(net.minecraft.text.Text.literal("Woolliam"));
+                    sheep.setCustomName(Text.literal("Woolliam"));
                     sheep.setNoGravity(true);
                     sheep.refreshPositionAndAngles(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0, 0);
                     world.spawnEntity(sheep);
@@ -758,8 +598,8 @@ public class TelekinesisPower implements Power {
         Vec3d playerPos = player.getPos().add(0, 1.0, 0);
         Set<UUID> toRemove = new HashSet<>();
         int total = field.orbitAngles.size();
-
         int index = 0;
+
         for (Map.Entry<UUID, Double> entry : field.orbitAngles.entrySet()) {
             UUID uuid = entry.getKey();
             Entity ent = world.getEntity(uuid);
@@ -790,11 +630,14 @@ public class TelekinesisPower implements Power {
             ent.setNoGravity(true);
             if (ent instanceof FallingBlockEntity fb) fb.timeFalling = -32768;
 
-            world.spawnParticles(isInner ? TK_MAGENTA : TK_DARK_PINK, target.x, target.y, target.z, 1, 0.04, 0.04, 0.04, 0.01);
+            TKDebrisOrbitPayload orbitFx = new TKDebrisOrbitPayload(target.x, target.y, target.z, isInner);
+            sendToViewers(world, player, orbitFx);
+
             index++;
         }
         toRemove.forEach(field.orbitAngles::remove);
 
+        // Pull nearby entities
         double contactRadius = DEBRIS_ORBIT_RADIUS_INNER * 1.2;
 
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class,
@@ -816,28 +659,14 @@ public class TelekinesisPower implements Power {
             }
 
             if (world.getTime() % 4 == 0) {
-                world.spawnParticles(TK_LIGHT_PINK,
-                        e.getX(), e.getBodyY(0.5), e.getZ(),
-                        1, pull.x * 2, pull.y * 2, pull.z * 2, 0.01);
+                TKDebrisPullPayload pullFx = new TKDebrisPullPayload(e.getId(), (float)(pull.x * 2), (float)(pull.y * 2), (float)(pull.z * 2));
+                PlayerLookup.tracking(world, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, pullFx));
             }
         }
 
-        long time = world.getTime();
-        for (int ring = 0; ring < 3; ring++) {
-            double ringR = DEBRIS_ORBIT_RADIUS_INNER + ring * 0.8;
-            double ringSpeed = 0.06 + ring * 0.02;
-            double ringDir = (ring % 2 == 0) ? 1 : -1;
-            int auraPoints = 4 + ring * 2;
-
-            for (int i = 0; i < auraPoints; i++) {
-                double a = (time * ringSpeed * ringDir) + (i * Math.PI * 2.0 / auraPoints);
-                world.spawnParticles(ring == 0 ? TK_MAGENTA : ring == 1 ? TK_PINK : TK_LIGHT_PINK,
-                        playerPos.x + Math.cos(a) * ringR,
-                        playerPos.y + Math.sin(a * 0.5) * 0.3,
-                        playerPos.z + Math.sin(a) * ringR,
-                        1, 0, 0.015, 0, 0);
-            }
-        }
+        // Rotating aura rings around player
+        TKDebrisAuraPayload auraFx = new TKDebrisAuraPayload(playerPos.x, playerPos.y, playerPos.z, world.getTime());
+        sendToViewers(world, player, auraFx);
     }
 
     private void throwDebrisProjectile(ServerPlayerEntity player, TKCasterState caster) {
@@ -851,9 +680,9 @@ public class TelekinesisPower implements Power {
             return;
         }
 
-        Vec3d look = player.getRotationVec(1.0f);
+        Vec3d look  = player.getRotationVec(1.0f);
         Vec3d right = new Vec3d(-look.z, 0, look.x).normalize();
-        Vec3d up = look.crossProduct(right).normalize();
+        Vec3d up    = look.crossProduct(right).normalize();
 
         int thrown = 0;
         Iterator<Map.Entry<UUID, Double>> it = field.orbitAngles.entrySet().iterator();
@@ -861,13 +690,11 @@ public class TelekinesisPower implements Power {
         while (it.hasNext() && thrown < DEBRIS_THROW_COUNT) {
             Map.Entry<UUID, Double> entry = it.next();
             UUID uuid = entry.getKey();
-
             Entity orbitEntity = world.getEntity(uuid);
             it.remove();
 
             if (orbitEntity != null && !orbitEntity.isRemoved()) {
                 orbitEntity.setNoGravity(false);
-
                 if (orbitEntity instanceof FallingBlockEntity fb) {
                     fb.timeFalling = 0;
                     fb.dropItem = false;
@@ -882,8 +709,8 @@ public class TelekinesisPower implements Power {
 
                 caster.thrownBlocks.put(uuid, orbitEntity.getPos());
 
-                spawnImpactRing(world, orbitEntity.getPos(), 8, 0.25);
-                world.spawnParticles(TK_MAGENTA, orbitEntity.getX(), orbitEntity.getY(), orbitEntity.getZ(), 4, 0.2, 0.2, 0.2, 0.06);
+                TKDebrisThrowPayload fx = new TKDebrisThrowPayload(orbitEntity.getX(), orbitEntity.getY(), orbitEntity.getZ());
+                sendToViewers(world, player, fx);
             }
             thrown++;
         }
@@ -913,9 +740,7 @@ public class TelekinesisPower implements Power {
 
             entry.setValue(ent.getPos());
 
-            boolean hitSomething = ent.horizontalCollision || ent.isOnGround();
-
-            if (hitSomething) {
+            if (ent.horizontalCollision || ent.isOnGround()) {
                 triggerDebrisExplosion(player, world, ent.getPos());
                 ent.discard();
                 toExplode.add(entityUuid);
@@ -927,13 +752,13 @@ public class TelekinesisPower implements Power {
 
     private void triggerDebrisExplosion(ServerPlayerEntity player, ServerWorld world, Vec3d pos) {
         for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class,
-                new net.minecraft.util.math.Box(pos, pos).expand(DEBRIS_THROW_EXPLOSION_RADIUS),
+                new Box(pos, pos).expand(DEBRIS_THROW_EXPLOSION_RADIUS),
                 en -> en.isAlive() && en != player)) {
 
             double dist = e.getPos().distanceTo(pos);
             if (dist > DEBRIS_THROW_EXPLOSION_RADIUS) continue;
 
-            float damage = DEBRIS_THROW_DAMAGE * (float) (1.0 - dist / DEBRIS_THROW_EXPLOSION_RADIUS);
+            float damage = DEBRIS_THROW_DAMAGE * (float)(1.0 - dist / DEBRIS_THROW_EXPLOSION_RADIUS);
             e.damage(ModDamageTypes.blockThrow(world, player), damage);
 
             Vec3d knockback = e.getPos().subtract(pos).normalize().multiply(0.8);
@@ -943,19 +768,10 @@ public class TelekinesisPower implements Power {
             markForImpactTracking(e, e.getVelocity(), player.getUuid());
         }
 
-        spawnSlamImpact(world, pos);
-        world.spawnParticles(ParticleTypes.EXPLOSION,
-                pos.x, pos.y + 0.5, pos.z, 3, 0.5, 0.3, 0.5, 0.1);
-        for (int i = 0; i < 15; i++) {
-            double a = world.random.nextDouble() * Math.PI * 2;
-            double r = world.random.nextDouble() * 0.8;
-            world.spawnParticles(TK_DARK_PINK,
-                    pos.x + Math.cos(a) * r, pos.y + 0.3, pos.z + Math.sin(a) * r,
-                    1, Math.cos(a) * 0.3, 0.2, Math.sin(a) * 0.3, 0.05);
-        }
+        TKDebrisExplosionPayload fx = new TKDebrisExplosionPayload(pos.x, pos.y, pos.z);
+        sendToViewers(world, player, fx);
 
-        world.playSound(null, player.getBlockPos(),
-                SoundEvents.ENTITY_GENERIC_EXPLODE.value(), player.getSoundCategory(), 0.6f, 0.5f);
+        world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_GENERIC_EXPLODE.value(), player.getSoundCategory(), 0.6f, 0.5f);
     }
 
     private void handleDebrisRegen(ServerPlayerEntity player, TKCasterState caster, DebrisField field) {
@@ -963,13 +779,11 @@ public class TelekinesisPower implements Power {
         long time = world.getTime();
 
         long idleTime = time - caster.lastSwingTime;
-
         if (idleTime < DEBRIS_REGEN_DELAY_TICKS) return;
         if (time % DEBRIS_REGEN_INTERVAL != 0) return;
         if (field.orbitAngles.size() >= DEBRIS_MAX_BLOCKS) return;
 
         int toRegen = Math.min(DEBRIS_REGEN_AMOUNT, DEBRIS_MAX_BLOCKS - field.orbitAngles.size());
-
         for (int i = 0; i < toRegen; i++) {
             spawnOrbitBlock(player, world, field);
         }
@@ -986,18 +800,23 @@ public class TelekinesisPower implements Power {
 
         field.orbitAngles.put(block.getUuid(), world.random.nextDouble() * Math.PI * 2);
 
-        world.spawnParticles(TK_MAGENTA,
-                block.getX(), block.getY(), block.getZ(),
-                6, 0.2, 0.2, 0.2, 0.05);
+        TKDebrisSpawnPayload fx = new TKDebrisSpawnPayload(block.getX(), block.getY(), block.getZ());
+        sendToViewers(world, player, fx);
 
-        world.playSound(null, player.getBlockPos(),
-                SoundEvents.BLOCK_STONE_PLACE,
-                player.getSoundCategory(), 0.4f, 1.2f);
+        world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_STONE_PLACE, player.getSoundCategory(), 0.4f, 1.2f);
     }
 
     private static Entity resolveOwner(UUID ownerUuid, ServerWorld world) {
         if (ownerUuid == null) return null;
         return world.getServer().getPlayerManager().getPlayer(ownerUuid);
+    }
+
+    private static <T extends net.minecraft.network.packet.CustomPayload> void sendToViewers(
+            ServerWorld w, ServerPlayerEntity player, T payload) {
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     /* ============================================================
@@ -1014,28 +833,9 @@ public class TelekinesisPower implements Power {
     @Override public long getSecondaryCooldownMs() { return 24_000; }
     @Override public long getUltimateCooldownMs()  { return 310_000; }
 
-    @Override
-    public String getOverviewDescription() {
-        return Text.translatable("power.loopypowers.telekinesis.description.overview").getString();
-    }
-
-    @Override
-    public String getPassiveDescription() {
-        return Text.translatable("power.loopypowers.telekinesis.description.passive").getString();
-    }
-
-    @Override
-    public String getPrimaryDescription() {
-        return Text.translatable("power.loopypowers.telekinesis.description.primary").getString();
-    }
-
-    @Override
-    public String getSecondaryDescription() {
-        return Text.translatable("power.loopypowers.telekinesis.description.secondary").getString();
-    }
-
-    @Override
-    public String getUltimateDescription() {
-        return Text.translatable("power.loopypowers.telekinesis.description.ultimate").getString();
-    }
+    @Override public String getOverviewDescription() { return Text.translatable("power.loopypowers.telekinesis.description.overview").getString(); }
+    @Override public String getPassiveDescription()  { return Text.translatable("power.loopypowers.telekinesis.description.passive").getString(); }
+    @Override public String getPrimaryDescription()  { return Text.translatable("power.loopypowers.telekinesis.description.primary").getString(); }
+    @Override public String getSecondaryDescription(){ return Text.translatable("power.loopypowers.telekinesis.description.secondary").getString(); }
+    @Override public String getUltimateDescription() { return Text.translatable("power.loopypowers.telekinesis.description.ultimate").getString(); }
 }

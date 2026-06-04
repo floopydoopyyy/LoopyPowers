@@ -153,7 +153,7 @@ public class LightningPower implements Power {
     // ring burst when fully charged — much more noticeable than before
     private static void spawnChargeReadyBurst(ServerWorld world, ServerPlayerEntity player) {
         LightningChargeReadyPayload payload = new LightningChargeReadyPayload(player.getX(), player.getY(), player.getZ());
-        PlayerLookup.tracking(world, player).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     @Override
@@ -165,7 +165,7 @@ public class LightningPower implements Power {
 
         // these appear no matter the tier
         LightningHitBasicPayload basicFx = new LightningHitBasicPayload(target.getId());
-        PlayerLookup.tracking(world, target).forEach(sp -> ServerPlayNetworking.send(sp, basicFx));
+        PlayerLookup.tracking(world, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, basicFx));
         world.playSound(null, target.getBlockPos(),
                 SoundEvents.BLOCK_REDSTONE_TORCH_BURNOUT, // sound
                 attacker.getSoundCategory(), 0.25f, 1.6f);
@@ -203,7 +203,7 @@ public class LightningPower implements Power {
         };
 
         LightningHitTierPayload tierFx = new LightningHitTierPayload(target.getId(), tier);
-        PlayerLookup.tracking(world, target).forEach(sp -> ServerPlayNetworking.send(sp, tierFx));
+        PlayerLookup.tracking(world, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, tierFx));
 
         world.playSound(null, target.getBlockPos(),
                 SoundEvents.ENTITY_LIGHTNING_BOLT_IMPACT,
@@ -253,7 +253,7 @@ public class LightningPower implements Power {
                 spawnChainTrail(world, a, b); // spawns chain effect
 
                 LightningChainHitPayload chainHitFx = new LightningChainHitPayload(next.getId());
-                PlayerLookup.tracking(world, next).forEach(sp -> ServerPlayNetworking.send(sp, chainHitFx));
+                PlayerLookup.tracking(world, next.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, chainHitFx));
 
                 current = next;
             }
@@ -267,6 +267,9 @@ public class LightningPower implements Power {
     }
 
     // Hit ring is now reproduced client-side as part of LightningHitTierPayload and LightningStormStrikePayload
+    private static void spawnHitRing(ServerWorld world, LivingEntity target, int tier) {
+        // This is handled client-side by the payload now, but kept as a no-op for compatibility
+    }
 
     private static int getChargeTier(int chargeTicks) {
         int c = MathHelper.clamp(chargeTicks, 0, MAX_CHARGE_TICKS);
@@ -364,7 +367,7 @@ public class LightningPower implements Power {
                 spawnTargetConfetti(world, target, t);
             } else {
                 LightningClapHitPayload clapHitFx = new LightningClapHitPayload(target.getId(), (float) t);
-                PlayerLookup.tracking(world, target).forEach(sp -> ServerPlayNetworking.send(sp, clapHitFx));
+                PlayerLookup.tracking(world, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, clapHitFx));
             }
         }
     }
@@ -374,7 +377,7 @@ public class LightningPower implements Power {
         Vec3d center  = player.getPos().add(0, 0.8, 0);
         LightningClapConePayload payload = new LightningClapConePayload(
                 center.x, center.y, center.z, forward.x, forward.y, forward.z);
-        PlayerLookup.tracking(world, player).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private void spawnConfetti(ServerWorld world, ServerPlayerEntity player) {
@@ -382,12 +385,12 @@ public class LightningPower implements Power {
         Vec3d center  = player.getPos().add(0, 0.8, 0);
         LightningConfettiPayload payload = new LightningConfettiPayload(
                 center.x, center.y, center.z, forward.x, forward.y, forward.z);
-        PlayerLookup.tracking(world, player).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private void spawnTargetConfetti(ServerWorld world, LivingEntity target, double t) {
         LightningTargetConfettiPayload payload = new LightningTargetConfettiPayload(target.getId(), (float) t);
-        PlayerLookup.tracking(world, target).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        PlayerLookup.tracking(world, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static final int SECONDARY_DURATION = 160;
@@ -420,13 +423,13 @@ public class LightningPower implements Power {
         boolean endRod = state.superchargeTicks % (SUPERCHARGE_AURA_INTERVAL * 5) == 0;
         LightningSuperchargeAuraPayload payload = new LightningSuperchargeAuraPayload(
                 player.getX(), player.getY(), player.getZ(), world.getTime(), spark, endRod);
-        PlayerLookup.tracking(world, player).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private void spawnSuperchargeBurst(ServerWorld world, ServerPlayerEntity player) {
         Vec3d center = player.getPos();
         LightningSuperchargeBurstPayload payload = new LightningSuperchargeBurstPayload(center.x, center.y, center.z);
-        PlayerLookup.tracking(world, player).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
 
         for (int i = 0; i < 3; i++) {
             Vec3d offset = new Vec3d(
@@ -467,7 +470,7 @@ public class LightningPower implements Power {
     private static void spawnMaelstromOpenBurst(ServerWorld world, ServerPlayerEntity player) {
         Vec3d center = player.getPos();
         LightningMaelstromOpenPayload payload = new LightningMaelstromOpenPayload(center.x, center.y, center.z);
-        PlayerLookup.tracking(world, player).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, payload));
 
         for (int i = 0; i < 5; i++) {
             spawnCosmeticLightning(world, new Vec3d(
@@ -502,7 +505,7 @@ public class LightningPower implements Power {
             for (LivingEntity e : targets) {
                 if (RNG.nextFloat() < 0.10f) {
                     LightningStormTargetAuraPayload auraFx = new LightningStormTargetAuraPayload(e.getId());
-                    PlayerLookup.tracking(world, e).forEach(sp -> ServerPlayNetworking.send(sp, auraFx));
+                    PlayerLookup.tracking(world, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, auraFx));
                 }
             }
         }
@@ -541,7 +544,7 @@ public class LightningPower implements Power {
         target.damage(ModDamageTypes.smite(caster.getWorld(), caster), STORM_DAMAGE);
 
         LightningStormStrikePayload strikeFx = new LightningStormStrikePayload(target.getId());
-        PlayerLookup.tracking(world, target).forEach(sp -> ServerPlayNetworking.send(sp, strikeFx));
+        PlayerLookup.tracking(world, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, strikeFx));
 
         world.playSound(null, target.getBlockPos(), SoundEvents.ENTITY_LIGHTNING_BOLT_IMPACT, caster.getSoundCategory(), 0.6f, 1.2f);
         CameraShake.shakeNearby(caster, 10, 15, 0.25f);

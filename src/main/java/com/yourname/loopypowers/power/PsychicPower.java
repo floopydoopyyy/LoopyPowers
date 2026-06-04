@@ -7,7 +7,10 @@ import com.yourname.loopypowers.entity.PuppetryEntity;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -17,7 +20,6 @@ import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
 import net.minecraft.network.packet.s2c.play.PositionFlag;
-import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.MinecraftServer;
@@ -31,7 +33,6 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
-import org.joml.Vector3f;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -88,32 +89,6 @@ public class PsychicPower implements Power {
     private static PsychicState getState(ServerPlayerEntity player) {
         return ACTIVE_STATES.computeIfAbsent(player.getUuid(), k -> new PsychicState());
     }
-
-    /* ============================================================
-       PARTICLE CONSTANTS (CACHED)
-       ============================================================ */
-
-    // Leech (passive)
-    private static final DustParticleEffect LEECH_DUST_MAIN  = new DustParticleEffect(new Vector3f(0.80f, 0.00f, 0.90f), 0.8f);
-    private static final DustParticleEffect LEECH_DUST_LIGHT = new DustParticleEffect(new Vector3f(1.00f, 0.40f, 0.90f), 0.5f);
-    private static final DustParticleEffect LEECH_DUST_END   = new DustParticleEffect(new Vector3f(1.00f, 0.20f, 0.80f), 1.0f);
-
-    // Compel (primary)
-    private static final DustParticleEffect COMPEL_DUST_MAIN  = new DustParticleEffect(new Vector3f(0.90f, 0.20f, 0.60f), 0.7f);
-    private static final DustParticleEffect COMPEL_DUST_LIGHT = new DustParticleEffect(new Vector3f(1.00f, 0.60f, 0.90f), 0.5f);
-
-    // Spike (secondary) — impact, aura, beam
-    private static final DustParticleEffect SPIKE_DUST_IMPACT_DARK  = new DustParticleEffect(new Vector3f(0.50f, 0.00f, 0.60f), 1.0f);
-    private static final DustParticleEffect SPIKE_DUST_IMPACT_LIGHT = new DustParticleEffect(new Vector3f(0.90f, 0.20f, 0.60f), 0.8f);
-    private static final DustParticleEffect SPIKE_DUST_AURA_MAIN    = new DustParticleEffect(new Vector3f(0.90f, 0.20f, 0.60f), 0.6f);
-    private static final DustParticleEffect SPIKE_DUST_AURA_LIGHT   = new DustParticleEffect(new Vector3f(0.50f, 0.00f, 0.60f), 0.5f);
-    private static final DustParticleEffect SPIKE_BEAM_MAIN         = new DustParticleEffect(new Vector3f(0.90f, 0.20f, 0.60f), 0.6f);
-    private static final DustParticleEffect SPIKE_BEAM_LIGHT        = new DustParticleEffect(new Vector3f(1.00f, 0.60f, 0.90f), 0.4f);
-
-    // Ultimate/Puppetry
-    private static final DustParticleEffect ULT_DUST_MAIN  = new DustParticleEffect(new Vector3f(1.00f, 0.20f, 0.80f), 0.9f);
-    private static final DustParticleEffect ULT_DUST_LIGHT = new DustParticleEffect(new Vector3f(1.00f, 0.60f, 0.90f), 0.6f);
-    private static final DustParticleEffect ULT_DUST_DARK  = new DustParticleEffect(new Vector3f(0.70f, 0.00f, 1.00f), 1.1f);
 
     /* ============================================================
        TUNING CONSTANTS
@@ -263,35 +238,16 @@ public class PsychicPower implements Power {
         ServerWorld world = attacker.getServerWorld();
 
         attacker.heal(LEECH_HEAL);
-        spawnLeechParticles(world, attacker, target);
+
+        PsychicLeechPayload leechPayload = new PsychicLeechPayload(attacker.getId(), target.getId());
+        sendToViewers(world, attacker, leechPayload);
+
         world.playSound(null, attacker.getBlockPos(),
                 SoundEvents.ENTITY_WARDEN_HEARTBEAT,
                 attacker.getSoundCategory(), 0.6f, 1.4f);
         PowerManager.reduceAllCooldowns(attacker, LEECH_CDR_MS);
 
         state.leechCd = LEECH_INTERNAL_CD;
-    }
-
-    /* ============================================================
-       PASSIVE — MIND SAP
-       ============================================================ */
-
-    private static void spawnLeechParticles(ServerWorld world, LivingEntity attacker, LivingEntity target) {
-        Vec3d from    = new Vec3d(target.getX(),   target.getBodyY(0.7),   target.getZ());
-        Vec3d to      = new Vec3d(attacker.getX(), attacker.getBodyY(0.7), attacker.getZ());
-        Vec3d step    = to.subtract(from).multiply(1.0 / 10);
-        Vec3d current = from;
-
-        for (int i = 0; i < 10; i++) {
-            double curve = Math.sin(i / 10.0 * Math.PI) * 0.15;
-            world.spawnParticles(LEECH_DUST_MAIN,  current.x, current.y - curve, current.z, 2, 0.05, 0.05, 0.05, 0.0);
-            world.spawnParticles(LEECH_DUST_LIGHT, current.x, current.y - curve, current.z, 1, 0.02, 0.02, 0.02, 0.0);
-            current = current.add(step);
-        }
-
-        world.spawnParticles(LEECH_DUST_END,
-                attacker.getX(), attacker.getBodyY(0.6), attacker.getZ(),
-                10, 0.3, 0.4, 0.3, 0.02);
     }
 
     /* ============================================================
@@ -358,7 +314,9 @@ public class PsychicPower implements Power {
                 if (dist > COMPEL_LOOK_MIN_DIST) forceLook(player, dir, COMPEL_LOOK_STRENGTH);
                 applyMovement(player, dir, dist, COMPEL_MOB_SPEED, COMPEL_PLAYER_ACCEL, COMPEL_PLAYER_MAX_SPEED, COMPEL_STOP_DISTANCE);
                 applyControlEffects(player);
-                spawnCompelParticles(w, player);
+
+                PsychicCompelAuraPayload aura = new PsychicCompelAuraPayload(player.getId());
+                sendToViewers(w, player, aura);
             }
         }
 
@@ -389,22 +347,15 @@ public class PsychicPower implements Power {
             }
             applyMovement(le, dir, distance, COMPEL_MOB_SPEED, COMPEL_PLAYER_ACCEL, COMPEL_PLAYER_MAX_SPEED, COMPEL_STOP_DISTANCE);
             applyControlEffects(le);
-            spawnCompelParticles(w, le);
+
+            PsychicCompelAuraPayload aura = new PsychicCompelAuraPayload(le.getId());
+            PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, aura));
         }
     }
 
     private static void applyControlEffects(LivingEntity entity) {
         entity.addStatusEffect(new StatusEffectInstance(
                 StatusEffects.SLOWNESS, 5, 1, true, false, false));
-    }
-
-    private static void spawnCompelParticles(ServerWorld world, LivingEntity entity) {
-        world.spawnParticles(COMPEL_DUST_MAIN,
-                entity.getX(), entity.getBodyY(0.6), entity.getZ(),
-                2, 0.2, 0.3, 0.2, 0.01);
-        world.spawnParticles(COMPEL_DUST_LIGHT,
-                entity.getX(), entity.getBodyY(0.6), entity.getZ(),
-                1, 0.3, 0.4, 0.3, 0.005);
     }
 
     /* ============================================================
@@ -430,7 +381,7 @@ public class PsychicPower implements Power {
             end = blockHit.getPos();
         }
 
-        spawnJaggedBeam(world, origin, end, SPIKE_JAGGED_SEGMENTS, SPIKE_JAGGED_OFFSET);
+        sendJaggedBeam(world, player, origin, end, SPIKE_JAGGED_SEGMENTS, (float) SPIKE_JAGGED_OFFSET);
 
         LivingEntity primaryTarget = getEntityOnBeam(world, player, origin, end);
 
@@ -450,14 +401,16 @@ public class PsychicPower implements Power {
 
         if (primaryTarget != null) {
             applySpike(state, primaryTarget);
-            spawnSpikeImpactParticles(world, primaryTarget);
+            PsychicSpikeImpactPayload impact = new PsychicSpikeImpactPayload(primaryTarget.getId());
+            PlayerLookup.tracking(world, primaryTarget.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, impact));
         }
 
         Vec3d chainOrigin = (primaryTarget != null) ? primaryTarget.getEyePos() : end;
         for (LivingEntity chain : chainTargets) {
-            spawnJaggedBeam(world, chainOrigin, chain.getEyePos(), SPIKE_CHAIN_SEGMENTS, SPIKE_JAGGED_OFFSET * 0.7);
+            sendJaggedBeam(world, player, chainOrigin, chain.getEyePos(), SPIKE_CHAIN_SEGMENTS, (float)(SPIKE_JAGGED_OFFSET * 0.7));
             applySpike(state, chain);
-            spawnSpikeImpactParticles(world, chain);
+            PsychicSpikeImpactPayload impact = new PsychicSpikeImpactPayload(chain.getId());
+            PlayerLookup.tracking(world, chain.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, impact));
             chainOrigin = chain.getEyePos();
         }
 
@@ -499,7 +452,8 @@ public class PsychicPower implements Power {
             entry.ticksLeft--;
             if (entry.ticksLeft <= 0) { it.remove(); continue; }
 
-            spawnSpikeAuraParticles(w, le);
+            PsychicSpikeAuraPayload aura = new PsychicSpikeAuraPayload(le.getId());
+            PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, aura));
 
             // Send a 15-tick subtle shake every 10 ticks to avoid network spam
             if (le instanceof ServerPlayerEntity targetPlayer && time % 10 == 0) {
@@ -510,16 +464,6 @@ public class PsychicPower implements Power {
 
     public static void shake(ServerPlayerEntity target, int ticks, float strength) {
         CameraShake.shakeNearby(target, 10.0, ticks, strength);
-    }
-
-    private static void spawnSpikeImpactParticles(ServerWorld world, LivingEntity entity) {
-        world.spawnParticles(SPIKE_DUST_IMPACT_DARK,  entity.getX(), entity.getBodyY(0.5), entity.getZ(), 20, 0.4, 0.5, 0.4, 0.03);
-        world.spawnParticles(SPIKE_DUST_IMPACT_LIGHT, entity.getX(), entity.getBodyY(0.5), entity.getZ(), 12, 0.3, 0.4, 0.3, 0.02);
-    }
-
-    private static void spawnSpikeAuraParticles(ServerWorld world, LivingEntity entity) {
-        world.spawnParticles(SPIKE_DUST_AURA_MAIN,  entity.getX(), entity.getBodyY(0.7), entity.getZ(), 2, 0.25, 0.30, 0.25, 0.01);
-        world.spawnParticles(SPIKE_DUST_AURA_LIGHT, entity.getX(), entity.getBodyY(0.4), entity.getZ(), 1, 0.20, 0.20, 0.20, 0.005);
     }
 
     /* ============================================================
@@ -605,7 +549,9 @@ public class PsychicPower implements Power {
             le.addStatusEffect(new StatusEffectInstance(
                     StatusEffects.MINING_FATIGUE, 5, 2, true, false, false));
 
-            spawnControlParticles(w, le);
+            PsychicControlAuraPayload aura = new PsychicControlAuraPayload(le.getId());
+            PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, aura));
+
             handleControlledAttacks(w, le, entry);
         }
     }
@@ -668,12 +614,6 @@ public class PsychicPower implements Power {
             }
         }
         return closest;
-    }
-
-    private static void spawnControlParticles(ServerWorld world, LivingEntity entity) {
-        world.spawnParticles(ULT_DUST_MAIN,  entity.getX(), entity.getBodyY(0.7), entity.getZ(), 4, 0.35, 0.45, 0.35, 0.02);
-        world.spawnParticles(ULT_DUST_LIGHT, entity.getX(), entity.getBodyY(0.5), entity.getZ(), 2, 0.30, 0.30, 0.30, 0.01);
-        world.spawnParticles(ULT_DUST_DARK,  entity.getX(), entity.getBodyY(0.6), entity.getZ(), 3, 0.30, 0.40, 0.30, 0.02);
     }
 
     /* ============================================================
@@ -754,32 +694,16 @@ public class PsychicPower implements Power {
        BEAM HELPERS
        ============================================================ */
 
-    private static void spawnJaggedBeam(ServerWorld world, Vec3d from, Vec3d to, int segments, double offset) {
-        Vec3d step    = to.subtract(from).multiply(1.0 / segments);
-        Vec3d beamDir = to.subtract(from).normalize();
-        Vec3d perp    = Math.abs(beamDir.y) < 0.9
-                ? new Vec3d(-beamDir.z, 0, beamDir.x).normalize()
-                : new Vec3d(1, 0, 0);
-        Vec3d perp2 = beamDir.crossProduct(perp).normalize();
-
-        Vec3d current = from;
-        Random rng = new Random(from.hashCode()); // stable seed = consistent look per cast
-
-        for (int i = 0; i < segments; i++) {
-            Vec3d next = current.add(step);
-
-            double jag  = (i % 2 == 0 ? 1 : -1) * offset * (0.5 + rng.nextDouble() * 0.5);
-            double jag2 = (i % 3 == 0 ? 1 : -1) * offset * 0.4 * rng.nextDouble();
-            Vec3d jaggedNext = next.add(perp.multiply(jag)).add(perp2.multiply(jag2));
-
-            for (int j = 0; j <= 4; j++) {
-                Vec3d pos = current.lerp(jaggedNext, j / 4.0);
-                world.spawnParticles(SPIKE_BEAM_MAIN,  pos.x, pos.y, pos.z, 1, 0.00,  0.00,  0.00,  0);
-                world.spawnParticles(SPIKE_BEAM_LIGHT, pos.x, pos.y, pos.z, 1, 0.01, 0.01, 0.01, 0);
-            }
-
-            current = jaggedNext;
-        }
+    private static void sendJaggedBeam(ServerWorld world, ServerPlayerEntity player,
+                                       Vec3d from, Vec3d to, int segments, float offset) {
+        PsychicSpikeBeamPayload payload = new PsychicSpikeBeamPayload(
+                from.x, from.y, from.z, to.x, to.y, to.z, segments, offset);
+        Vec3d mid = from.add(to).multiply(0.5);
+        // send to player and nearby viewers
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(world, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     private static LivingEntity getEntityOnBeam(ServerWorld world, ServerPlayerEntity player,
@@ -810,6 +734,14 @@ public class PsychicPower implements Power {
         double t = MathHelper.clamp(
                 point.subtract(lineStart).dotProduct(line) / (len * len), 0, 1);
         return point.distanceTo(lineStart.add(line.multiply(t)));
+    }
+
+    private static <T extends net.minecraft.network.packet.CustomPayload> void sendToViewers(
+            ServerWorld w, ServerPlayerEntity player, T payload) {
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     /* ============================================================

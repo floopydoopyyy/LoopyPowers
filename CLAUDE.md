@@ -170,16 +170,16 @@ mark it complete and move to the next. Do not batch multiple powers in one pass
 - [x] DimensionalPower
 - [x] ExplosionPower
 - [x] FirePower
-- [ ] FlightPower
+- [x] FlightPower
 - [x] FortunePower
 - [x] HealingPower
 - [x] IcePower
 - [x] LightningPower
-- [ ] NaturePower
-- [ ] PsychicPower
-- [ ] SoundPower
-- [ ] SpeedPower
-- [ ] StrengthPower
-- [ ] TelekinesisPower
-- [ ] TeleportPower
-- [ ] Rituals (after all powers done)
+- [x] NaturePower
+- [x] PsychicPower
+- [x] SoundPower
+- [x] SpeedPower
+- [x] StrengthPower
+- [x] TelekinesisPower
+- [x] TeleportPower
+- [x] Rituals (ElementalRitual, LifeRitual, MindRitual, MotionRitual, PerfectedUpgradeRitual, PowerRitual, PowerUpgradeRitual, RuinRitual, SeveranceRitual, SpaceRitual)

@@ -9,10 +9,28 @@ import com.yourname.loopypowers.client.fx.DimensionalFxClient;
 import com.yourname.loopypowers.client.fx.ExplosionFxClient;
 import com.yourname.loopypowers.client.fx.FireFxClient;
 import com.yourname.loopypowers.client.fx.FlightFxClient;
+import com.yourname.loopypowers.client.fx.NatureFxClient;
+import com.yourname.loopypowers.client.fx.PsychicFxClient;
+import com.yourname.loopypowers.client.fx.SoundFxClient;
+import com.yourname.loopypowers.client.fx.SpeedFxClient;
+import com.yourname.loopypowers.client.fx.StrengthFxClient;
+import com.yourname.loopypowers.client.fx.TelekinesisFxClient;
+import com.yourname.loopypowers.client.fx.TeleportFxClient;
 import com.yourname.loopypowers.client.fx.FortuneFxClient;
 import com.yourname.loopypowers.client.fx.HealingFxClient;
 import com.yourname.loopypowers.client.fx.IceFxClient;
 import com.yourname.loopypowers.client.fx.LightningFxClient;
+import com.yourname.loopypowers.client.fx.ElementalRitualFxClient;
+import com.yourname.loopypowers.client.fx.LifeRitualFxClient;
+import com.yourname.loopypowers.client.fx.MindRitualFxClient;
+import com.yourname.loopypowers.client.fx.MotionRitualFxClient;
+import com.yourname.loopypowers.client.fx.PerfectedUpgradeRitualFxClient;
+import com.yourname.loopypowers.client.fx.PowerRitualFxClient;
+import com.yourname.loopypowers.client.fx.PowerUpgradeRitualFxClient;
+import com.yourname.loopypowers.client.fx.RuinRitualFxClient;
+import com.yourname.loopypowers.client.fx.SeveranceRitualFxClient;
+import com.yourname.loopypowers.client.fx.SpaceRitualFxClient;
+import com.yourname.loopypowers.network.payload.RitualFxPayload;
 import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.entity.ModEntities;
 import net.fabricmc.api.ClientModInitializer;
@@ -198,6 +216,83 @@ public class LoopypowersClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(HealingUltTickPayload.ID,     HealingFxClient::handleUltTick);
 		ClientPlayNetworking.registerGlobalReceiver(HealingUltPhasePayload.ID,    HealingFxClient::handleUltPhase);
 
+		// TeleportPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(TeleportDodgePayload.ID,        TeleportFxClient::handleDodge);
+		ClientPlayNetworking.registerGlobalReceiver(TeleportBlinkPayload.ID,        TeleportFxClient::handleBlink);
+		ClientPlayNetworking.registerGlobalReceiver(TeleportAimBeamPayload.ID,      TeleportFxClient::handleAimBeam);
+		ClientPlayNetworking.registerGlobalReceiver(TeleportSwapBurstPayload.ID,    TeleportFxClient::handleSwapBurst);
+		ClientPlayNetworking.registerGlobalReceiver(TeleportFrenzyTickPayload.ID,   TeleportFxClient::handleFrenzyTick);
+		ClientPlayNetworking.registerGlobalReceiver(TeleportFrenzyStrikePayload.ID, TeleportFxClient::handleFrenzyStrike);
+
+		// TelekinesisPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(TKBeamPayload.ID,              TelekinesisFxClient::handleBeam);
+		ClientPlayNetworking.registerGlobalReceiver(TKPassiveHitPayload.ID,        TelekinesisFxClient::handlePassiveHit);
+		ClientPlayNetworking.registerGlobalReceiver(TKYankTargetPayload.ID,        TelekinesisFxClient::handleYankTarget);
+		ClientPlayNetworking.registerGlobalReceiver(TKGrabTargetPayload.ID,        TelekinesisFxClient::handleGrabTarget);
+		ClientPlayNetworking.registerGlobalReceiver(TKWallImpactPayload.ID,        TelekinesisFxClient::handleWallImpact);
+		ClientPlayNetworking.registerGlobalReceiver(TKFloorImpactPayload.ID,       TelekinesisFxClient::handleFloorImpact);
+		ClientPlayNetworking.registerGlobalReceiver(TKSuspendAuraPayload.ID,       TelekinesisFxClient::handleSuspendAura);
+		ClientPlayNetworking.registerGlobalReceiver(TKChokeAuraPayload.ID,         TelekinesisFxClient::handleChokeAura);
+		ClientPlayNetworking.registerGlobalReceiver(TKThrowPayload.ID,             TelekinesisFxClient::handleThrow);
+		ClientPlayNetworking.registerGlobalReceiver(TKDebrisActivatePayload.ID,    TelekinesisFxClient::handleDebrisActivate);
+		ClientPlayNetworking.registerGlobalReceiver(TKDebrisOrbitPayload.ID,       TelekinesisFxClient::handleDebrisOrbit);
+		ClientPlayNetworking.registerGlobalReceiver(TKDebrisPullPayload.ID,        TelekinesisFxClient::handleDebrisPull);
+		ClientPlayNetworking.registerGlobalReceiver(TKDebrisAuraPayload.ID,        TelekinesisFxClient::handleDebrisAura);
+		ClientPlayNetworking.registerGlobalReceiver(TKDebrisThrowPayload.ID,       TelekinesisFxClient::handleDebrisThrow);
+		ClientPlayNetworking.registerGlobalReceiver(TKDebrisExplosionPayload.ID,   TelekinesisFxClient::handleDebrisExplosion);
+		ClientPlayNetworking.registerGlobalReceiver(TKDebrisSpawnPayload.ID,       TelekinesisFxClient::handleDebrisSpawn);
+
+		// StrengthPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(StrengthOnePunchPayload.ID,      StrengthFxClient::handleOnePunch);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthRageHitPayload.ID,       StrengthFxClient::handleRageHit);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthSlamPayload.ID,          StrengthFxClient::handleSlam);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthSlamTargetPayload.ID,    StrengthFxClient::handleSlamTarget);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthRushTrailPayload.ID,     StrengthFxClient::handleRushTrail);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthRushEntityHitPayload.ID, StrengthFxClient::handleRushEntityHit);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthRushCancelPayload.ID,    StrengthFxClient::handleRushCancel);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthRushCrashPayload.ID,     StrengthFxClient::handleRushCrash);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthRagePulsePayload.ID,     StrengthFxClient::handleRagePulse);
+		ClientPlayNetworking.registerGlobalReceiver(StrengthRageAuraPayload.ID,      StrengthFxClient::handleRageAura);
+
+		// SpeedPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(SpeedLowHealthBurstPayload.ID,  SpeedFxClient::handleLowHealthBurst);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedRushTrailPayload.ID,       SpeedFxClient::handleRushTrail);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedDashPayload.ID,            SpeedFxClient::handleDash);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedRushCastPayload.ID,        SpeedFxClient::handleRushCast);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedOverdriveCastPayload.ID,   SpeedFxClient::handleOverdriveCast);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedOverdriveTrailPayload.ID,  SpeedFxClient::handleOverdriveTrail);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedOverdriveHitPayload.ID,    SpeedFxClient::handleOverdriveHit);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedBlockImpactPayload.ID,     SpeedFxClient::handleBlockImpact);
+
+		// SoundPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(SoundResonanceBurstPayload.ID,  SoundFxClient::handleResonanceBurst);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBurstHitPayload.ID,        SoundFxClient::handleBurstHit);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBoomCastPayload.ID,        SoundFxClient::handleBoomCast);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBassPullPayload.ID,        SoundFxClient::handleBassPull);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBassPullHitPayload.ID,     SoundFxClient::handleBassPullHit);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBassFinalPayload.ID,       SoundFxClient::handleBassFinal);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBassFinalRemotePayload.ID, SoundFxClient::handleBassFinalRemote);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBassPullVizPayload.ID,     SoundFxClient::handleBassPullViz);
+		ClientPlayNetworking.registerGlobalReceiver(SoundBassBlastVizPayload.ID,    SoundFxClient::handleBassBlastViz);
+		ClientPlayNetworking.registerGlobalReceiver(SoundUltWindupPayload.ID,       SoundFxClient::handleUltWindup);
+		ClientPlayNetworking.registerGlobalReceiver(SoundUltBeamPayload.ID,         SoundFxClient::handleUltBeam);
+
+		// PsychicPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(PsychicLeechPayload.ID,       PsychicFxClient::handleLeech);
+		ClientPlayNetworking.registerGlobalReceiver(PsychicCompelAuraPayload.ID,  PsychicFxClient::handleCompelAura);
+		ClientPlayNetworking.registerGlobalReceiver(PsychicSpikeBeamPayload.ID,   PsychicFxClient::handleSpikeBeam);
+		ClientPlayNetworking.registerGlobalReceiver(PsychicSpikeImpactPayload.ID, PsychicFxClient::handleSpikeImpact);
+		ClientPlayNetworking.registerGlobalReceiver(PsychicSpikeAuraPayload.ID,   PsychicFxClient::handleSpikeAura);
+		ClientPlayNetworking.registerGlobalReceiver(PsychicControlAuraPayload.ID, PsychicFxClient::handleControlAura);
+
+		// NaturePower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(NatureGasTickPayload.ID,      NatureFxClient::handleGasTick);
+		ClientPlayNetworking.registerGlobalReceiver(NatureVineCastPayload.ID,     NatureFxClient::handleVineCast);
+		ClientPlayNetworking.registerGlobalReceiver(NatureVineBindPayload.ID,     NatureFxClient::handleVineBind);
+		ClientPlayNetworking.registerGlobalReceiver(NatureVineStrikePayload.ID,   NatureFxClient::handleVineStrike);
+		ClientPlayNetworking.registerGlobalReceiver(NatureVineTetherPayload.ID,   NatureFxClient::handleVineTether);
+		ClientPlayNetworking.registerGlobalReceiver(NatureBuffRingPayload.ID,     NatureFxClient::handleBuffRing);
+
 		// FortunePower fx receivers
 		ClientPlayNetworking.registerGlobalReceiver(FortuneProcEnemyPayload.ID,    FortuneFxClient::handleProcEnemy);
 		ClientPlayNetworking.registerGlobalReceiver(FortuneProcSelfPayload.ID,     FortuneFxClient::handleProcSelf);
@@ -216,6 +311,30 @@ public class LoopypowersClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(FortunePoofAtPayload.ID,       FortuneFxClient::handlePoofAt);
 		ClientPlayNetworking.registerGlobalReceiver(FortuneJackpotHitPayload.ID,   FortuneFxClient::handleJackpotHit);
 		ClientPlayNetworking.registerGlobalReceiver(FortuneCeilingBreakPayload.ID, FortuneFxClient::handleCeilingBreak);
+
+		// Ritual fx receiver (shared payload, dispatches by ritualId)
+		ClientPlayNetworking.registerGlobalReceiver(RitualFxPayload.ID, (payload, ctx) -> {
+			ctx.client().execute(() -> {
+				net.minecraft.client.world.ClientWorld world = ctx.client().world;
+				if (world == null) return;
+				double x = payload.x(), y = payload.y(), z = payload.z();
+				int stage = payload.stage(), t = payload.stageTick();
+				float progress = payload.progress();
+				long time = payload.time();
+				switch (payload.ritualId()) {
+					case RitualFxPayload.ELEMENTAL     -> ElementalRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.LIFE          -> LifeRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.MIND          -> MindRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.MOTION        -> MotionRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.PERFECTED     -> PerfectedUpgradeRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.POWER         -> PowerRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.POWER_UPGRADE -> PowerUpgradeRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.RUIN          -> RuinRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.SEVERANCE     -> SeveranceRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+					case RitualFxPayload.SPACE         -> SpaceRitualFxClient.render(world, x, y, z, stage, t, progress, time);
+				}
+			});
+		});
 
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			if (client.player == null) return;

@@ -214,6 +214,86 @@ public class AbilityPackets {
         PayloadTypeRegistry.playS2C().register(LightningStormCloudsPayload.ID,        LightningStormCloudsPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(LightningStormStrikePayload.ID,        LightningStormStrikePayload.CODEC);
 
+        // Ritual fx (shared payload for all rituals)
+        PayloadTypeRegistry.playS2C().register(RitualFxPayload.ID, RitualFxPayload.CODEC);
+
+        // TeleportPower fx
+        PayloadTypeRegistry.playS2C().register(TeleportDodgePayload.ID,        TeleportDodgePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TeleportBlinkPayload.ID,        TeleportBlinkPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TeleportAimBeamPayload.ID,      TeleportAimBeamPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TeleportSwapBurstPayload.ID,    TeleportSwapBurstPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TeleportFrenzyTickPayload.ID,   TeleportFrenzyTickPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TeleportFrenzyStrikePayload.ID, TeleportFrenzyStrikePayload.CODEC);
+
+        // TelekinesisPower fx
+        PayloadTypeRegistry.playS2C().register(TKBeamPayload.ID,              TKBeamPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKPassiveHitPayload.ID,        TKPassiveHitPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKYankTargetPayload.ID,        TKYankTargetPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKGrabTargetPayload.ID,        TKGrabTargetPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKWallImpactPayload.ID,        TKWallImpactPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKFloorImpactPayload.ID,       TKFloorImpactPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKSuspendAuraPayload.ID,       TKSuspendAuraPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKChokeAuraPayload.ID,         TKChokeAuraPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKThrowPayload.ID,             TKThrowPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKDebrisActivatePayload.ID,    TKDebrisActivatePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKDebrisOrbitPayload.ID,       TKDebrisOrbitPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKDebrisPullPayload.ID,        TKDebrisPullPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKDebrisAuraPayload.ID,        TKDebrisAuraPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKDebrisThrowPayload.ID,       TKDebrisThrowPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKDebrisExplosionPayload.ID,   TKDebrisExplosionPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(TKDebrisSpawnPayload.ID,       TKDebrisSpawnPayload.CODEC);
+
+        // StrengthPower fx
+        PayloadTypeRegistry.playS2C().register(StrengthOnePunchPayload.ID,      StrengthOnePunchPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthRageHitPayload.ID,       StrengthRageHitPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthSlamPayload.ID,          StrengthSlamPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthSlamTargetPayload.ID,    StrengthSlamTargetPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthRushTrailPayload.ID,     StrengthRushTrailPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthRushEntityHitPayload.ID, StrengthRushEntityHitPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthRushCancelPayload.ID,    StrengthRushCancelPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthRushCrashPayload.ID,     StrengthRushCrashPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthRagePulsePayload.ID,     StrengthRagePulsePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(StrengthRageAuraPayload.ID,      StrengthRageAuraPayload.CODEC);
+
+        // SpeedPower fx
+        PayloadTypeRegistry.playS2C().register(SpeedLowHealthBurstPayload.ID,  SpeedLowHealthBurstPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedRushTrailPayload.ID,       SpeedRushTrailPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedDashPayload.ID,            SpeedDashPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedRushCastPayload.ID,        SpeedRushCastPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedOverdriveCastPayload.ID,   SpeedOverdriveCastPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedOverdriveTrailPayload.ID,  SpeedOverdriveTrailPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedOverdriveHitPayload.ID,    SpeedOverdriveHitPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedBlockImpactPayload.ID,     SpeedBlockImpactPayload.CODEC);
+
+        // SoundPower fx
+        PayloadTypeRegistry.playS2C().register(SoundResonanceBurstPayload.ID,  SoundResonanceBurstPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBurstHitPayload.ID,        SoundBurstHitPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBoomCastPayload.ID,        SoundBoomCastPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBassPullPayload.ID,        SoundBassPullPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBassPullHitPayload.ID,     SoundBassPullHitPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBassFinalPayload.ID,       SoundBassFinalPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBassFinalRemotePayload.ID, SoundBassFinalRemotePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBassPullVizPayload.ID,     SoundBassPullVizPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundBassBlastVizPayload.ID,    SoundBassBlastVizPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundUltWindupPayload.ID,       SoundUltWindupPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SoundUltBeamPayload.ID,         SoundUltBeamPayload.CODEC);
+
+        // PsychicPower fx
+        PayloadTypeRegistry.playS2C().register(PsychicLeechPayload.ID,        PsychicLeechPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(PsychicCompelAuraPayload.ID,   PsychicCompelAuraPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(PsychicSpikeBeamPayload.ID,    PsychicSpikeBeamPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(PsychicSpikeImpactPayload.ID,  PsychicSpikeImpactPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(PsychicSpikeAuraPayload.ID,    PsychicSpikeAuraPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(PsychicControlAuraPayload.ID,  PsychicControlAuraPayload.CODEC);
+
+        // NaturePower fx
+        PayloadTypeRegistry.playS2C().register(NatureGasTickPayload.ID,      NatureGasTickPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(NatureVineCastPayload.ID,     NatureVineCastPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(NatureVineBindPayload.ID,     NatureVineBindPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(NatureVineStrikePayload.ID,   NatureVineStrikePayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(NatureVineTetherPayload.ID,   NatureVineTetherPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(NatureBuffRingPayload.ID,     NatureBuffRingPayload.CODEC);
+
         // IcePower fx
         PayloadTypeRegistry.playS2C().register(IceShatterPayload.ID,          IceShatterPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(IceFreezeStagePayload.ID,       IceFreezeStagePayload.CODEC);

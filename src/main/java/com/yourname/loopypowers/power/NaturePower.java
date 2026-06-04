@@ -3,9 +3,13 @@ package com.yourname.loopypowers.power;
 import com.yourname.loopypowers.block.ModBlocks;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
@@ -13,7 +17,6 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.ZombieEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
-import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
@@ -23,12 +26,10 @@ import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.*;
 import net.minecraft.world.Heightmap;
 import net.minecraft.world.RaycastContext;
-import org.joml.Vector3f;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.world.World;
 import com.yourname.loopypowers.damage.ModDamageTypes;
-import net.minecraft.block.Blocks;
 import net.minecraft.text.Text;
 
 import java.util.*;
@@ -213,10 +214,6 @@ public class NaturePower implements Power {
     // stinky
     private static final float STINK_CHANCE = 0.02f;
 
-    // make green dust
-    private static final DustParticleEffect GAS_DUST =
-            new DustParticleEffect(new Vector3f(0.12f, 0.95f, 0.18f), 1.75f);
-
     private static final class GasInstance {
         final RegistryKey<World> worldKey;
         final Vec3d center;
@@ -280,50 +277,28 @@ public class NaturePower implements Power {
             float h = MathHelper.lerp(t, GAS_HEIGHT_START, GAS_HEIGHT_MAX);
 
             Vec3d center = g.center;
+            float halfH = h * 0.5f;
 
-            // centered vertical volume
-            double halfH = h * 0.5;
+            int count = MathHelper.lerp(t, GAS_PARTICLES_MIN, GAS_PARTICLES_MAX);
+            boolean showBoundary = ((now + g.seed) & 1L) == 0L;
+            int boundaryCount = Math.max(20, count / 3);
+            boolean showOccasional = ((now + g.seed) % 10L) == 0L;
+
+            NatureGasTickPayload payload = new NatureGasTickPayload(
+                    center.x, center.y, center.z,
+                    r, halfH,
+                    count, showBoundary, boundaryCount, showOccasional
+            );
+            BlockPos centerPos = BlockPos.ofFloored(center);
+            PlayerLookup.tracking(w, centerPos).forEach(sp -> ServerPlayNetworking.send(sp, payload));
+
+            // POISON
             double minY = center.y - halfH;
             double maxY = center.y + halfH;
 
-            // VISUALS
-            int count = MathHelper.lerp(t, GAS_PARTICLES_MIN, GAS_PARTICLES_MAX);
-
-            // thick core
-            w.spawnParticles(
-                    GAS_DUST,
-                    center.x, center.y, center.z,
-                    count,
-                    r * 0.90, halfH * 0.90, r * 0.90,
-                    0.02
-            );
-
-            // boundary wisps (readable edge)
-            if (((now + g.seed) & 1L) == 0L) {
-                w.spawnParticles(
-                        GAS_DUST,
-                        center.x, center.y, center.z,
-                        Math.max(20, count / 3),
-                        r * 1.10, halfH * 0.55, r * 1.10,
-                        0.03
-                );
-            }
-
-            // occasional particles
-            if (((now + g.seed) % 10L) == 0L) {
-                w.spawnParticles(
-                        GAS_DUST,
-                        center.x, center.y, center.z,
-                        120,
-                        r * 0.70, halfH * 0.70, r * 0.70,
-                        0.04
-                );
-            }
-
-            // POISON
             if (((g.age + g.seed) % GAS_APPLY_INTERVAL_TICKS) != 0) continue;
 
-            // Small vertical padding so it feels like “fog volume” not a razor slab
+            // Small vertical padding so it feels like "fog volume" not a razor slab
             double yPad = 0.35;
 
             Box scan = new Box(
@@ -510,17 +485,7 @@ public class NaturePower implements Power {
     private static final int VINE_BUFF_TICKS = 30;
     //lash visuals
     private static final int VINE_STRIKE_LASHES_PER_TARGET = 3; // extra vine lines per target
-    private static final int VINE_STRIKE_EXTRA_RANDOM = 6;      // extra “miss” lashes forward
-
-    // visuals
-    private static final DustParticleEffect VINE_DUST =
-            new DustParticleEffect(new Vector3f(0.10f, 0.85f, 0.12f), 1.35f);
-
-    // pink
-    private static final DustParticleEffect VINE_PINK_DUST =
-            new DustParticleEffect(new Vector3f(0.95f, 0.35f, 0.85f), 1.05f);
-
-    private static final float VINE_PINK_SPECK_CHANCE = 0.12f; // ~12% of particles become pink
+    private static final int VINE_STRIKE_EXTRA_RANDOM = 6;      // extra "miss" lashes forward
 
     private static final class VineBind {
         final UUID target;                // bound entity
@@ -546,12 +511,9 @@ public class NaturePower implements Power {
         NatureState state = getState(player);
 
         // cast FX
-        w.spawnParticles(VINE_DUST,
-                player.getX(), player.getY() + 1.0, player.getZ(),
-                80,
-                0.75, 0.95, 0.75,
-                0.02
-        );
+        NatureVineCastPayload castPayload = new NatureVineCastPayload(player.getX(), player.getY() + 1.0, player.getZ());
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, castPayload));
+
         w.playSound(null, player.getBlockPos(),
                 ModSounds.VINELASH,
                 player.getSoundCategory(),
@@ -592,7 +554,8 @@ public class NaturePower implements Power {
             state.vines.put(player.getUuid(), new VineBind(player.getUuid(), w.getRegistryKey(), anchor, seed));
 
             // anchor particles
-            w.spawnParticles(VINE_DUST, anchor.x, anchor.y + 0.2, anchor.z, 35, 0.35, 0.15, 0.35, 0.02);
+            NatureVineCastPayload anchorPayload = new NatureVineCastPayload(anchor.x, anchor.y + 0.2, anchor.z);
+            PlayerLookup.tracking(w, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, anchorPayload));
 
             player.swingHand(Hand.MAIN_HAND, true);
             return;
@@ -622,40 +585,21 @@ public class NaturePower implements Power {
             // store bind
             int seed = seedBase ^ e.getId();
 
-            // main strike line
-            spawnVineStrike(w, lashFrom, e.getPos().add(0, e.getHeight() * 0.65, 0), seed);
-
-            // extra lash lines around the target
-            spawnVineLashes(w, lashFrom, e, seed);
-
             state.vines.put(e.getUuid(), new VineBind(e.getUuid(), w.getRegistryKey(), anchor, seed));
 
-            // bind FX on target
-            w.spawnParticles(VINE_DUST,
-                    e.getX(), e.getY() + (e.getHeight() * 0.55), e.getZ(),
-                    40,
-                    0.45, 0.45, 0.45,
-                    0.02
+            // strike + lashes + bind FX + anchor puff — all handled client-side
+            NatureVineBindPayload bindPayload = new NatureVineBindPayload(
+                    lashFrom.x, lashFrom.y, lashFrom.z,
+                    e.getId(),
+                    anchor.x, anchor.y, anchor.z,
+                    seed
             );
-            // pink
-            w.spawnParticles(VINE_PINK_DUST,
-                    e.getX(), e.getY() + (e.getHeight() * 0.55), e.getZ(),
-                    6,
-                    0.35, 0.35, 0.35,
-                    0.01
-            );
-
-            w.spawnParticles(VINE_DUST,
-                    anchor.x, anchor.y + 0.2, anchor.z,
-                    25,
-                    0.35, 0.15, 0.35,
-                    0.02
-            );
+            PlayerLookup.tracking(w, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, bindPayload));
 
             taken++;
         }
 
-        // extra lashes
+        // extra random lashes
         Random rr = new Random(seedBase);
         for (int i = 0; i < VINE_STRIKE_EXTRA_RANDOM; i++) {
             double d = 6.0 + rr.nextDouble() * (VINE_RANGE - 6.0);
@@ -666,7 +610,15 @@ public class NaturePower implements Power {
             double oy = (rr.nextDouble() - 0.5) * 2.0;
             double oz = (rr.nextDouble() - 0.5) * 3.5;
 
-            spawnVineStrike(w, lashFrom, to.add(ox, oy, oz), seedBase ^ (i * 991));
+            Vec3d lashTo = to.add(ox, oy, oz);
+            int lashSeed = seedBase ^ (i * 991);
+            NatureVineStrikePayload strikePayload = new NatureVineStrikePayload(
+                    lashFrom.x, lashFrom.y, lashFrom.z,
+                    lashTo.x, lashTo.y, lashTo.z,
+                    lashSeed
+            );
+            BlockPos midPos = BlockPos.ofFloored((lashFrom.x + lashTo.x) * 0.5, (lashFrom.y + lashTo.y) * 0.5, (lashFrom.z + lashTo.z) * 0.5);
+            PlayerLookup.tracking(w, midPos).forEach(sp -> ServerPlayNetworking.send(sp, strikePayload));
         }
 
         player.swingHand(Hand.MAIN_HAND, true);
@@ -701,7 +653,8 @@ public class NaturePower implements Power {
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE, VINE_BUFF_TICKS, 0, true, false));
 
             // visuals while buffed
-            spawnBuffRing(w, player);
+            NatureBuffRingPayload ringPayload = new NatureBuffRingPayload(player.getX(), player.getY(), player.getZ(), w.getTime());
+            PlayerLookup.tracking(w, player.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, ringPayload));
         }
     }
 
@@ -729,9 +682,16 @@ public class NaturePower implements Power {
 
             // === tether particles ===
             if (((now + b.seed) % 3L) == 0L) {
-                Vec3d a = b.anchor.add(0, 0.2, 0);
-                Vec3d t = le.getPos().add(0, le.getHeight() * 0.55, 0);
-                spawnVineTether(w, a, t, b.seed);
+                Vec3d from = b.anchor.add(0, 0.2, 0);
+                Vec3d to   = le.getPos().add(0, le.getHeight() * 0.55, 0);
+                boolean anchorPuff = (now & 3L) == 0L;
+                NatureVineTetherPayload tetherPayload = new NatureVineTetherPayload(
+                        from.x, from.y, from.z,
+                        to.x, to.y, to.z,
+                        b.seed, anchorPuff
+                );
+                BlockPos midPos = BlockPos.ofFloored((from.x + to.x) * 0.5, (from.y + to.y) * 0.5, (from.z + to.z) * 0.5);
+                PlayerLookup.tracking(w, midPos).forEach(sp -> ServerPlayNetworking.send(sp, tetherPayload));
             }
 
             // effects
@@ -794,154 +754,6 @@ public class NaturePower implements Power {
         double hitSq = hr.getPos().squaredDistanceTo(casterEye);
         double endSq = targetPoint.squaredDistanceTo(casterEye);
         return hitSq >= (endSq - 0.05);
-    }
-
-    private static void spawnVineTether(ServerWorld w, Vec3d from, Vec3d to, int seed) {
-        Vec3d delta = to.subtract(from);
-        double len = delta.length();
-        if (len < 0.001) return;
-
-        int steps = MathHelper.clamp((int)(len * 10), 10, 60);
-        Vec3d step = delta.multiply(1.0 / steps);
-
-        Vec3d p = from;
-        for (int i = 0; i <= steps; i++) {
-            DustParticleEffect eff = ((w.getTime() + seed + i) % 9L == 0L) ? VINE_PINK_DUST : VINE_DUST;
-
-            w.spawnParticles(
-                    eff,
-                    p.x, p.y, p.z,
-                    1,
-                    0.02, 0.02, 0.02,
-                    0.0
-            );
-            p = p.add(step);
-        }
-
-        // “anchor” puff
-        if ((w.getTime() & 3L) == 0L) {
-            w.spawnParticles(
-                    VINE_DUST,
-                    from.x, from.y + 0.15, from.z,
-                    8,
-                    0.20, 0.10, 0.20,
-                    0.01
-            );
-            w.spawnParticles(
-                    VINE_PINK_DUST,
-                    from.x, from.y + 0.15, from.z,
-                    2,
-                    0.20, 0.10, 0.20,
-                    0.01
-            );
-        }
-    }
-
-    private static void spawnVineStrike(ServerWorld w, Vec3d from, Vec3d to, int seed) {
-        Vec3d delta = to.subtract(from);
-        double len = delta.length();
-        if (len < 0.001) return;
-
-        int steps = MathHelper.clamp((int)(len * 14), 12, 90);
-        Vec3d step = delta.multiply(1.0 / steps);
-
-        Random r = new Random(seed);
-        Vec3d p = from;
-
-        for (int i = 0; i <= steps; i++) {
-            // jitter
-            double j = 0.05 + (r.nextDouble() * 0.04);
-            double jx = (r.nextDouble() - 0.5) * j;
-            double jy = (r.nextDouble() - 0.5) * j;
-            double jz = (r.nextDouble() - 0.5) * j;
-
-            DustParticleEffect eff = (r.nextFloat() < VINE_PINK_SPECK_CHANCE) ? VINE_PINK_DUST : VINE_DUST;
-
-            w.spawnParticles(
-                    eff,
-                    p.x + jx, p.y + jy, p.z + jz,
-                    1,
-                    0.0, 0.0, 0.0,
-                    0.0
-            );
-
-            p = p.add(step);
-        }
-
-        // hit stuff
-        w.spawnParticles(
-                VINE_DUST,
-                to.x, to.y, to.z,
-                8,
-                0.20, 0.20, 0.20,
-                0.02
-        );
-        w.spawnParticles(
-                VINE_PINK_DUST,
-                to.x, to.y, to.z,
-                2,
-                0.20, 0.20, 0.20,
-                0.02
-        );
-    }
-
-    private static void spawnVineLashes(ServerWorld w, Vec3d lashFrom, LivingEntity target, int seed) {
-        Random r = new Random(seed ^ 0x52A1B);
-
-        Vec3d base = target.getPos().add(0, target.getHeight() * 0.65, 0);
-
-        for (int i = 0; i < VINE_STRIKE_LASHES_PER_TARGET; i++) {
-            double ox = (r.nextDouble() - 0.5) * 1.8;
-            double oy = (r.nextDouble() - 0.5) * 1.2;
-            double oz = (r.nextDouble() - 0.5) * 1.8;
-
-            spawnVineStrike(w, lashFrom, base.add(ox, oy, oz), seed ^ (i * 1337));
-        }
-    }
-
-    private static void spawnBuffRing(ServerWorld w, ServerPlayerEntity player) {
-        Vec3d c = player.getPos();
-        double y = c.y + 0.15;
-
-        int points = 24;
-        double radius1 = 0.85;
-        double radius2 = 1.15;
-
-        // rotate over time
-        double spin = (w.getTime() * 0.22);
-
-        for (int i = 0; i < points; i++) {
-            double a = spin + (Math.PI * 2.0) * (i / (double) points);
-
-            double x1 = c.x + Math.cos(a) * radius1;
-            double z1 = c.z + Math.sin(a) * radius1;
-
-            double x2 = c.x + Math.cos(a + 0.35) * radius2;
-            double z2 = c.z + Math.sin(a + 0.35) * radius2;
-
-            DustParticleEffect eff1 = (w.getTime() % 9L == 0L) ? VINE_PINK_DUST : VINE_DUST;
-            w.spawnParticles(eff1, x1, y, z1, 1, 0.0, 0.0, 0.0, 0.0);
-
-            if ((i & 1) == 0) {
-                DustParticleEffect eff2 = ((w.getTime() + i) % 11L == 0L) ? VINE_PINK_DUST : VINE_DUST;
-                w.spawnParticles(eff2, x2, y + 0.10, z2, 1, 0.0, 0.0, 0.0, 0.0);
-            }
-        }
-
-        w.spawnParticles(
-                VINE_DUST,
-                c.x, c.y + 0.9, c.z,
-                6,
-                0.20, 0.35, 0.20,
-                0.01
-        );
-        w.spawnParticles(
-                VINE_PINK_DUST,
-                c.x, c.y + 0.9, c.z,
-                2,
-                0.20, 0.35, 0.20,
-                0.01
-        );
     }
 
     // Called by HealingPower's purge ability to cleanse the player

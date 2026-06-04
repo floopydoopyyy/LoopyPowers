@@ -1,38 +1,39 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.manager.AbilityTypes;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.block.BlockState;
-import net.minecraft.particle.BlockStateParticleEffect;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
-import net.minecraft.particle.DustParticleEffect;
-import org.joml.Vector3f;
-import com.yourname.loopypowers.damage.ModDamageTypes;
-import net.minecraft.entity.damage.DamageSource;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class StrengthPower implements Power {
@@ -70,38 +71,38 @@ public class StrengthPower implements Power {
        ============================================================ */
 
     // Bullrush
-    private static final int RUSH_TICKS = 26;     // duration
-    private static final double RUSH_SPEED = 1.25;
-    private static final double RUSH_HIT_RADIUS = 1.3;
-    private static final int RUSH_STEER_TICKS = 7;
-    private static final int RUSH_CANCEL_COOLDOWN_TICKS = 4;
-    private static final float RUSH_HIT_DAMAGE = 11.5f;
-    private static final float RUSH_HIT_KNOCKUP = 0.95f;
-    private static final double RUSH_WALL_CHECK_DIST = 0.75;
-    private static final int RUSH_WALL_MAX_BLOCKS = 18;
-    private static final float RUSH_WALL_MAX_HARDNESS = 3.5f;
-    private static final float RUSH_WALL_BREAK_CHANCE = 0.80f;
-    private static final float RUSH_CRASH_SELF_DAMAGE = 4.0f;
-    private static final float RUSH_CRASH_AOE_DAMAGE = 6.0f;
-    private static final double RUSH_CRASH_AOE_RADIUS = 4.5;
+    private static final int    RUSH_TICKS               = 26;
+    private static final double RUSH_SPEED               = 1.25;
+    private static final double RUSH_HIT_RADIUS          = 1.3;
+    private static final int    RUSH_STEER_TICKS         = 7;
+    private static final int    RUSH_CANCEL_COOLDOWN_TICKS = 4;
+    private static final float  RUSH_HIT_DAMAGE          = 11.5f;
+    private static final float  RUSH_HIT_KNOCKUP         = 0.95f;
+    private static final double RUSH_WALL_CHECK_DIST     = 0.75;
+    private static final int    RUSH_WALL_MAX_BLOCKS     = 18;
+    private static final float  RUSH_WALL_MAX_HARDNESS   = 3.5f;
+    private static final float  RUSH_WALL_BREAK_CHANCE   = 0.80f;
+    private static final float  RUSH_CRASH_SELF_DAMAGE   = 4.0f;
+    private static final float  RUSH_CRASH_AOE_DAMAGE    = 6.0f;
+    private static final double RUSH_CRASH_AOE_RADIUS    = 4.5;
 
     // Rage
-    private static final int RAGE_TICKS = 240; // 12s
-    private static final int RAGE_STR_AMP = 1;    // Strength II
-    private static final int RAGE_RES_AMP = 0;    // Resistance I
-    private static final int RAGE_SPEED_AMP = 0;  // Speed I
+    private static final int RAGE_TICKS     = 240;
+    private static final int RAGE_STR_AMP   = 1;
+    private static final int RAGE_RES_AMP   = 0;
+    private static final int RAGE_SPEED_AMP = 0;
 
     // Slam
-    private static final int SLAM_BLOCK_RADIUS = 3;
-    private static final int SLAM_MAX_BLOCKS_BROKEN = 22;
-    private static final float SLAM_MAX_HARDNESS = 2.2f;
-    private static final float SLAM_BLOCK_BREAK_CHANCE = 0.55f;
-    private static final float SLAM_ENTITY_DAMAGE = 12.0f;
-    private static final float SLAM_OUT = 0.35f;
-    private static final float SLAM_FRONT_DOT = 0.35f;
-    private static final double SLAM_FRONT_OFFSET = 1.4;
-    private static final double SLAM_RADIUS = 5.5;
-    private static final float SLAM_UP = 1.55f;
+    private static final int    SLAM_BLOCK_RADIUS      = 3;
+    private static final int    SLAM_MAX_BLOCKS_BROKEN = 22;
+    private static final float  SLAM_MAX_HARDNESS      = 2.2f;
+    private static final float  SLAM_BLOCK_BREAK_CHANCE = 0.55f;
+    private static final float  SLAM_ENTITY_DAMAGE     = 12.0f;
+    private static final float  SLAM_OUT               = 0.35f;
+    private static final float  SLAM_FRONT_DOT         = 0.35f;
+    private static final double SLAM_FRONT_OFFSET      = 1.4;
+    private static final double SLAM_RADIUS            = 5.5;
+    private static final float  SLAM_UP                = 1.55f;
 
     /* ============================================================
        BASIC
@@ -109,7 +110,7 @@ public class StrengthPower implements Power {
 
     @Override
     public void onAssign(ServerPlayerEntity player) {
-        player.getCommandTags().removeIf(tag -> tag.startsWith("st_")); // Clean legacy tags
+        player.getCommandTags().removeIf(tag -> tag.startsWith("st_"));
         ACTIVE_STATES.put(player.getUuid(), new StrengthState());
     }
 
@@ -141,7 +142,6 @@ public class StrengthPower implements Power {
             player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 200, 0, true, false));
         }
 
-        // Tick timers
         if (state.rushHitLock > 0) state.rushHitLock--;
         if (state.rushCancelLock > 0) state.rushCancelLock--;
 
@@ -161,7 +161,6 @@ public class StrengthPower implements Power {
     public boolean onAttack(ServerPlayerEntity attacker, LivingEntity target, DamageSource source, float amount) {
         if (!PassiveManager.isEnabled(attacker)) return true;
 
-        // GUARD CLAUSE - should've remembered this on release lol
         if (amount >= 9999f) return true;
 
         // ONE PUNCH EASTER EGG
@@ -181,26 +180,11 @@ public class StrengthPower implements Power {
                 }
 
                 Vec3d pos = target.getPos();
-                w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, pos.x, pos.y + 1.0, pos.z, 2, 0, 0, 0, 0);
-                w.spawnParticles(ParticleTypes.FLASH, pos.x, pos.y + 1.0, pos.z, 5, 1.0, 1.0, 1.0, 0);
-
-                for (int i = 0; i < 35; i++) {
-                    double step = i * 3.5;
-                    double px = pos.x + dir.x * step;
-                    double py = pos.y + 1.0 + dir.y * step;
-                    double pz = pos.z + dir.z * step;
-
-                    w.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, px, py, pz, 5, 0.5, 0.5, 0.5, 0.1);
-                    w.spawnParticles(ParticleTypes.CLOUD, px, py, pz, 10, 3.0, 3.0, 3.0, 0.3);
-
-                    if (i % 3 == 0) {
-                        w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, px, py, pz, 1, 0, 0, 0, 0);
-                        w.spawnParticles(ParticleTypes.EXPLOSION, px, py, pz, 2, 4.0, 4.0, 4.0, 0);
-                    }
-                }
+                StrengthOnePunchPayload fx = new StrengthOnePunchPayload(pos.x, pos.y, pos.z, dir.x, dir.y, dir.z);
+                PlayerLookup.tracking(w, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
 
                 target.damage(ModDamageTypes.onePunch(w, attacker), 9999f);
-                return false; // Cancel original punch damage
+                return false;
             }
         }
         return true;
@@ -219,12 +203,10 @@ public class StrengthPower implements Power {
         Vec3d dir = horiz.normalize();
 
         double out = 0.95;
-
         double lift = target.isOnGround() ? 0.18 : 0.08;
         double maxUp = 0.55;
 
         target.setAttacker(attacker);
-
         target.addVelocity(dir.x * out, lift, dir.z * out);
         Vec3d tv = target.getVelocity();
         target.setVelocity(tv.x, Math.min(maxUp, Math.max(tv.y, 0.06)), tv.z);
@@ -234,22 +216,10 @@ public class StrengthPower implements Power {
             sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp));
         }
 
-        w.spawnParticles(
-                ParticleTypes.CLOUD,
-                target.getX(), target.getY() + target.getHeight() * 0.55, target.getZ(),
-                14,
-                0.18, 0.18, 0.18,
-                0.02
-        );
+        StrengthRageHitPayload fx = new StrengthRageHitPayload(target.getId());
+        PlayerLookup.tracking(w, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
 
-        w.playSound(
-                null,
-                target.getX(), target.getY(), target.getZ(),
-                SoundEvents.ENTITY_GENERIC_EXPLODE,
-                attacker.getSoundCategory(),
-                0.8f,
-                0.85f
-        );
+        w.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.ENTITY_GENERIC_EXPLODE, attacker.getSoundCategory(), 0.8f, 0.85f);
     }
 
     /* ============================================================
@@ -296,107 +266,16 @@ public class StrengthPower implements Power {
             groundState = slamGroundState;
         }
 
-        w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                ModSounds.SLAM,
-                player.getSoundCategory(),
-                casterGrounded ? 1.00f : 0.35f,
-                casterGrounded ? 0.85f : 1.10f
-        );
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.SLAM, player.getSoundCategory(),
+                casterGrounded ? 1.00f : 0.35f, casterGrounded ? 0.85f : 1.10f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(),
+                casterGrounded ? 1.00f : 0.35f, casterGrounded ? 0.85f : 1.10f);
 
-        w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ENTITY_GENERIC_EXPLODE,
-                player.getSoundCategory(),
-                casterGrounded ? 1.00f : 0.35f,
-                casterGrounded ? 0.85f : 1.10f
-        );
-
-        w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
-                slamPos.x, pos.y + 0.10, slamPos.z,
-                1, 0, 0, 0, 0
-        );
-
-        if (casterGrounded) {
-            w.spawnParticles(ParticleTypes.EXPLOSION,
-                    slamPos.x, pos.y + 0.15, slamPos.z,
-                    6,
-                    0.35, 0.15, 0.35,
-                    0.02
-            );
-            w.spawnParticles(ParticleTypes.POOF,
-                    slamPos.x, pos.y + 0.10, slamPos.z,
-                    12,
-                    0.55, 0.15, 0.55,
-                    0.03
-            );
-        }
-
-        if (!groundState.isAir()) {
-            int dustCountA = casterGrounded ? 420 : 20;
-            int dustCountB = casterGrounded ? 220 : 8;
-
-            w.spawnParticles(
-                    new BlockStateParticleEffect(ParticleTypes.BLOCK, groundState),
-                    slamPos.x, ground.getY() + 1.01, slamPos.z,
-                    dustCountA,
-                    casterGrounded ? 2.2 : 0.5,
-                    casterGrounded ? 0.18 : 0.08,
-                    casterGrounded ? 2.2 : 0.5,
-                    casterGrounded ? 0.75 : 0.08
-            );
-
-            w.spawnParticles(
-                    new BlockStateParticleEffect(ParticleTypes.BLOCK, groundState),
-                    slamPos.x, ground.getY() + 1.01, slamPos.z,
-                    dustCountB,
-                    casterGrounded ? 0.65 : 0.20,
-                    casterGrounded ? 1.10 : 0.25,
-                    casterGrounded ? 0.65 : 0.20,
-                    casterGrounded ? 1.15 : 0.12
-            );
-
-            if (casterGrounded) {
-                double[] radii = new double[] { 1.4, 2.8, 4.2 };
-                int[] counts   = new int[]    { 24, 32, 42 };
-                double[] spreads = new double[]{ 0.25, 0.30, 0.38 };
-                double[] speeds  = new double[]{ 0.35, 0.40, 0.45 };
-
-                for (int ri = 0; ri < radii.length; ri++) {
-                    double r = radii[ri];
-                    int n = counts[ri];
-
-                    for (int i = 0; i < n; i++) {
-                        double a = w.random.nextDouble() * (Math.PI * 2.0);
-                        double jr = (w.random.nextDouble() - 0.5) * 0.35;
-
-                        double x = slamPos.x + Math.cos(a) * (r + jr);
-                        double z = slamPos.z + Math.sin(a) * (r + jr);
-
-                        w.spawnParticles(
-                                new BlockStateParticleEffect(ParticleTypes.BLOCK, groundState),
-                                x, ground.getY() + 1.01, z,
-                                1,
-                                spreads[ri], 0.08, spreads[ri],
-                                speeds[ri]
-                        );
-                    }
-                }
-
-                w.spawnParticles(
-                        ParticleTypes.CLOUD,
-                        slamPos.x, ground.getY() + 1.05, slamPos.z,
-                        140,
-                        1.1, 0.25, 1.1,
-                        0.10
-                );
-                w.spawnParticles(
-                        ParticleTypes.CRIT,
-                        slamPos.x, ground.getY() + 1.05, slamPos.z,
-                        55,
-                        0.7, 0.20, 0.7,
-                        0.12
-                );
-            }
-        }
+        StrengthSlamPayload slamFx = new StrengthSlamPayload(
+                slamPos.x, pos.y, slamPos.z,
+                ground.getX(), ground.getY(), ground.getZ(),
+                casterGrounded);
+        sendToViewers(w, player, slamFx);
 
         if (casterGrounded) {
             CameraShake.shakeNearby(player, 6.0, 10, 1.05f);
@@ -405,12 +284,7 @@ public class StrengthPower implements Power {
         }
 
         Box box = new Box(slamPos, slamPos).expand(SLAM_RADIUS, 2.5, SLAM_RADIUS);
-
-        List<LivingEntity> targets = w.getEntitiesByClass(
-                LivingEntity.class,
-                box,
-                e -> e.isAlive() && e != player
-        );
+        List<LivingEntity> targets = w.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != player);
 
         for (LivingEntity t : targets) {
             Vec3d d = t.getPos().subtract(slamPos);
@@ -424,14 +298,14 @@ public class StrengthPower implements Power {
             double upRaw  = SLAM_UP  * (0.85 + 0.95 * falloff);
             double outRaw = SLAM_OUT * (0.35 + 1.0  * falloff);
 
-            double kbMult = casterGrounded ? 1.0 : 0.15;
+            double kbMult  = casterGrounded ? 1.0 : 0.15;
             double dmgMult = casterGrounded ? 1.0 : 0.15;
 
             double maxUp = 1.15;
             double minUpGround = 0.65;
             double maxOut = 0.55;
 
-            double up = MathHelper.clamp(upRaw * kbMult, 0.0, maxUp);
+            double up  = MathHelper.clamp(upRaw  * kbMult, 0.0, maxUp);
             double out = MathHelper.clamp(outRaw * kbMult, 0.0, maxOut);
 
             if (t.isOnGround()) {
@@ -454,9 +328,8 @@ public class StrengthPower implements Power {
             }
 
             if (casterGrounded && w.random.nextFloat() < 0.35f) {
-                w.spawnParticles(ParticleTypes.CRIT,
-                        t.getX(), t.getY() + t.getHeight() * 0.55, t.getZ(),
-                        2, 0.12, 0.12, 0.12, 0.0);
+                StrengthSlamTargetPayload targetFx = new StrengthSlamTargetPayload(t.getId());
+                PlayerLookup.tracking(w, t.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, targetFx));
             }
         }
 
@@ -509,9 +382,7 @@ public class StrengthPower implements Power {
     }
 
     private static void doWallSlam(ServerPlayerEntity player, ServerWorld w, Vec3d pos, Vec3d forward, Vec3d slamPos, BlockHitResult wallHit) {
-        boolean casterGrounded = true;
-
-        doGroundSlam(player, w, pos, forward, slamPos, casterGrounded);
+        doGroundSlam(player, w, pos, forward, slamPos, true);
 
         int wallMaxBreak = 14;
         float wallMaxHardness = 3.5f;
@@ -520,10 +391,7 @@ public class StrengthPower implements Power {
         BlockPos hitPos = wallHit.getBlockPos();
         Vec3d n = Vec3d.of(wallHit.getSide().getVector());
 
-        int halfW = 1;
-        int halfH = 1;
-        int depth = 2;
-
+        int halfW = 1, halfH = 1, depth = 2;
         boolean xWall = Math.abs(n.x) > 0.5;
 
         for (int d = 0; d < depth; d++) {
@@ -531,12 +399,9 @@ public class StrengthPower implements Power {
                 for (int xz = -halfW; xz <= halfW; xz++) {
                     if (broken >= wallMaxBreak) break;
 
-                    BlockPos p;
-                    if (xWall) {
-                        p = hitPos.add((int)(-n.x * d), y, xz);
-                    } else {
-                        p = hitPos.add(xz, y, (int)(-n.z * d));
-                    }
+                    BlockPos p = xWall
+                            ? hitPos.add((int)(-n.x * d), y, xz)
+                            : hitPos.add(xz, y, (int)(-n.z * d));
 
                     BlockState s = w.getBlockState(p);
                     if (s.isAir()) continue;
@@ -548,74 +413,47 @@ public class StrengthPower implements Power {
 
                     if (w.random.nextFloat() > 0.75f) continue;
 
-                    if (w.breakBlock(p, true, player)) {
-                        broken++;
-                    }
+                    if (w.breakBlock(p, true, player)) broken++;
                 }
             }
         }
     }
 
     private static BlockHitResult findWallSlamHit(ServerWorld w, ServerPlayerEntity player, Vec3d forward) {
-        double maxDist = 2.2;
-
         Vec3d start = player.getEyePos();
-        Vec3d end = start.add(forward.normalize().multiply(maxDist));
+        Vec3d end = start.add(forward.normalize().multiply(2.2));
 
-        BlockHitResult bhr = w.raycast(new RaycastContext(
-                start,
-                end,
-                RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE,
-                player
-        ));
+        BlockHitResult bhr = w.raycast(new RaycastContext(start, end,
+                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player));
 
         if (bhr.getType() != HitResult.Type.BLOCK) return null;
-
         BlockState s = w.getBlockState(bhr.getBlockPos());
         if (s.isAir()) return null;
-
         return bhr;
     }
 
     private static void applySlamDrag(ServerPlayerEntity player) {
         Vec3d v = player.getVelocity();
-
-        double newY;
-        if (v.y > 0.0) {
-            newY = -0.12;
-        } else {
-            newY = Math.min(v.y, -0.12);
-        }
-
+        double newY = v.y > 0.0 ? -0.12 : Math.min(v.y, -0.12);
         player.setVelocity(v.x, newY, v.z);
         player.velocityModified = true;
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
     }
 
     private static boolean isNearGround(ServerPlayerEntity player, ServerWorld w) {
-        final double leeway = 1.60;
-
         if (player.isOnGround()) return true;
 
         Vec3d start = player.getPos().add(0.0, 0.05, 0.0);
-        Vec3d end   = start.add(0.0, -leeway, 0.0);
+        Vec3d end   = start.add(0.0, -1.60, 0.0);
 
-        BlockHitResult hr = w.raycast(new RaycastContext(
-                start,
-                end,
-                RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE,
-                player
-        ));
+        BlockHitResult hr = w.raycast(new RaycastContext(start, end,
+                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player));
 
         if (hr.getType() != HitResult.Type.BLOCK) return false;
-
-        BlockState s = w.getBlockState(hr.getBlockPos());
-        return !s.isAir();
+        return !w.getBlockState(hr.getBlockPos()).isAir();
     }
 
-        /* ============================================================
+    /* ============================================================
        SECONDARY
        ============================================================ */
 
@@ -628,24 +466,14 @@ public class StrengthPower implements Power {
         state.rushCancelLock = RUSH_CANCEL_COOLDOWN_TICKS;
 
         ServerWorld w = player.getServerWorld();
-
-        w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                ModSounds.LUNGESTART,
-                player.getSoundCategory(),
-                1.2f, 1.0f);
-
-        w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                ModSounds.BULLRUSH,
-                player.getSoundCategory(),
-                1.5f, 1.0f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.LUNGESTART, player.getSoundCategory(), 1.2f, 1.0f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.BULLRUSH, player.getSoundCategory(), 1.5f, 1.0f);
 
         enableRushStepUp(player, true);
-
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
     private static void tickBullrush(ServerPlayerEntity player, StrengthState state) {
-        // If we just ended, revert step-up.
         if (state.rushTicks <= 0) {
             enableRushStepUp(player, false);
             return;
@@ -658,7 +486,9 @@ public class StrengthPower implements Power {
 
             ServerWorld w = player.getServerWorld();
             w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.BULLRUSH, player.getSoundCategory(), 0.6f, 0.9f);
-            w.spawnParticles(ParticleTypes.CLOUD, player.getX(), player.getY() + 0.2, player.getZ(), 10, 0.25, 0.10, 0.25, 0.02);
+
+            StrengthRushCancelPayload fx = new StrengthRushCancelPayload(player.getX(), player.getY() + 0.2, player.getZ());
+            sendToViewers(w, player, fx);
             return;
         }
 
@@ -669,32 +499,22 @@ public class StrengthPower implements Power {
         int elapsed = Math.max(0, RUSH_TICKS - state.rushTicks);
 
         if (elapsed < RUSH_STEER_TICKS) {
-            double maxTurnDeg = 14.0;
-            double maxTurn = Math.toRadians(maxTurnDeg);
-
+            double maxTurn = Math.toRadians(14.0);
             Vec3d look = player.getRotationVec(1.0f);
             Vec3d a = new Vec3d(dir.x, 0.0, dir.z);
             Vec3d b = new Vec3d(look.x, 0.0, look.z);
 
             if (a.lengthSquared() > 1.0e-6 && b.lengthSquared() > 1.0e-6) {
-                a = a.normalize();
-                b = b.normalize();
-
+                a = a.normalize(); b = b.normalize();
                 double dot = MathHelper.clamp(a.x * b.x + a.z * b.z, -1.0, 1.0);
                 double ang = Math.acos(dot);
 
                 if (ang > 1.0e-6) {
                     double t = Math.min(1.0, maxTurn / ang);
-
-                    Vec3d blended = new Vec3d(
-                            MathHelper.lerp(t, a.x, b.x),
-                            0.0,
-                            MathHelper.lerp(t, a.z, b.z)
-                    );
-
+                    Vec3d blended = new Vec3d(MathHelper.lerp(t, a.x, b.x), 0.0, MathHelper.lerp(t, a.z, b.z));
                     if (blended.lengthSquared() > 1.0e-6) {
                         dir = blended.normalize();
-                        state.rushDir = dir; // lock it in once window ends
+                        state.rushDir = dir;
                     }
                 }
             }
@@ -705,7 +525,6 @@ public class StrengthPower implements Power {
         if (wallHit != null) {
             state.rushTicks = 0;
             enableRushStepUp(player, false);
-
             doRushCrash(player, player.getServerWorld(), wallHit);
             return;
         }
@@ -715,74 +534,47 @@ public class StrengthPower implements Power {
         if (horiz.lengthSquared() < 1.0e-6) horiz = new Vec3d(0, 0, 1);
 
         boolean stepped = tryRushStepUp(player, player.getServerWorld(), horiz);
-
         Vec3d push = horiz.normalize().multiply(RUSH_SPEED);
-
         Vec3d vel = player.getVelocity();
 
-        double newY;
-        if (stepped) {
-            newY = Math.max(vel.y, 0.52);
-        } else {
-            newY = MathHelper.clamp(vel.y, -0.35, 0.35);
-        }
+        double newY = stepped ? Math.max(vel.y, 0.52) : MathHelper.clamp(vel.y, -0.35, 0.35);
 
         player.setVelocity(push.x, newY, push.z);
         player.velocityModified = true;
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
-        // fx
+        // TRAIL FX
         ServerWorld w = player.getServerWorld();
 
         if (w.random.nextFloat() < 0.85f) {
             BlockPos under = player.getBlockPos().down();
             BlockState underState = w.getBlockState(under);
-            if (!underState.isAir()) {
-                w.spawnParticles(
-                        new BlockStateParticleEffect(ParticleTypes.BLOCK, underState),
-                        player.getX(), under.getY() + 1.01, player.getZ(),
-                        14,
-                        0.35, 0.04, 0.35,
-                        0.10
-                );
-            } else {
-                w.spawnParticles(
-                        ParticleTypes.CLOUD,
-                        player.getX(), player.getY() + 0.15, player.getZ(),
-                        6,
-                        0.18, 0.06, 0.18,
-                        0.02
-                );
-            }
-        }
+            boolean hasGround = !underState.isAir();
 
-        if (w.random.nextFloat() < 0.60f) {
-            Vec3d front = player.getPos().add(horiz.normalize().multiply(0.8)).add(0.0, 1.0, 0.0);
-            w.spawnParticles(
-                    ParticleTypes.CRIT,
-                    front.x, front.y, front.z,
-                    2,
-                    0.08, 0.08, 0.08,
-                    0.0
-            );
+            Vec3d horizNorm = horiz.normalize();
+            Vec3d front = player.getPos().add(horizNorm.multiply(0.8)).add(0.0, 1.0, 0.0);
+            boolean showCrit = w.random.nextFloat() < 0.60f;
+
+            StrengthRushTrailPayload trail = new StrengthRushTrailPayload(
+                    player.getX(), player.getY(), player.getZ(),
+                    under.getX(), under.getY(), under.getZ(),
+                    hasGround,
+                    (float) dir.x, (float) dir.z,
+                    showCrit);
+            sendToViewers(w, player, trail);
         }
 
         // ENTITY COLLISION
-        boolean canHit = state.rushHitLock <= 0;
-        if (canHit) {
-            Vec3d p = player.getPos().add(horiz.normalize().multiply(0.9));
+        if (state.rushHitLock <= 0) {
+            Vec3d horizNorm = horiz.normalize();
+            Vec3d p = player.getPos().add(horizNorm.multiply(0.9));
             Box hitBox = new Box(p, p).expand(RUSH_HIT_RADIUS, 1.2, RUSH_HIT_RADIUS);
 
-            List<LivingEntity> hits = w.getEntitiesByClass(
-                    LivingEntity.class,
-                    hitBox,
-                    e -> e.isAlive() && e != player
-            );
+            List<LivingEntity> hits = w.getEntitiesByClass(LivingEntity.class, hitBox, e -> e.isAlive() && e != player);
 
             if (!hits.isEmpty()) {
                 for (LivingEntity t : hits) {
                     t.setAttacker(player);
-
                     t.damage(ModDamageTypes.rushCollision(w, player), RUSH_HIT_DAMAGE);
 
                     Vec3d tv = t.getVelocity();
@@ -793,18 +585,11 @@ public class StrengthPower implements Power {
                         sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp));
                     }
 
-                    w.spawnParticles(ParticleTypes.CRIT,
-                            t.getX(), t.getY() + t.getHeight() * 0.55, t.getZ(),
-                            8, 0.16, 0.16, 0.16, 0.02);
-                    w.spawnParticles(ParticleTypes.CLOUD,
-                            t.getX(), t.getY() + 0.15, t.getZ(),
-                            14, 0.25, 0.10, 0.25, 0.04);
+                    StrengthRushEntityHitPayload hitFx = new StrengthRushEntityHitPayload(t.getId());
+                    PlayerLookup.tracking(w, t.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, hitFx));
                 }
 
-                w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                        ModSounds.ENTITYSLAM,
-                        player.getSoundCategory(), 0.9f, 0.9f);
-
+                w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.ENTITYSLAM, player.getSoundCategory(), 0.9f, 0.9f);
                 state.rushHitLock = 6;
             }
         }
@@ -817,62 +602,38 @@ public class StrengthPower implements Power {
         Vec3d fwd = horiz.normalize().multiply(RUSH_WALL_CHECK_DIST);
 
         Vec3d lowStart = player.getPos().add(0.0, 0.20, 0.0);
-        Vec3d lowEnd   = lowStart.add(fwd);
-
-        HitResult low = w.raycast(new RaycastContext(
-                lowStart, lowEnd,
-                RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE,
-                player
-        ));
+        HitResult low = w.raycast(new RaycastContext(lowStart, lowStart.add(fwd),
+                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player));
 
         Vec3d highStart = player.getPos().add(0.0, player.getHeight() * 0.90, 0.0);
-        Vec3d highEnd   = highStart.add(fwd);
-
-        BlockHitResult high = w.raycast(new RaycastContext(
-                highStart, highEnd,
-                RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE,
-                player
-        ));
+        BlockHitResult high = w.raycast(new RaycastContext(highStart, highStart.add(fwd),
+                RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player));
 
         boolean lowBlock  = (low.getType()  == HitResult.Type.BLOCK);
         boolean highBlock = (high.getType() == HitResult.Type.BLOCK);
 
         if (lowBlock && !highBlock) return null;
-
         if (!highBlock) return null;
         return high;
     }
 
     private static void doRushCrash(ServerPlayerEntity player, ServerWorld w, BlockHitResult wallHit) {
-        BlockPos hitPos = wallHit.getBlockPos();
-
         player.setVelocity(0, player.getVelocity().y * 0.25, 0);
         player.velocityModified = true;
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
         Vec3d impact = wallHit.getPos();
-        w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                ModSounds.WALLSLAM,
-                player.getSoundCategory(), 1.0f, 1.00f);
+        BlockPos hitPos = wallHit.getBlockPos();
 
-        w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                SoundEvents.ENTITY_GENERIC_EXPLODE,
-                player.getSoundCategory(), 0.8f, 0.85f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.WALLSLAM, player.getSoundCategory(), 1.0f, 1.00f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 0.8f, 0.85f);
 
-        w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER,
-                impact.x, impact.y, impact.z,
-                1, 0, 0, 0, 0);
+        StrengthRushCrashPayload fx = new StrengthRushCrashPayload(impact.x, impact.y, impact.z);
+        sendToViewers(w, player, fx);
 
         int broken = 0;
-
         Vec3d n = Vec3d.of(wallHit.getSide().getVector());
-
-        int halfW = 1;
-        int halfH = 1;
-        int depth = 2;
-
+        int halfW = 1, halfH = 1, depth = 2;
         boolean xWall = Math.abs(n.x) > 0.5;
 
         for (int d = 0; d < depth; d++) {
@@ -880,12 +641,9 @@ public class StrengthPower implements Power {
                 for (int xz = -halfW; xz <= halfW; xz++) {
                     if (broken >= RUSH_WALL_MAX_BLOCKS) break;
 
-                    BlockPos p;
-                    if (xWall) {
-                        p = hitPos.add((int) (-n.x * d), y, xz);
-                    } else {
-                        p = hitPos.add(xz, y, (int) (-n.z * d));
-                    }
+                    BlockPos p = xWall
+                            ? hitPos.add((int)(-n.x * d), y, xz)
+                            : hitPos.add(xz, y, (int)(-n.z * d));
 
                     BlockState s = w.getBlockState(p);
                     if (s.isAir()) continue;
@@ -905,12 +663,7 @@ public class StrengthPower implements Power {
         player.damage(ModDamageTypes.rushCollision(w, player), RUSH_CRASH_SELF_DAMAGE);
 
         Box box = new Box(impact, impact).expand(RUSH_CRASH_AOE_RADIUS, 2.0, RUSH_CRASH_AOE_RADIUS);
-
-        List<LivingEntity> victims = w.getEntitiesByClass(
-                LivingEntity.class,
-                box,
-                e -> e.isAlive() && e != player
-        );
+        List<LivingEntity> victims = w.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != player);
 
         for (LivingEntity t : victims) {
             t.setAttacker(player);
@@ -926,20 +679,11 @@ public class StrengthPower implements Power {
         }
 
         CameraShake.shakeNearby(player, 8.0, 10, 1.15f);
-
-        w.spawnParticles(ParticleTypes.CLOUD,
-                impact.x, impact.y, impact.z,
-                120, 1.0, 0.35, 1.0, 0.12);
-        w.spawnParticles(ParticleTypes.CRIT,
-                impact.x, impact.y, impact.z,
-                50, 0.8, 0.25, 0.8, 0.18);
     }
 
     private static void enableRushStepUp(ServerPlayerEntity player, boolean enable) {
         var attr = player.getAttributeInstance(EntityAttributes.GENERIC_STEP_HEIGHT);
-        if (attr != null) {
-            attr.setBaseValue(enable ? 1.05 : 0.6);
-        }
+        if (attr != null) attr.setBaseValue(enable ? 1.05 : 0.6);
     }
 
     private static boolean tryRushStepUp(ServerPlayerEntity player, ServerWorld w, Vec3d horizDir) {
@@ -951,23 +695,20 @@ public class StrengthPower implements Power {
         Vec3d feet = player.getPos().add(0.0, 0.05, 0.0);
         Vec3d ahead = feet.add(fwd.multiply(0.55));
 
-        BlockPos front = BlockPos.ofFloored(ahead);
-        BlockPos frontUp = front.up();
+        BlockPos front    = BlockPos.ofFloored(ahead);
+        BlockPos frontUp  = front.up();
 
         BlockState sFront = w.getBlockState(front);
-        boolean frontBlocks = !sFront.getCollisionShape(w, front).isEmpty();
-        if (!frontBlocks) return false;
+        if (sFront.getCollisionShape(w, front).isEmpty()) return false;
 
         BlockState sFrontUp = w.getBlockState(frontUp);
-        boolean upBlocks = !sFrontUp.getCollisionShape(w, frontUp).isEmpty();
-        if (upBlocks) return false;
+        if (!sFrontUp.getCollisionShape(w, frontUp).isEmpty()) return false;
 
         if (player.getVelocity().y > 0.30) return false;
 
         Vec3d v = player.getVelocity();
         player.setVelocity(v.x, Math.max(v.y, 0.52), v.z);
         player.velocityModified = true;
-
         return true;
     }
 
@@ -975,60 +716,49 @@ public class StrengthPower implements Power {
        ULT
        ============================================================ */
 
-    private static final int RAGE_FX_RADIUS = 10;
+    private static final int RAGE_FX_RADIUS   = 10;
     private static final int RAGE_AURA_INTERVAL = 2;
-    private static final int RAGE_HB_INTERVAL = 14;
+    private static final int RAGE_HB_INTERVAL   = 14;
 
     @Override
     public void activateUltimate(ServerPlayerEntity player) {
         StrengthState state = getState(player);
-        state.rageTicks = RAGE_TICKS;
-        state.rageFxBurst = 2;
+        state.rageTicks    = RAGE_TICKS;
+        state.rageFxBurst  = 2;
         state.rageAuraStep = 0;
-        state.rageHbStep = 0;
+        state.rageHbStep   = 0;
 
         ServerWorld w = player.getServerWorld();
-
-        w.playSound(null, player.getX(), player.getY(), player.getZ(),
-                ModSounds.RAGE,
-                player.getSoundCategory(), 0.8f, 1.00f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.RAGE, player.getSoundCategory(), 0.8f, 1.00f);
 
         PowerManager.clearAbilityCooldown(player, AbilityTypes.PRIMARY);
         PowerManager.clearAbilityCooldown(player, AbilityTypes.SECONDARY);
     }
 
     private static void tickRageBuffs(ServerPlayerEntity player) {
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 10, RAGE_STR_AMP, true, false));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 10, RAGE_RES_AMP, true, false));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 10, RAGE_SPEED_AMP, true, false));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH,   10, RAGE_STR_AMP,   true, false));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE,  10, RAGE_RES_AMP,   true, false));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,       10, RAGE_SPEED_AMP, true, false));
     }
 
     public static boolean isRaging(ServerPlayerEntity player) {
         return ACTIVE_STATES.getOrDefault(player.getUuid(), new StrengthState()).rageTicks > 0;
     }
 
-    private static final DustParticleEffect RAGE_RED_DUST =
-            new DustParticleEffect(new Vector3f(1.0f, 0.0f, 0.0f), 1.35f);
-
     private static void tickRageFX(ServerPlayerEntity player, StrengthState state) {
         ServerWorld w = player.getServerWorld();
 
         if (state.rageFxBurst >= 0) {
-            spawnRagePulse(w, player);
+            StrengthRagePulsePayload pulse = new StrengthRagePulsePayload(player.getX(), player.getY(), player.getZ());
+            sendToViewers(w, player, pulse);
             CameraShake.shakeNearby(player, RAGE_FX_RADIUS, 18, 1.85f);
             state.rageFxBurst = -1;
         }
 
         if (state.rageAuraStep <= 0) {
             state.rageAuraStep = RAGE_AURA_INTERVAL;
-
-            w.spawnParticles(
-                    RAGE_RED_DUST,
-                    player.getX(), player.getY() + 0.95, player.getZ(),
-                    1,
-                    0.55, 0.55, 0.55,
-                    0.02
-            );
+            StrengthRageAuraPayload aura = new StrengthRageAuraPayload(player.getX(), player.getY() + 0.95, player.getZ());
+            sendToViewers(w, player, aura);
         } else {
             state.rageAuraStep--;
         }
@@ -1038,118 +768,36 @@ public class StrengthPower implements Power {
 
             Vec3d c = player.getPos();
             Box box = new Box(c, c).expand(RAGE_FX_RADIUS, 6.0, RAGE_FX_RADIUS);
-            List<ServerPlayerEntity> nearbyPlayers = w.getEntitiesByClass(
-                    ServerPlayerEntity.class,
-                    box,
-                    ServerPlayerEntity::isAlive
-            );
-
-            for (ServerPlayerEntity p : nearbyPlayers) {
-                p.playSound(SoundEvents.ENTITY_WARDEN_HEARTBEAT, 0.95f, 0.95f);
-            }
+            w.getEntitiesByClass(ServerPlayerEntity.class, box, ServerPlayerEntity::isAlive)
+                    .forEach(p -> p.playSound(SoundEvents.ENTITY_WARDEN_HEARTBEAT, 0.95f, 0.95f));
         } else {
             state.rageHbStep--;
         }
     }
 
-    private static void spawnRagePulse(ServerWorld w, ServerPlayerEntity player) {
-        double cx = player.getX();
-        double cy = player.getY() + 1.0;
-        double cz = player.getZ();
-
-        w.spawnParticles(
-                RAGE_RED_DUST,
-                cx, cy, cz,
-                28,
-                0.12, 0.18, 0.12,
-                0.06
-        );
-
-        int points = 24;
-        double radius = 3.35;
-        double speed = 0.45;
-        double y = player.getY() + 0.15;
-
-        for (int i = 0; i < points; i++) {
-            double a = (Math.PI * 2.0) * (i / (double) points);
-            double dx = Math.cos(a);
-            double dz = Math.sin(a);
-
-            w.spawnParticles(
-                    RAGE_RED_DUST,
-                    cx + dx * radius, y, cz + dz * radius,
-                    10,
-                    dx * speed, 0.03, dz * speed,
-                    1.0
-            );
-        }
-
-        w.spawnParticles(
-                ParticleTypes.EXPLOSION_EMITTER,
-                cx, player.getY() + 0.35, cz,
-                1,
-                0, 0, 0,
-                0
-        );
-
-        w.spawnParticles(
-                ParticleTypes.POOF,
-                cx, player.getY() + 0.10, cz,
-                10,
-                0.35, 0.05, 0.35,
-                0.05
-        );
+    private static <T extends net.minecraft.network.packet.CustomPayload> void sendToViewers(
+            ServerWorld w, ServerPlayerEntity player, T payload) {
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 
     /* ============================================================
        COOLDOWNS / DISPLAY
        ============================================================ */
 
-    @Override public String getName() { return Text.translatable("power.loopypowers.strength.name").getString(); }
-    @Override public String getPrimaryName() { return Text.translatable("power.loopypowers.strength.primary_name").getString(); }
-    @Override public String getSecondaryName() { return Text.translatable("power.loopypowers.strength.secondary_name").getString(); }
-    @Override public String getUltimateName() { return Text.translatable("power.loopypowers.strength.ultimate_name").getString(); }
-
-    @Override
-    public long getPrimaryCooldownMs() { return 12_500; }
-
-    @Override
-    public long getSecondaryCooldownMs() {
-        return 18_500;
-    }
-
-    @Override
-    public long getUltimateCooldownMs() {
-        return 280_000;
-    }
-
-    @Override
-    public String getOverviewDescription() {
-        return Text.translatable("power.loopypowers.strength.description.overview").getString();
-    }
-
-    @Override
-    public String getPassiveName() {
-        return Text.translatable("power.loopypowers.strength.passive_name").getString();
-    }
-
-    @Override
-    public String getPassiveDescription() {
-        return Text.translatable("power.loopypowers.strength.description.passive").getString();
-    }
-
-    @Override
-    public String getPrimaryDescription() {
-        return Text.translatable("power.loopypowers.strength.description.primary").getString();
-    }
-
-    @Override
-    public String getSecondaryDescription() {
-        return Text.translatable("power.loopypowers.strength.description.secondary").getString();
-    }
-
-    @Override
-    public String getUltimateDescription() {
-        return Text.translatable("power.loopypowers.strength.description.ultimate").getString();
-    }
+    @Override public String getName()              { return Text.translatable("power.loopypowers.strength.name").getString(); }
+    @Override public String getPrimaryName()       { return Text.translatable("power.loopypowers.strength.primary_name").getString(); }
+    @Override public String getSecondaryName()     { return Text.translatable("power.loopypowers.strength.secondary_name").getString(); }
+    @Override public String getUltimateName()      { return Text.translatable("power.loopypowers.strength.ultimate_name").getString(); }
+    @Override public long getPrimaryCooldownMs()   { return 12_500; }
+    @Override public long getSecondaryCooldownMs() { return 18_500; }
+    @Override public long getUltimateCooldownMs()  { return 280_000; }
+    @Override public String getOverviewDescription() { return Text.translatable("power.loopypowers.strength.description.overview").getString(); }
+    @Override public String getPassiveName()         { return Text.translatable("power.loopypowers.strength.passive_name").getString(); }
+    @Override public String getPassiveDescription()  { return Text.translatable("power.loopypowers.strength.description.passive").getString(); }
+    @Override public String getPrimaryDescription()  { return Text.translatable("power.loopypowers.strength.description.primary").getString(); }
+    @Override public String getSecondaryDescription(){ return Text.translatable("power.loopypowers.strength.description.secondary").getString(); }
+    @Override public String getUltimateDescription() { return Text.translatable("power.loopypowers.strength.description.ultimate").getString(); }
 }

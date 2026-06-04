@@ -7,7 +7,10 @@ import com.yourname.loopypowers.entity.SonicBoltEntity;
 import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.RenderPackets;
+import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
@@ -16,7 +19,6 @@ import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.particle.ParticleTypes;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
@@ -24,10 +26,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
-import java.util.List;
-import java.util.UUID;
-import java.util.Map;
-import java.util.HashMap;
+
+import java.util.*;
 
 public class SoundPower implements Power {
 
@@ -79,7 +79,7 @@ public class SoundPower implements Power {
        ============================================================ */
 
     // Passive
-    private static final int    RES_IMMUNITY_TICKS = 140; // time after stun for immunity
+    private static final int    RES_IMMUNITY_TICKS = 140;
     private static final double RES_RADIUS         = 14.0;
     private static final int    RES_SCAN_INTERVAL  = 4;
     private static final int    RES_TRAIL_INTERVAL = 2;
@@ -118,8 +118,6 @@ public class SoundPower implements Power {
 
     private static final int PULL_VIZ_STEPS  = 8;
     private static final int BLAST_VIZ_STEPS = 8;
-    private static final int PULL_POINTS     = 90;
-    private static final int BLAST_POINTS    = 120;
 
     // Ultimate
     private static final int    ULT_WINDUP_TICKS      = 28;
@@ -154,10 +152,8 @@ public class SoundPower implements Power {
 
         if (player.getServer() != null) {
             for (ServerWorld w : player.getServer().getWorlds()) {
-                // Remove mid-air Sonic Bolts owned by this player
                 w.getEntitiesByClass(SonicBoltEntity.class, player.getBoundingBox().expand(150), e -> player.equals(e.getOwner())).forEach(Entity::discard);
 
-                // Strip GLOWING and STUN from entities that the player resonated
                 for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, player.getBoundingBox().expand(150), LivingEntity::isAlive)) {
                     SoundVictimState state = VICTIM_STATES.get(e.getUuid());
                     if (state != null && state.resonatedTicks > 0) {
@@ -217,11 +213,9 @@ public class SoundPower implements Power {
 
         target.damage(ModDamageTypes.sound(target.getWorld(), caster), BURST_BONUS_DAMAGE);
 
-        // resets velocity before stunning so they stop moving
         target.setVelocity(0, Math.min(target.getVelocity().y, 0.0), 0);
         target.velocityModified = true;
 
-        // Apply stun
         target.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.STUN), 35, 0, false, false, true));
         vState.immunityTicks = RES_IMMUNITY_TICKS;
         vState.score = 0;
@@ -230,11 +224,11 @@ public class SoundPower implements Power {
             CameraShake.shakeNearby(targetPlayer, 3, 15, 0.08f);
         }
 
-        ServerWorld sw = (ServerWorld) target.getWorld();
-        sw.spawnParticles(ParticleTypes.SONIC_BOOM, target.getX(), target.getY() + target.getHeight() * 0.6, target.getZ(), 1, 0, 0, 0, 0);
-        sw.spawnParticles(ParticleTypes.EXPLOSION, target.getX(), target.getY() + 0.2, target.getZ(), 6, 0.35, 0.25, 0.35, 0.02);
-
-        sw.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.ENTITY_GENERIC_EXPLODE, caster.getSoundCategory(), 0.9f, 1.3f);
+        if (target.getWorld() instanceof ServerWorld sw) {
+            SoundBurstHitPayload fx = new SoundBurstHitPayload(target.getId());
+            PlayerLookup.tracking(sw, target.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
+            sw.playSound(null, target.getX(), target.getY(), target.getZ(), SoundEvents.ENTITY_GENERIC_EXPLODE, caster.getSoundCategory(), 0.9f, 1.3f);
+        }
     }
 
     /* ============================================================
@@ -265,16 +259,14 @@ public class SoundPower implements Power {
             SoundVictimState vState = getVictimState(e);
             vState.lastSeenTick = nowTick;
 
-            // Decouple ticking from the 4-tick scan loop to ensure accurate countdowns
             if (vState.lastTickTime != nowTick) {
                 int delta = (int) (nowTick - vState.lastTickTime);
-                if (delta > 20) delta = 20; // prevent massive jumps
+                if (delta > 20) delta = 20;
                 vState.lastTickTime = nowTick;
 
                 boolean wasResonated = vState.resonatedTicks > 0;
                 if (vState.resonatedTicks > 0) vState.resonatedTicks -= delta;
 
-                // If resonance naturally expired this tick, start immunity
                 if (wasResonated && vState.resonatedTicks <= 0) {
                     vState.immunityTicks = RES_IMMUNITY_TICKS;
                     vState.score = 0;
@@ -284,7 +276,6 @@ public class SoundPower implements Power {
                 if (vState.hbStep > 0) vState.hbStep -= delta;
             }
 
-            // Block score buildup and instant radius if immune
             if (vState.immunityTicks > 0) {
                 vState.score = 0;
             } else {
@@ -337,9 +328,8 @@ public class SoundPower implements Power {
                             player.getSoundCategory(),
                             0.7f, 1.1f);
 
-                    w.spawnParticles(ParticleTypes.SCULK_SOUL,
-                            e.getX(), e.getY() + 1.0, e.getZ(),
-                            6, 0.35, 0.45, 0.35, 0.02);
+                    SoundResonanceBurstPayload fx = new SoundResonanceBurstPayload(e.getId());
+                    PlayerLookup.tracking(w, e.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, fx));
 
                     RenderPackets.sendResonanceLine(player, e.getId(), 20, 1.0f);
                     if (e instanceof ServerPlayerEntity spTarget) {
@@ -402,7 +392,9 @@ public class SoundPower implements Power {
         caster.bdState = s;
 
         w.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.BLOCK_SCULK_CATALYST_BLOOM, player.getSoundCategory(), 0.7f, 1.4f);
-        w.spawnParticles(ParticleTypes.SONIC_BOOM, player.getX(), player.getY() + 1.0, player.getZ(), 1, 0, 0, 0, 0);
+
+        SoundBoomCastPayload fx = new SoundBoomCastPayload(player.getX(), player.getY() + 1.0, player.getZ());
+        sendToViewers(w, player, fx);
     }
 
     private static void tickBassDrop(ServerPlayerEntity caster, SoundCasterState state) {
@@ -441,11 +433,9 @@ public class SoundPower implements Power {
         List<LivingEntity> nearby = w.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != caster);
 
         w.playSound(null, caster.getX(), caster.getY(), caster.getZ(), ModSounds.BASSDROP, caster.getSoundCategory(), 1.0f, 1.00f);
-        w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, cPos.x, cPos.y + 0.25, cPos.z, 1, 0, 0, 0, 0);
-        w.spawnParticles(ParticleTypes.SONIC_BOOM, cPos.x, cPos.y + 1.0, cPos.z, 1, 0, 0, 0, 0);
 
-        spawnFinalExpandingSphere(w, cPos);
-        spawnSphereShell(w, cPos, BD_FINAL_RADIUS * 0.85, 18, ParticleTypes.SCULK_SOUL, 0.9);
+        SoundBassFinalPayload finalFx = new SoundBassFinalPayload(cPos.x, cPos.y, cPos.z);
+        sendToViewers(w, caster, finalFx);
 
         if (state.bdState != null) state.bdState.blastVizStep = 0;
 
@@ -467,12 +457,13 @@ public class SoundPower implements Power {
             if (t.getWorld() == w && t.squaredDistanceTo(caster) <= (BD_FINAL_RADIUS * BD_FINAL_RADIUS)) continue;
 
             if (t.getWorld() instanceof ServerWorld tw) {
-                tw.spawnParticles(ParticleTypes.EXPLOSION, t.getX(), t.getY() + 0.2, t.getZ(), 6, 0.35, 0.20, 0.35, 0.02);
+                SoundBassFinalRemotePayload remoteFx = new SoundBassFinalRemotePayload(t.getId());
+                PlayerLookup.tracking(tw, t.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, remoteFx));
                 tw.playSound(null, t.getX(), t.getY(), t.getZ(), SoundEvents.ENTITY_GENERIC_EXPLODE, caster.getSoundCategory(), 0.7f, 1.3f);
             }
             applyBassBurstHit(caster, t, 0.0f, BD_REMOTE_STUN_TICKS);
         }
-        CameraShake.shakeNearby(caster, 5,15, 0.04f);
+        CameraShake.shakeNearby(caster, 5, 15, 0.04f);
     }
 
     private static void doBassPullPulse(ServerWorld w, ServerPlayerEntity caster, BassDropState s) {
@@ -482,10 +473,9 @@ public class SoundPower implements Power {
         List<LivingEntity> targets = w.getEntitiesByClass(LivingEntity.class, box, e -> e.isAlive() && e != caster);
 
         w.playSound(null, caster.getX(), caster.getY(), caster.getZ(), ModSounds.BASSSINGLE, caster.getSoundCategory(), 0.6f, 1.6f);
-        w.spawnParticles(ParticleTypes.SONIC_BOOM, cPos.x, cPos.y + 1.0, cPos.z, 1, 0, 0, 0, 0);
 
-        spawnPullContractingSphere(w, cPos);
-        spawnSphereShell(w, cPos, BD_PULL_RADIUS * 0.65, 12, ParticleTypes.SCULK_SOUL, 0.9);
+        SoundBassPullPayload pullFx = new SoundBassPullPayload(cPos.x, cPos.y, cPos.z);
+        sendToViewers(w, caster, pullFx);
 
         s.pullVizStep = 0;
 
@@ -498,7 +488,9 @@ public class SoundPower implements Power {
             t.addVelocity(dir.x * BD_PULL_STRENGTH, BD_PULL_UP, dir.z * BD_PULL_STRENGTH);
             t.velocityModified = true;
 
-            w.spawnParticles(ParticleTypes.SCULK_CHARGE_POP, t.getX(), t.getY() + t.getHeight() * 0.55, t.getZ(), 2, 0.12, 0.10, 0.12, 0.01);
+            SoundBassPullHitPayload hitFx = new SoundBassPullHitPayload(t.getId());
+            PlayerLookup.tracking(w, t.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, hitFx));
+
             s.scanned.add(t.getUuid());
         }
     }
@@ -515,7 +507,6 @@ public class SoundPower implements Power {
         target.addVelocity(dir.x * BD_FINAL_KB, BD_FINAL_UP, dir.z * BD_FINAL_KB);
         target.velocityModified = true;
 
-        // Apply STUN Effect if resonated
         SoundVictimState vState = VICTIM_STATES.get(target.getUuid());
         if (vState != null && vState.resonatedTicks > 0) {
             vState.resonatedTicks = 0;
@@ -526,7 +517,6 @@ public class SoundPower implements Power {
             vState.score = 0;
 
             if (target instanceof ServerPlayerEntity spTarget) {
-                // holllyyy fuckinggg shittt i hate this new sound system
                 spTarget.getServerWorld().playSound(null, spTarget.getX(), spTarget.getY(), spTarget.getZ(), ModSounds.EARRING, net.minecraft.sound.SoundCategory.PLAYERS, 1.5f, 1.0f);
             }
         }
@@ -536,56 +526,16 @@ public class SoundPower implements Power {
         }
     }
 
-    private static void spawnSphereShell(ServerWorld w, Vec3d center, double radius, int points, net.minecraft.particle.ParticleEffect particle, double yOffset) {
-        for (int i = 0; i < points; i++) {
-            double u = w.random.nextDouble();
-            double v = w.random.nextDouble();
-            double theta = 2.0 * Math.PI * u;
-            double phi = Math.acos(2.0 * v - 1.0);
-
-            double sx = Math.sin(phi) * Math.cos(theta);
-            double sy = Math.cos(phi);
-            double sz = Math.sin(phi) * Math.sin(theta);
-
-            double j = 0.12;
-            double px = center.x + sx * radius + (w.random.nextDouble() - 0.5) * j;
-            double py = center.y + yOffset + sy * radius + (w.random.nextDouble() - 0.5) * j;
-            double pz = center.z + sz * radius + (w.random.nextDouble() - 0.5) * j;
-
-            w.spawnParticles(particle, px, py, pz, 1, 0.0, 0.0, 0.0, 0.0);
-        }
-    }
-
-    private static void spawnPullContractingSphere(ServerWorld w, Vec3d center) {
-        int shells = 10;
-        for (int s = 0; s < shells; s++) {
-            double t = (shells <= 1) ? 1.0 : (s / (double)(shells - 1));
-            double r = MathHelper.lerp(t, BD_PULL_RADIUS, 5.2);
-            spawnSphereShell(w, center, r, 120, ParticleTypes.SCULK_CHARGE_POP, 0.9);
-        }
-    }
-
-    private static void spawnFinalExpandingSphere(ServerWorld w, Vec3d center) {
-        int shells = 10;
-        for (int s = 0; s < shells; s++) {
-            double t = (shells <= 1) ? 1.0 : (s / (double)(shells - 1));
-            double r = MathHelper.lerp(t, 1.0, BD_FINAL_RADIUS);
-            spawnSphereShell(w, center, r, 150, ParticleTypes.SCULK_CHARGE_POP, 0.9);
-        }
-    }
-
     private static void animateBassSpheres(ServerWorld w, ServerPlayerEntity caster, BassDropState s) {
         if (s.pullVizStep >= 0 && s.pullVizStep < PULL_VIZ_STEPS) {
             Vec3d c = caster.getPos().add(0, 0.9, 0);
             double t = (PULL_VIZ_STEPS <= 1) ? 1.0 : (s.pullVizStep / (double)(PULL_VIZ_STEPS - 1));
             t = t * t;
             double r = MathHelper.lerp(t, BD_PULL_RADIUS, 2.6);
+            boolean innerShell = (s.pullVizStep & 1) == 0;
 
-            spawnSphereShell(w, c, r, PULL_POINTS, ParticleTypes.SCULK_CHARGE_POP, 0.0);
-
-            if ((s.pullVizStep & 1) == 0) {
-                spawnSphereShell(w, c, r * 0.55, 22, ParticleTypes.SCULK_SOUL, 0.0);
-            }
+            SoundBassPullVizPayload viz = new SoundBassPullVizPayload(c.x, c.y, c.z, (float) r, innerShell);
+            sendToViewers(w, caster, viz);
 
             s.pullVizStep++;
             if (s.pullVizStep >= PULL_VIZ_STEPS) s.pullVizStep = -1;
@@ -596,30 +546,13 @@ public class SoundPower implements Power {
             double t = (BLAST_VIZ_STEPS <= 1) ? 1.0 : (s.blastVizStep / (double)(BLAST_VIZ_STEPS - 1));
             double ease = 1.0 - Math.pow(1.0 - t, 2.0);
             double r = MathHelper.lerp(ease, 1.0, BD_FINAL_RADIUS * 1.5);
+            boolean groundRing = (s.blastVizStep & 1) == 0;
 
-            spawnSphereShell(w, c, r, BLAST_POINTS, ParticleTypes.SCULK_CHARGE_POP, 0.0);
-
-            if ((s.blastVizStep & 1) == 0) {
-                spawnBassGroundRing(w, caster.getPos(), r);
-            }
+            SoundBassBlastVizPayload viz = new SoundBassBlastVizPayload(c.x, c.y, c.z, (float) r, groundRing);
+            sendToViewers(w, caster, viz);
 
             s.blastVizStep++;
             if (s.blastVizStep >= BLAST_VIZ_STEPS) s.blastVizStep = -1;
-        }
-    }
-
-    private static void spawnBassGroundRing(ServerWorld w, Vec3d center, double radius) {
-        double y = center.y + 0.10;
-        for (int i = 0; i < 36; i++) {
-            double a = (Math.PI * 2.0) * (i / 36.0);
-            double x = center.x + Math.cos(a) * radius;
-            double z = center.z + Math.sin(a) * radius;
-
-            double j = 0.06;
-            x += (w.random.nextDouble() - 0.5) * j;
-            z += (w.random.nextDouble() - 0.5) * j;
-
-            w.spawnParticles(ParticleTypes.SCULK_CHARGE_POP, x, y, z, 1, 0, 0, 0, 0);
         }
     }
 
@@ -636,7 +569,10 @@ public class SoundPower implements Power {
         caster.ultPendingFire = true;
 
         w.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_WARDEN_SONIC_CHARGE, player.getSoundCategory(), 1.0f, 1.0f);
-        w.spawnParticles(ParticleTypes.SONIC_BOOM, player.getX(), player.getY() + 1.0, player.getZ(), 1, 0, 0, 0, 0);
+
+        SoundBoomCastPayload fx = new SoundBoomCastPayload(player.getX(), player.getY() + 1.0, player.getZ());
+        sendToViewers(w, player, fx);
+
         CameraShake.shakeNearby(player, 10.0, 8, 0.9f);
     }
 
@@ -654,7 +590,8 @@ public class SoundPower implements Power {
 
         if (player.getWorld() instanceof ServerWorld w) {
             if (state.ultWindup % 4 == 0) {
-                w.spawnParticles(ParticleTypes.SCULK_CHARGE_POP, player.getX(), player.getY() + 1.0, player.getZ(), 6, 0.25, 0.35, 0.25, 0.01);
+                SoundUltWindupPayload fx = new SoundUltWindupPayload(player.getX(), player.getY() + 1.0, player.getZ());
+                sendToViewers(w, player, fx);
             }
         }
 
@@ -676,7 +613,8 @@ public class SoundPower implements Power {
         w.playSound(null, caster.getX(), caster.getY(), caster.getZ(), ModSounds.RAILGUN, caster.getSoundCategory(), 1.2f, 0.9f);
         CameraShake.shakeNearby(caster, 20.0, 18, 1.6f);
 
-        spawnBeamParticles(w, caster, start, end);
+        SoundUltBeamPayload beamFx = new SoundUltBeamPayload(start.x, start.y, start.z, end.x, end.y, end.z);
+        sendToViewers(w, caster, beamFx);
 
         Box search = new Box(start, end).expand(ULT_BEAM_RADIUS + 1.0);
         List<LivingEntity> hits = w.getEntitiesByClass(LivingEntity.class, search, e -> e.isAlive() && e != caster);
@@ -695,29 +633,6 @@ public class SoundPower implements Power {
         }
 
         tearGroundAlongBeam(w, start, end);
-    }
-
-    private static void spawnBeamParticles(ServerWorld w, ServerPlayerEntity caster, Vec3d start, Vec3d end) {
-        Vec3d delta = end.subtract(start);
-        double len = delta.length();
-        if (len < 0.01) return;
-
-        int steps = MathHelper.clamp((int)(len / ULT_PARTICLE_STEP), 10, 220);
-        Vec3d step = delta.multiply(1.0 / steps);
-
-        Vec3d p = start;
-        for (int i = 0; i <= steps; i++) {
-            w.spawnParticles(caster, ParticleTypes.SONIC_BOOM, true, p.x, p.y, p.z, 1, 0, 0, 0, 0);
-
-            if ((i & 1) == 0) {
-                w.spawnParticles(caster, ParticleTypes.SCULK_CHARGE_POP, true, p.x, p.y, p.z, 3, 0.18, 0.18, 0.18, 0.01);
-            } else {
-                w.spawnParticles(caster, ParticleTypes.SCULK_SOUL, true, p.x, p.y, p.z, 1, 0.10, 0.10, 0.10, 0.0);
-            }
-            p = p.add(step);
-        }
-
-        w.spawnParticles(caster, ParticleTypes.EXPLOSION_EMITTER, true, end.x, end.y, end.z, 1, 0, 0, 0, 0);
     }
 
     private static void tearGroundAlongBeam(ServerWorld w, Vec3d start, Vec3d end) {
@@ -746,7 +661,7 @@ public class SoundPower implements Power {
 
             if (collides && boomCooldown <= 0) {
                 if (lastBoom == null || lastBoom.getManhattanDistance(beamPos) >= 2) {
-                    w.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, beamPos.getX() + 0.5, beamPos.getY() + 0.5, beamPos.getZ() + 0.5, 1, 0, 0, 0, 0);
+                    // Block-break explosion — vanilla handles the sound + particles here
                     w.playSound(null, beamPos.getX() + 0.5, beamPos.getY() + 0.5, beamPos.getZ() + 0.5, SoundEvents.ENTITY_GENERIC_EXPLODE, SoundCategory.PLAYERS, 0.9f, 1.2f);
                     broken += breakBlastCapped(w, beamPos, (ULT_MAX_BLOCKS_BROKEN - broken));
                     lastBoom = beamPos;
@@ -775,11 +690,7 @@ public class SoundPower implements Power {
             }
 
             if (hitPos != null) {
-                if (w.random.nextFloat() < ULT_TEAR_CHANCE) {
-                    w.spawnParticles(new net.minecraft.particle.BlockStateParticleEffect(ParticleTypes.BLOCK, hitState), hitPos.getX() + 0.5, hitPos.getY() + 0.75, hitPos.getZ() + 0.5, 12, 0.35, 0.25, 0.35, 0.10);
-                    w.spawnParticles(ParticleTypes.CRIT, hitPos.getX() + 0.5, hitPos.getY() + 1.1, hitPos.getZ() + 0.5, 2, 0.10, 0.10, 0.10, 0.0);
-                }
-
+                // Block-break particles are vanilla — no payload needed
                 boolean drop = w.random.nextFloat() < ULT_DROP_CHANCE;
                 if (w.breakBlock(hitPos, drop)) {
                     broken++;
@@ -803,30 +714,11 @@ public class SoundPower implements Power {
     @Override public long getSecondaryCooldownMs() { return 26_000; }
     @Override public long getUltimateCooldownMs()  { return 290_000; }
 
-    @Override
-    public String getOverviewDescription() {
-        return Text.translatable("power.loopypowers.sound.description.overview").getString();
-    }
-
-    @Override
-    public String getPassiveDescription() {
-        return Text.translatable("power.loopypowers.sound.description.passive").getString();
-    }
-
-    @Override
-    public String getPrimaryDescription() {
-        return Text.translatable("power.loopypowers.sound.description.primary").getString();
-    }
-
-    @Override
-    public String getSecondaryDescription() {
-        return Text.translatable("power.loopypowers.sound.description.secondary").getString();
-    }
-
-    @Override
-    public String getUltimateDescription() {
-        return Text.translatable("power.loopypowers.sound.description.ultimate").getString();
-    }
+    @Override public String getOverviewDescription() { return Text.translatable("power.loopypowers.sound.description.overview").getString(); }
+    @Override public String getPassiveDescription()  { return Text.translatable("power.loopypowers.sound.description.passive").getString(); }
+    @Override public String getPrimaryDescription()  { return Text.translatable("power.loopypowers.sound.description.primary").getString(); }
+    @Override public String getSecondaryDescription(){ return Text.translatable("power.loopypowers.sound.description.secondary").getString(); }
+    @Override public String getUltimateDescription() { return Text.translatable("power.loopypowers.sound.description.ultimate").getString(); }
 
     /* ============================================================
        HELPERS
@@ -853,9 +745,6 @@ public class SoundPower implements Power {
                     if (w.getBlockEntity(p) != null) continue;
                     if (s.getHardness(w, p) >= 30.0f) continue;
 
-                    if (w.random.nextFloat() < 0.35f) {
-                        w.spawnParticles(new net.minecraft.particle.BlockStateParticleEffect(ParticleTypes.BLOCK, s), p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5, 6, 0.25, 0.25, 0.25, 0.08);
-                    }
                     boolean drop = w.random.nextFloat() < ULT_DROP_CHANCE;
                     if (w.breakBlock(p, drop)) {
                         broken++;
@@ -880,5 +769,13 @@ public class SoundPower implements Power {
             p = p.add(step);
         }
         return false;
+    }
+
+    private static <T extends net.minecraft.network.packet.CustomPayload> void sendToViewers(
+            ServerWorld w, ServerPlayerEntity player, T payload) {
+        Set<ServerPlayerEntity> viewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(viewers::add);
+        viewers.add(player);
+        viewers.forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 }
