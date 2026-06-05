@@ -4,12 +4,15 @@ import com.yourname.loopypowers.network.payload.*;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.block.BlockState;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleEffect;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Vector3f;
@@ -106,19 +109,19 @@ public final class IceFxClient {
             double pz0 = MathHelper.lerp(MathHelper.clamp(progress - back, 0.0f, 1.0f), p.sz(), p.ez());
             double fx  = MathHelper.lerp(progress, p.sx(), p.ex());
             double fz  = MathHelper.lerp(progress, p.sz(), p.ez());
-            double y   = p.yHint() + 0.06;
-
             int steps = 10;
             int seed = p.seed();
+            int yHint = p.yHint();
             for (int i = 0; i <= steps; i++) {
                 double a  = i / (double) steps;
                 double x  = MathHelper.lerp(a, px0, fx);
                 double z  = MathHelper.lerp(a, pz0, fz);
+                int y = findSurfaceY(world, MathHelper.floor(x), MathHelper.floor(z), yHint);
                 double jx = ((seed * 31L + i * 17L) % 100) / 100.0 - 0.5;
                 double jz = ((seed * 13L + i * 29L) % 100) / 100.0 - 0.5;
 
-                world.addParticle(SPIKE_TRAIL_DUST, x + jx * 0.08, y, z + jz * 0.08, 0, 0, 0);
-                if ((i & 1) == 0) scatter(world, ParticleTypes.SNOWFLAKE, x, y + 0.02, z, 1, 0.05, 0.01, 0.05, 0.0);
+                world.addParticle(SPIKE_TRAIL_DUST, x + jx * 0.08, y + 0.06, z + jz * 0.08, 0, 0, 0);
+                if ((i & 1) == 0) scatter(world, ParticleTypes.SNOWFLAKE, x, y + 0.08, z, 1, 0.05, 0.01, 0.05, 0.0);
             }
         });
     }
@@ -275,6 +278,21 @@ public final class IceFxClient {
                 }
             }
         });
+    }
+
+    private static int findSurfaceY(ClientWorld world, int bx, int bz, int yHint) {
+        int startY = MathHelper.clamp(yHint + 3, world.getBottomY() + 1, world.getTopY() - 1);
+        for (int y = startY; y > world.getBottomY(); y--) {
+            BlockPos pos = new BlockPos(bx, y, bz);
+            BlockState here  = world.getBlockState(pos);
+            BlockState below = world.getBlockState(pos.down());
+            boolean hereOk = (here.isAir() || here.getCollisionShape(world, pos).isEmpty())
+                    && here.getFluidState().isEmpty();
+            boolean belowSolid = below.isSideSolidFullSquare(world, pos.down(), Direction.UP)
+                    || !below.getFluidState().isEmpty();
+            if (hereOk && belowSolid) return y;
+        }
+        return yHint;
     }
 
     private static <T extends ParticleEffect> void scatter(

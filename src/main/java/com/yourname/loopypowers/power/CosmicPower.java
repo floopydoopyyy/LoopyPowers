@@ -21,6 +21,7 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.util.math.Vec3d;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,33 +51,36 @@ public class CosmicPower implements Power {
 
     // ── Passive tuning ────────────────────────────────────────────────────────
 
-    private static final int   FATE_TIMER_DEFAULT     = 200;
-    private static final int   FATE_TIMER_MAX         = 300;
-    private static final float FATE_DAMAGE_CAP        = 60.0f;
-    private static final int   FATE_DETONATE_TICKS    = 30;
+    private static final int   FATE_TIMER_MAX         = 300; // 15 seconds
+    private static final float FATE_DAMAGE_CAP        = 55.0f;
+    private static final int   FATE_DETONATE_TICKS    = 40;
     private static final int   FATE_DETONATE_INTERVAL = 10;
-    private static final float MELEE_FATE_RATIO       = 0.8f;
-    private static final int   MELEE_TIMER_ADD        = 12;
+    private static final float MELEE_FATE_RATIO       = 0.6f;
+    private static final int   MELEE_TIMER_REDUCE     = 25; // ticks subtracted per hit
     private static final int   MELEE_TIMER_CD         = 10;
     private static final int   FATE_IMMUNE_TICKS      = 200;
+
+    // Distance Decay
+    private static final double FATE_DECAY_DISTANCE   = 9.0;
+    private static final float  FATE_DECAY_PER_TICK   = 0.5f;
 
     // ── Primary tuning ────────────────────────────────────────────────────────
 
     private static final double RAY_RANGE         = 30.0;
     private static final float  RAY_DIRECT_DAMAGE = 3.5f;
-    private static final float  RAY_FATE_STORE    = 9.0f;
-    private static final int    RAY_TIMER_ADD     = 50;
+    private static final float  RAY_FATE_STORE    = 7.0f;
+    private static final int    RAY_TIMER_ADD     = 40; // Increases timer to stall detonation
 
     // ── Secondary tuning ─────────────────────────────────────────────────────
 
     private static final double STAR_SLAM_RADIUS     = 4.0;
-    private static final float  STAR_FATE_STORE      = 14.0f;
-    private static final float  STAR_TIMER_REDUCTION = 0.60f;
+    private static final float  STAR_FATE_STORE      = 9.0f;
+    private static final float  STAR_TIMER_REDUCTION = 0.50f; // halves the timer
     private static final int    STAR_ARC_TICKS       = 40;
 
     // ── Ultimate tuning ───────────────────────────────────────────────────────
 
-    private static final float  BH_TIMER_REDUCTION = 1.5f;
+    private static final int    BH_TIMER_REDUCTION = 5;
 
     /* ============================================================
        LIFECYCLE
@@ -101,7 +105,12 @@ public class CosmicPower implements Power {
             for (ServerWorld w : player.getServer().getWorlds()) {
                 for (UUID targetId : myTargets.keySet()) {
                     Entity e = w.getEntity(targetId);
-                    if (e instanceof LivingEntity le) le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
+                    if (e instanceof LivingEntity le) {
+                        le.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
+                        // Tell clients to stop rendering
+                        CosmicFateAuraPayload clearPayload = new CosmicFateAuraPayload(le.getId(), 0, 0);
+                        PlayerLookup.tracking(w, le.getBlockPos()).forEach(p -> ServerPlayNetworking.send(p, clearPayload));
+                    }
                 }
             }
         }
@@ -151,6 +160,29 @@ public class CosmicPower implements Power {
                     continue;
                 }
 
+                // decay
+                double distSq = target.squaredDistanceTo(player);
+                if (distSq > FATE_DECAY_DISTANCE * FATE_DECAY_DISTANCE && fate.detonateTicks <= 0) {
+                    fate.storedDamage -= FATE_DECAY_PER_TICK;
+
+                    if (fate.storedDamage <= 0) {
+                        CosmicFateAuraPayload clearPayload = new CosmicFateAuraPayload(target.getId(), 0, 0);
+                        PlayerLookup.tracking(world, target.getBlockPos()).forEach(p -> ServerPlayNetworking.send(p, clearPayload));
+                        syncFateEffect(target, 0);
+
+                        world.playSound(null, target.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_BREAK, target.getSoundCategory(), 1.0f, 0.5f);
+                        world.spawnParticles(ParticleTypes.CRIT, target.getX(), target.getY() + 1.0, target.getZ(), 20, 0.4, 0.4, 0.4, 0.1);
+
+                        it.remove();
+                        continue;
+                    } else if (target.age % 10 == 0) {
+                        float sd = fate.storedDamage;
+                        int tt = fate.timerTicks;
+                        CosmicFateAuraPayload syncPayload = new CosmicFateAuraPayload(target.getId(), sd, tt);
+                        PlayerLookup.tracking(world, target.getBlockPos()).forEach(p -> ServerPlayNetworking.send(p, syncPayload));
+                    }
+                }
+
                 if (fate.meleeTimerCdTicks > 0) {
                     fate.meleeTimerCdTicks--;
                 }
@@ -184,6 +216,13 @@ public class CosmicPower implements Power {
                 if (fate.timerTicks > 0) {
                     fate.timerTicks--;
                     if (fate.timerTicks <= 0) {
+                        // Tell clients to clear the aura so the explosion looks clean
+                        CosmicFateAuraPayload clearAura = new CosmicFateAuraPayload(target.getId(), 0, 0);
+                        Set<ServerPlayerEntity> clearViewers = new HashSet<>();
+                        PlayerLookup.tracking(world, target.getBlockPos()).forEach(clearViewers::add);
+                        clearViewers.add(player);
+                        clearViewers.forEach(p -> ServerPlayNetworking.send(p, clearAura));
+
                         fate.detonateTicks = FATE_DETONATE_TICKS;
 
                         // detonate start visuals → client
@@ -248,19 +287,25 @@ public class CosmicPower implements Power {
 
     public static void applyMeleeFate(ServerPlayerEntity attacker, LivingEntity target, float damageDealt) {
         float fatePortion = damageDealt * MELEE_FATE_RATIO;
-        addFate(target, fatePortion, 0, attacker.getUuid());
 
         Map<UUID, FateInstance> playerFates = ACTIVE_FATES.get(attacker.getUuid());
-        if (playerFates != null) {
-            FateInstance fate = playerFates.get(target.getUuid());
-            if (fate != null && fate.meleeTimerCdTicks <= 0) {
-                addFate(target, 0, MELEE_TIMER_ADD, attacker.getUuid());
+        FateInstance fate = playerFates != null ? playerFates.get(target.getUuid()) : null;
+
+        if (fate == null) {
+            // First hit: starts timer at FATE_TIMER_MAX
+            addFate(target, fatePortion, 0, attacker.getUuid());
+        } else {
+            // Subsequent hits: reduce timer to accelerate detonation
+            int timerMod = 0;
+            if (fate.meleeTimerCdTicks <= 0) {
+                timerMod = -MELEE_TIMER_REDUCE;
                 fate.meleeTimerCdTicks = MELEE_TIMER_CD;
             }
+            addFate(target, fatePortion, timerMod, attacker.getUuid());
         }
     }
 
-    private static void addFate(LivingEntity target, float fateDmg, int timerAdd, UUID attackerUuid) {
+    private static void addFate(LivingEntity target, float fateDmg, int timerChange, UUID attackerUuid) {
         UUID targetId = target.getUuid();
         FateInstance fate = null;
         UUID previousOwner = null;
@@ -306,11 +351,21 @@ public class CosmicPower implements Power {
         }
 
         if (fate.timerTicks <= 0) {
-            fate.timerTicks = FATE_TIMER_DEFAULT;
+            fate.timerTicks = FATE_TIMER_MAX;
         } else {
-            fate.timerTicks = Math.min(fate.timerTicks + timerAdd, FATE_TIMER_MAX);
+            fate.timerTicks = MathHelper.clamp(fate.timerTicks + timerChange, 1, FATE_TIMER_MAX);
         }
 
+        // Send payload with the updated stored damage and ticks to start/refresh the visual
+        if (target.getWorld() instanceof ServerWorld sw) {
+            float sd = fate.storedDamage;
+            int tt = fate.timerTicks;
+            CosmicFateAuraPayload auraPayload = new CosmicFateAuraPayload(target.getId(), sd, tt);
+            Set<ServerPlayerEntity> viewers = new HashSet<>();
+            PlayerLookup.tracking(sw, target.getBlockPos()).forEach(viewers::add);
+            if (target instanceof ServerPlayerEntity sp) viewers.add(sp);
+            viewers.forEach(p -> ServerPlayNetworking.send(p, auraPayload));
+        }
         syncFateEffect(target, fate.timerTicks);
     }
 
@@ -325,7 +380,18 @@ public class CosmicPower implements Power {
 
         if (fate == null || fate.timerTicks <= 0 || fate.detonateTicks > 0 || fate.immuneTicks > 0) return;
 
-        fate.timerTicks = Math.max(0, fate.timerTicks - Math.round(fate.timerTicks * reduction));
+        fate.timerTicks = Math.max(1, fate.timerTicks - Math.round(fate.timerTicks * reduction));
+
+        // Notify clients of the timer deduction so the particles stay perfectly synced
+        if (target.getWorld() instanceof ServerWorld sw) {
+            float sd = fate.storedDamage;
+            int tt = fate.timerTicks;
+            CosmicFateAuraPayload payload = new CosmicFateAuraPayload(target.getId(), sd, tt);
+            Set<ServerPlayerEntity> viewers = new HashSet<>();
+            PlayerLookup.tracking(sw, target.getBlockPos()).forEach(viewers::add);
+            if (target instanceof ServerPlayerEntity sp) viewers.add(sp);
+            viewers.forEach(p -> ServerPlayNetworking.send(p, payload));
+        }
         syncFateEffect(target, fate.timerTicks);
     }
 
@@ -526,7 +592,28 @@ public class CosmicPower implements Power {
     }
 
     public static void drainFateTimer(LivingEntity target) {
-        reduceFateTimer(target, BH_TIMER_REDUCTION);
+        UUID targetId = target.getUuid();
+        FateInstance fate = null;
+
+        for (Map<UUID, FateInstance> playerFates : ACTIVE_FATES.values()) {
+            fate = playerFates.get(targetId);
+            if (fate != null) break;
+        }
+
+        if (fate == null || fate.timerTicks <= 0 || fate.detonateTicks > 0 || fate.immuneTicks > 0) return;
+
+        fate.timerTicks = Math.max(1, fate.timerTicks - BH_TIMER_REDUCTION);
+
+        if (target.getWorld() instanceof ServerWorld sw) {
+            float sd = fate.storedDamage;
+            int tt = fate.timerTicks;
+            CosmicFateAuraPayload payload = new CosmicFateAuraPayload(target.getId(), sd, tt);
+            Set<ServerPlayerEntity> viewers = new HashSet<>();
+            PlayerLookup.tracking(sw, target.getBlockPos()).forEach(viewers::add);
+            if (target instanceof ServerPlayerEntity sp) viewers.add(sp);
+            viewers.forEach(p -> ServerPlayNetworking.send(p, payload));
+        }
+        syncFateEffect(target, fate.timerTicks);
     }
 
     /* ============================================================
@@ -570,6 +657,34 @@ public class CosmicPower implements Power {
     @Override
     public String getUltimateDescription() {
         return Text.translatable("power.loopypowers.cosmic.description.ultimate").getString();
+    }
+
+    // OTHER HELPERS
+
+    public static boolean cleanseFate(LivingEntity target) {
+        boolean cleansed = false;
+        UUID targetId = target.getUuid();
+
+        for (Map<UUID, FateInstance> playerFates : ACTIVE_FATES.values()) {
+            if (playerFates.remove(targetId) != null) {
+                cleansed = true;
+            }
+        }
+
+        if (cleansed) {
+            target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.FATE));
+            // Tell clients to immediately stop rendering the cosmic aura
+            if (target.getWorld() instanceof ServerWorld sw) {
+                CosmicFateAuraPayload clearPayload = new CosmicFateAuraPayload(target.getId(), 0, 0);
+                Set<ServerPlayerEntity> viewers = new HashSet<>();
+                PlayerLookup.tracking(sw, target.getBlockPos()).forEach(viewers::add);
+                if (target instanceof ServerPlayerEntity sp) viewers.add(sp);
+                viewers.forEach(p -> ServerPlayNetworking.send(p, clearPayload));
+            }
+            return true;
+        }
+
+        return false;
     }
 
     private LivingEntity getEntityOnBeam(ServerWorld world, ServerPlayerEntity player, Vec3d origin, Vec3d end) {

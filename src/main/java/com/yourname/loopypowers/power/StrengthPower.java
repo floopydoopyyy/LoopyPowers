@@ -10,6 +10,7 @@ import com.yourname.loopypowers.sound.ModSounds;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.BlockState;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
@@ -71,12 +72,12 @@ public class StrengthPower implements Power {
        ============================================================ */
 
     // Bullrush
-    private static final int    RUSH_TICKS               = 26;
+    private static final int    RUSH_TICKS               = 28;
     private static final double RUSH_SPEED               = 1.25;
     private static final double RUSH_HIT_RADIUS          = 1.3;
-    private static final int    RUSH_STEER_TICKS         = 7;
+    private static final double RUSH_MAX_TURN_DEG        = 4.5;
     private static final int    RUSH_CANCEL_COOLDOWN_TICKS = 4;
-    private static final float  RUSH_HIT_DAMAGE          = 11.5f;
+    private static final float  RUSH_HIT_DAMAGE          = 13.5f;
     private static final float  RUSH_HIT_KNOCKUP         = 0.95f;
     private static final double RUSH_WALL_CHECK_DIST     = 0.75;
     private static final int    RUSH_WALL_MAX_BLOCKS     = 18;
@@ -97,7 +98,7 @@ public class StrengthPower implements Power {
     private static final int    SLAM_MAX_BLOCKS_BROKEN = 22;
     private static final float  SLAM_MAX_HARDNESS      = 2.2f;
     private static final float  SLAM_BLOCK_BREAK_CHANCE = 0.55f;
-    private static final float  SLAM_ENTITY_DAMAGE     = 12.0f;
+    private static final float  SLAM_ENTITY_DAMAGE     = 14.0f;
     private static final float  SLAM_OUT               = 0.35f;
     private static final float  SLAM_FRONT_DOT         = 0.35f;
     private static final double SLAM_FRONT_OFFSET      = 1.4;
@@ -495,37 +496,56 @@ public class StrengthPower implements Power {
         Vec3d dir = state.rushDir;
         if (dir == null) dir = player.getRotationVec(1.0f).normalize();
 
-        // STEERING WINDOW
-        int elapsed = Math.max(0, RUSH_TICKS - state.rushTicks);
-
-        if (elapsed < RUSH_STEER_TICKS) {
-            double maxTurn = Math.toRadians(14.0);
+        // CONTINUOUS STEERING — max RUSH_MAX_TURN_DEG degrees per tick
+        {
+            double maxTurn = Math.toRadians(RUSH_MAX_TURN_DEG);
             Vec3d look = player.getRotationVec(1.0f);
             Vec3d a = new Vec3d(dir.x, 0.0, dir.z);
             Vec3d b = new Vec3d(look.x, 0.0, look.z);
 
-            if (a.lengthSquared() > 1.0e-6 && b.lengthSquared() > 1.0e-6) {
-                a = a.normalize(); b = b.normalize();
+            if (a.lengthSquared() > 1e-5 && b.lengthSquared() > 1e-5) {
+                a = a.normalize();
+                b = b.normalize();
                 double dot = MathHelper.clamp(a.x * b.x + a.z * b.z, -1.0, 1.0);
                 double ang = Math.acos(dot);
+                if (ang > maxTurn) {
+                    // Use 2D cross-product Y component to determine turn direction
+                    double crossY = a.z * b.x - a.x * b.z;
+                    double sign = crossY >= 0 ? -1.0 : 1.0;
+                    double clampedAng = sign * maxTurn;
+                    double cos = Math.cos(clampedAng);
+                    double sin = Math.sin(clampedAng);
+                    dir = new Vec3d(a.x * cos - a.z * sin, look.y, a.x * sin + a.z * cos).normalize();
+                } else {
+                    dir = look;
+                }
+                state.rushDir = dir;
+            }
+        }
 
-                if (ang > 1.0e-6) {
-                    double t = Math.min(1.0, maxTurn / ang);
-                    Vec3d blended = new Vec3d(MathHelper.lerp(t, a.x, b.x), 0.0, MathHelper.lerp(t, a.z, b.z));
-                    if (blended.lengthSquared() > 1.0e-6) {
-                        dir = blended.normalize();
-                        state.rushDir = dir;
-                    }
+        ServerWorld w = player.getServerWorld();
+
+        // CLEAR DECORATIVE BLOCKS in path
+        BlockPos basePos = player.getBlockPos();
+        for (BlockPos bPos : BlockPos.iterate(basePos.add(-1, 0, -1), basePos.add(1, 1, 1))) {
+            BlockState bs = w.getBlockState(bPos);
+            if (!bs.isAir()) {
+                if (bs.isReplaceable()
+                        || bs.isIn(BlockTags.LEAVES)
+                        || bs.isIn(BlockTags.FLOWERS)
+                        || bs.isIn(BlockTags.SMALL_FLOWERS)
+                        || bs.isIn(BlockTags.TALL_FLOWERS)) {
+                    w.breakBlock(bPos, true, player);
                 }
             }
         }
 
         // WALL CHECKS
-        BlockHitResult wallHit = findRushWallHit(player.getServerWorld(), player, dir);
+        BlockHitResult wallHit = findRushWallHit(w, player, dir);
         if (wallHit != null) {
             state.rushTicks = 0;
             enableRushStepUp(player, false);
-            doRushCrash(player, player.getServerWorld(), wallHit);
+            doRushCrash(player, w, wallHit);
             return;
         }
 
@@ -533,26 +553,20 @@ public class StrengthPower implements Power {
         Vec3d horiz = new Vec3d(dir.x, 0.0, dir.z);
         if (horiz.lengthSquared() < 1.0e-6) horiz = new Vec3d(0, 0, 1);
 
-        boolean stepped = tryRushStepUp(player, player.getServerWorld(), horiz);
-        Vec3d push = horiz.normalize().multiply(RUSH_SPEED);
-        Vec3d vel = player.getVelocity();
-
-        double newY = stepped ? Math.max(vel.y, 0.52) : MathHelper.clamp(vel.y, -0.35, 0.35);
-
-        player.setVelocity(push.x, newY, push.z);
-        player.velocityModified = true;
+        if (!tryRushStepUp(player, w, horiz)) {
+            player.setVelocity(horiz.x * RUSH_SPEED, player.getVelocity().y, horiz.z * RUSH_SPEED);
+            player.velocityModified = true;
+        }
         player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
-        // TRAIL FX
-        ServerWorld w = player.getServerWorld();
-
-        if (w.random.nextFloat() < 0.85f) {
+        // TRAIL FX + STEP SOUND
+        {
+            boolean playStep = w.getTime() % 2 == 0;
             BlockPos under = player.getBlockPos().down();
             BlockState underState = w.getBlockState(under);
             boolean hasGround = !underState.isAir();
 
             Vec3d horizNorm = horiz.normalize();
-            Vec3d front = player.getPos().add(horizNorm.multiply(0.8)).add(0.0, 1.0, 0.0);
             boolean showCrit = w.random.nextFloat() < 0.60f;
 
             StrengthRushTrailPayload trail = new StrengthRushTrailPayload(
@@ -562,6 +576,11 @@ public class StrengthPower implements Power {
                     (float) dir.x, (float) dir.z,
                     showCrit);
             sendToViewers(w, player, trail);
+
+            if (playStep) {
+                w.playSound(null, player.getX(), player.getY(), player.getZ(),
+                        SoundEvents.ENTITY_WARDEN_STEP, player.getSoundCategory(), 0.5f, 0.8f);
+            }
         }
 
         // ENTITY COLLISION
@@ -693,13 +712,15 @@ public class StrengthPower implements Power {
         if (fwd.lengthSquared() < 1.0e-6) return false;
 
         Vec3d feet = player.getPos().add(0.0, 0.05, 0.0);
-        Vec3d ahead = feet.add(fwd.multiply(0.55));
+        Vec3d ahead = feet.add(fwd.multiply(0.8));
 
-        BlockPos front    = BlockPos.ofFloored(ahead);
-        BlockPos frontUp  = front.up();
+        BlockPos front   = BlockPos.ofFloored(ahead);
+        BlockPos frontUp = front.up();
 
         BlockState sFront = w.getBlockState(front);
-        if (sFront.getCollisionShape(w, front).isEmpty()) return false;
+        var shape = sFront.getCollisionShape(w, front);
+        if (shape.isEmpty()) return false;
+        if (shape.getMax(net.minecraft.util.math.Direction.Axis.Y) <= 0.56) return false;
 
         BlockState sFrontUp = w.getBlockState(frontUp);
         if (!sFrontUp.getCollisionShape(w, frontUp).isEmpty()) return false;
@@ -709,6 +730,7 @@ public class StrengthPower implements Power {
         Vec3d v = player.getVelocity();
         player.setVelocity(v.x, Math.max(v.y, 0.52), v.z);
         player.velocityModified = true;
+        player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
         return true;
     }
 
@@ -765,11 +787,8 @@ public class StrengthPower implements Power {
 
         if (state.rageHbStep <= 0) {
             state.rageHbStep = RAGE_HB_INTERVAL;
-
-            Vec3d c = player.getPos();
-            Box box = new Box(c, c).expand(RAGE_FX_RADIUS, 6.0, RAGE_FX_RADIUS);
-            w.getEntitiesByClass(ServerPlayerEntity.class, box, ServerPlayerEntity::isAlive)
-                    .forEach(p -> p.playSound(SoundEvents.ENTITY_WARDEN_HEARTBEAT, 0.95f, 0.95f));
+            w.playSound(null, player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.ENTITY_WARDEN_HEARTBEAT, net.minecraft.sound.SoundCategory.PLAYERS, 0.95f, 0.95f);
         } else {
             state.rageHbStep--;
         }

@@ -4,11 +4,15 @@ import com.yourname.loopypowers.network.payload.*;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.particle.BlockStateParticleEffect;
 import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleEffect;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import org.joml.Vector3f;
@@ -26,9 +30,47 @@ public final class NatureFxClient {
             new DustParticleEffect(new Vector3f(0.10f, 0.85f, 0.12f), 1.35f);
     private static final DustParticleEffect VINE_PINK_DUST =
             new DustParticleEffect(new Vector3f(0.95f, 0.35f, 0.85f), 1.05f);
+    private static final DustParticleEffect CAGE_VINE_DUST =
+            new DustParticleEffect(new Vector3f(0.10f, 0.85f, 0.12f), 1.5f);
 
     private static final float VINE_PINK_SPECK_CHANCE = 0.12f;
     private static final int VINE_STRIKE_LASHES_PER_TARGET = 3;
+
+    // ---- Secondary: cage eruption burst ----
+
+    public static void handleCageFx(NatureCageFxPayload p, ClientPlayNetworking.Context ctx) {
+        ctx.client().execute(() -> {
+            ClientWorld world = ctx.client().world;
+            if (world == null) return;
+
+            int cx = p.cx(), cy = p.cy(), cz = p.cz();
+            int radius = p.radius(), thickness = p.thickness();
+            int points = 80;
+
+            BlockStateParticleEffect dirt = new BlockStateParticleEffect(ParticleTypes.BLOCK, Blocks.DIRT.getDefaultState());
+
+            for (int i = 0; i < points; i++) {
+                double a = (Math.PI * 2.0) * (i / (double) points);
+                for (int t = 0; t < thickness; t++) {
+                    double rNow = radius - t + (world.random.nextDouble() * 0.5 - 0.25);
+                    double x = cx + Math.cos(a) * rNow;
+                    double z = cz + Math.sin(a) * rNow;
+
+                    // find ground level visually
+                    int y = cy + 2;
+                    while (y > cy - 10 && world.getBlockState(new BlockPos((int) x, y, (int) z)).isAir()) {
+                        y--;
+                    }
+
+                    world.addParticle(dirt,          x, y + 1.0, z, 0, 0.2 + world.random.nextDouble() * 0.3, 0);
+                    world.addParticle(CAGE_VINE_DUST, x, y + 1.0, z, 0, 0.3 + world.random.nextDouble() * 0.4, 0);
+                    if (world.random.nextFloat() < 0.3f) {
+                        world.addParticle(ParticleTypes.HAPPY_VILLAGER, x, y + 1.0, z, 0, 0.1, 0);
+                    }
+                }
+            }
+        });
+    }
 
     // ---- Primary: gas cloud ----
 
@@ -39,14 +81,39 @@ public final class NatureFxClient {
 
             float r = p.radius();
             float halfH = p.halfH();
+            long now = world.getTime();
+            int seed = p.seed();
 
-            scatter(world, GAS_DUST, p.x(), p.y(), p.z(), p.count(), r * 0.90f, halfH * 0.90f, r * 0.90f, 0.02);
-
-            if (p.showBoundary()) {
-                scatter(world, GAS_DUST, p.x(), p.y(), p.z(), p.boundaryCount(), r * 1.10f, halfH * 0.55f, r * 1.10f, 0.03);
+            // Thick core — Gaussian for rounded, cylindrical shape
+            for (int i = 0; i < p.count(); i++) {
+                world.addParticle(GAS_DUST,
+                        p.x() + world.random.nextGaussian() * (r * 0.9),
+                        p.y() + world.random.nextGaussian() * (halfH * 0.9),
+                        p.z() + world.random.nextGaussian() * (r * 0.9),
+                        0, 0, 0);
             }
-            if (p.showOccasional()) {
-                scatter(world, GAS_DUST, p.x(), p.y(), p.z(), 120, r * 0.70f, halfH * 0.70f, r * 0.70f, 0.04);
+
+            // Boundary wisps
+            if (((now + seed) & 1L) == 0L) {
+                int wispCount = Math.max(20, p.count() / 3);
+                for (int i = 0; i < wispCount; i++) {
+                    world.addParticle(GAS_DUST,
+                            p.x() + world.random.nextGaussian() * (r * 1.1),
+                            p.y() + world.random.nextGaussian() * (halfH * 0.55),
+                            p.z() + world.random.nextGaussian() * (r * 1.1),
+                            0, 0, 0);
+                }
+            }
+
+            // Occasional full volume
+            if (((now + seed) % 10L) == 0L) {
+                for (int i = 0; i < 120; i++) {
+                    world.addParticle(GAS_DUST,
+                            p.x() + world.random.nextGaussian() * (r * 0.7),
+                            p.y() + world.random.nextGaussian() * (halfH * 0.7),
+                            p.z() + world.random.nextGaussian() * (r * 0.7),
+                            0, 0, 0);
+                }
             }
         });
     }
@@ -125,18 +192,35 @@ public final class NatureFxClient {
 
             int steps = MathHelper.clamp((int)(len * 10), 10, 60);
             Vec3d step = delta.multiply(1.0 / steps);
-            long time = world.getTime();
+            long now = world.getTime();
 
             Vec3d pos = from;
             for (int i = 0; i <= steps; i++) {
-                DustParticleEffect eff = ((time + p.seed() + i) % 9L == 0L) ? VINE_PINK_DUST : VINE_DUST;
-                world.addParticle(eff, pos.x, pos.y, pos.z, 0.0, 0.0, 0.0);
+                DustParticleEffect eff = ((now + p.seed() + i) % 9L == 0L) ? VINE_PINK_DUST : VINE_DUST;
+                world.addParticle(eff,
+                        pos.x + world.random.nextGaussian() * 0.02,
+                        pos.y + world.random.nextGaussian() * 0.02,
+                        pos.z + world.random.nextGaussian() * 0.02,
+                        0.0, 0.0, 0.0);
                 pos = pos.add(step);
             }
 
-            if (p.anchorPuff()) {
-                scatter(world, VINE_DUST,      p.fromX(), p.fromY() + 0.15, p.fromZ(), 8, 0.20, 0.10, 0.20, 0.01);
-                scatter(world, VINE_PINK_DUST, p.fromX(), p.fromY() + 0.15, p.fromZ(), 2, 0.20, 0.10, 0.20, 0.01);
+            // Anchor puff — computed client-side matching NeoForge
+            if ((now & 3L) == 0L) {
+                for (int i = 0; i < 8; i++) {
+                    world.addParticle(VINE_DUST,
+                            from.x + world.random.nextGaussian() * 0.20,
+                            from.y + 0.15 + world.random.nextGaussian() * 0.10,
+                            from.z + world.random.nextGaussian() * 0.20,
+                            0, 0, 0);
+                }
+                for (int i = 0; i < 2; i++) {
+                    world.addParticle(VINE_PINK_DUST,
+                            from.x + world.random.nextGaussian() * 0.20,
+                            from.y + 0.15 + world.random.nextGaussian() * 0.10,
+                            from.z + world.random.nextGaussian() * 0.20,
+                            0, 0, 0);
+                }
             }
         });
     }

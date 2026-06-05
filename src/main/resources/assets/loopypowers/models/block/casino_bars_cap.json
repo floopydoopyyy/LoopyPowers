@@ -1,5 +1,6 @@
 {
   "parent": "minecraft:block/iron_bars_cap",
+  "render_type": "minecraft:cutout",
   "textures": {
     "bars": "loopypowers:block/casino_bars",
     "edge": "loopypowers:block/casino_bars",

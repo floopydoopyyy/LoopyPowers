@@ -6,7 +6,6 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.particle.ParticleTypes;
-import net.minecraft.util.math.Vec3d;
 
 @Environment(EnvType.CLIENT)
 public final class FlightFxClient {
@@ -41,7 +40,10 @@ public final class FlightFxClient {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
-            scatter(world, ParticleTypes.EXPLOSION, p.x(), p.y() + 0.3, p.z(), 20, 0.35, 0.25, 0.35, 0.03);
+            double x = p.x(), y = p.y(), z = p.z();
+            for (int i = 0; i < 2; i++) world.addParticle(ParticleTypes.GUST_EMITTER_LARGE, x, y, z, 0, 0, 0);
+            scatter(world, ParticleTypes.CAMPFIRE_COSY_SMOKE, x, y + 0.5, z, 15, 1.5, 0.5, 1.5, 0.1);
+            scatter(world, ParticleTypes.CLOUD,               x, y + 0.5, z, 20, 2.0, 0.5, 2.0, 0.2);
         });
     }
 
@@ -57,28 +59,21 @@ public final class FlightFxClient {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
-            double x = p.x(), y = p.y() + 1.0, z = p.z();
-            scatter(world, ParticleTypes.CLOUD,          x, y, z, 6, 0.35, 0.45, 0.35, 0.01);
-            scatter(world, ParticleTypes.ELECTRIC_SPARK, x, y, z, 8, 0.45, 0.55, 0.45, 0.02);
+            FlightBoomFxClient.onWindup(world,
+                    p.x(), p.y(), p.z(),
+                    p.lookX(), p.lookY(), p.lookZ(),
+                    p.isStart());
         });
     }
 
-    public static void handleBoomTunnel(FlightBoomTunnelPayload p, ClientPlayNetworking.Context ctx) {
+    public static void handleBoomDash(FlightBoomDashPayload p, ClientPlayNetworking.Context ctx) {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
-
-            // pos already has +1 Y from server; back = -dir
-            Vec3d pos  = new Vec3d(p.x(), p.y(), p.z());
-            Vec3d back = new Vec3d(-p.dirX(), -p.dirY(), -p.dirZ());
-
-            for (int i = 0; i < 3; i++) {
-                Vec3d pt = pos.add(back.multiply(i * 1.5));
-                scatter(world, ParticleTypes.CLOUD, pt.x, pt.y, pt.z, 3, 0.4, 0.4, 0.4, 0.02);
-                if (world.random.nextFloat() < 0.25f) {
-                    world.addParticle(ParticleTypes.SWEEP_ATTACK, pt.x, pt.y, pt.z, 0.0, 0.0, 0.0);
-                }
-            }
+            FlightBoomFxClient.onDash(world,
+                    p.x(), p.y(), p.z(),
+                    p.dirX(), p.dirY(), p.dirZ(),
+                    p.isStart());
         });
     }
 
@@ -86,7 +81,7 @@ public final class FlightFxClient {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
-            world.addParticle(ParticleTypes.EXPLOSION_EMITTER, p.x(), p.y() + 1.0, p.z(), 0.0, 0.0, 0.0);
+            FlightBoomFxClient.onImpact(world, p.x(), p.y(), p.z());
         });
     }
 

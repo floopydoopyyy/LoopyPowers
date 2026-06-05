@@ -80,8 +80,8 @@ public class TeleportPower implements Power {
        ============================================================ */
     private static final long   ULTIMATE_COOLDOWN_MS          = 420_000;
     private static final int    ULTIMATE_DURATION_TICKS       = 120;
-    private static final int    ULTIMATE_ATTACK_STEP_INITIAL  = 4;
-    private static final int    ULTIMATE_ATTACK_STEP_ONGOING  = 6;
+    private static final int    ULTIMATE_ATTACK_STEP_INITIAL  = 2;
+    private static final int    ULTIMATE_ATTACK_STEP_ONGOING  = 4;
     private static final double ULTIMATE_SEARCH_RADIUS        = 7.0;
     private static final double ULTIMATE_TELEPORT_OFFSET      = -1.5;
     private static final double ULTIMATE_AURA_RADIUS          = 11.0;
@@ -117,7 +117,7 @@ public class TeleportPower implements Power {
         TeleportState state = getState(player);
 
         if (state.blinkLockTicks > 0) state.blinkLockTicks--;
-        tickBlinkRecharge(state);
+        tickBlinkRecharge(player, state);
         updateBlinkCooldownUI(player, state);
 
         if (state.dodgeCdTicks > 0) state.dodgeCdTicks--;
@@ -172,16 +172,28 @@ public class TeleportPower implements Power {
         state.blinkLockTicks = PRIMARY_LOCK_TICKS;
 
         if (state.blinkRechargeTicks < 0) {
-            state.blinkRechargeTicks = PRIMARY_RECHARGE_TICKS;
+            state.blinkRechargeTicks = com.yourname.loopypowers.manager.PowerManager.getModifiedCooldownTicks(player, PRIMARY_RECHARGE_TICKS);
         }
 
         blinkForward(player);
     }
 
-    private static void tickBlinkRecharge(TeleportState state) {
+    private static void tickBlinkRecharge(ServerPlayerEntity player, TeleportState state) {
+        if (com.yourname.loopypowers.manager.PowerManager.areCooldownsDisabled()) {
+            state.blinkCharges = PRIMARY_MAX_CHARGES;
+            state.blinkRechargeTicks = -1;
+            return;
+        }
+
         if (state.blinkCharges >= PRIMARY_MAX_CHARGES) {
             state.blinkRechargeTicks = -1;
             return;
+        }
+
+        int maxTicks = com.yourname.loopypowers.manager.PowerManager.getModifiedCooldownTicks(player, PRIMARY_RECHARGE_TICKS);
+
+        if (state.blinkRechargeTicks <= 0 && state.blinkRechargeTicks != -1) {
+            state.blinkRechargeTicks = maxTicks;
         }
 
         if (state.blinkRechargeTicks >= 0) {
@@ -191,7 +203,7 @@ public class TeleportPower implements Power {
                 state.blinkCharges++;
 
                 if (state.blinkCharges < PRIMARY_MAX_CHARGES) {
-                    state.blinkRechargeTicks = PRIMARY_RECHARGE_TICKS;
+                    state.blinkRechargeTicks = maxTicks;
                 } else {
                     state.blinkRechargeTicks = -1;
                 }
@@ -202,18 +214,20 @@ public class TeleportPower implements Power {
     private static void updateBlinkCooldownUI(ServerPlayerEntity player, TeleportState state) {
         String key = "Teleport:PRIMARY";
 
-        if (state.blinkCharges >= PRIMARY_MAX_CHARGES) {
+        if (state.blinkCharges >= PRIMARY_MAX_CHARGES || com.yourname.loopypowers.manager.PowerManager.areCooldownsDisabled()) {
             CooldownUI.clearCooldown(player, key);
             return;
         }
 
+        int maxTicks = com.yourname.loopypowers.manager.PowerManager.getModifiedCooldownTicks(player, PRIMARY_RECHARGE_TICKS);
+
         int leftTicks = state.blinkRechargeTicks;
-        if (leftTicks < 0) leftTicks = PRIMARY_RECHARGE_TICKS;
+        if (leftTicks < 0) leftTicks = maxTicks;
 
         long endMs = System.currentTimeMillis() + (leftTicks * 50L);
 
         String suffix = makeChargeSuffix(
-                state.blinkCharges, PRIMARY_MAX_CHARGES, leftTicks, PRIMARY_RECHARGE_TICKS
+                state.blinkCharges, PRIMARY_MAX_CHARGES, leftTicks, Math.max(1, maxTicks)
         ).getString();
 
         CooldownUI.setCooldownEnd(player, key, endMs, suffix);
@@ -247,16 +261,15 @@ public class TeleportPower implements Power {
         Vec3d safe   = findSafeTeleportSpot(world, player, desired);
         Vec3d origin = player.getPos();
 
-        // Trail + bursts (sent before teleporting so player is still at origin)
-        TeleportBlinkPayload fx = new TeleportBlinkPayload(
-                origin.x, origin.y, origin.z,
-                safe.x, safe.y, safe.z);
-        sendToViewers(world, player, fx);
-
         world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, player.getSoundCategory(), 1.0f, 1.2f);
         world.playSound(null, player.getBlockPos(), ModSounds.TELEPORTSNAP, player.getSoundCategory(), 0.7f, 1.4f);
 
         safeTeleport(player, safe.x, safe.y, safe.z);
+
+        TeleportBlinkPayload fx = new TeleportBlinkPayload(
+                origin.x, origin.y, origin.z,
+                safe.x, safe.y, safe.z);
+        sendToViewers(world, player, fx);
 
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.HASTE, 5, 50, true, false, false));
     }
@@ -387,6 +400,11 @@ public class TeleportPower implements Power {
     public long getUltimateCooldownMs() { return ULTIMATE_COOLDOWN_MS; }
 
     private void tickFrenzy(ServerPlayerEntity player, TeleportState state) {
+        if (player.isSneaking()) {
+            state.frenzyTicks = 0;
+            return;
+        }
+
         state.frenzyTicks--;
         if (state.frenzyTicks <= 0) return;
 

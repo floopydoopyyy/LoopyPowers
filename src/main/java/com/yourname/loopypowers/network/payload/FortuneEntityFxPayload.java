@@ -19,6 +19,8 @@ import net.minecraft.util.Identifier;
 // 9  = CARD_COUNTER    : ENCHANT 22  at +1.0
 // 10 = SMOKE_MACHINE   : SMOKE 8     at getHeight()*0.6
 // 11 = CHIP_TOSS_ENTITY: CRIT 10     at getHeight()*0.5
+// 12 = LIGHTNING_TICK  : ELECTRIC_SPARK 6 at getHeight()*0.6
+// 13 = BOUNCER_PUSH    : ELECTRIC_SPARK 25 at +1.0 (speed 0.15)
 public record FortuneEntityFxPayload(int entityId, int type) implements CustomPayload {
 
     public static final Id<FortuneEntityFxPayload> ID =

@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.registry.RegistryKey;
@@ -362,11 +363,8 @@ public class FortunePower implements Power {
     public void activateSecondary(ServerPlayerEntity player) {
         ServerWorld w = player.getServerWorld();
 
-        // If already dueling, recast cancels it
+        // If already dueling, you cannot cancel or overwrite it
         if (isInDuel(player)) {
-            breakDuel(player.getUuid());
-            w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_CHAIN_BREAK, player.getSoundCategory(), 0.8f, 1.0f);
-            CooldownUI.pushActionbarOverride(player, Text.translatable("power.loopypowers.fortune.duel_ended"), 35);
             return;
         }
 
@@ -547,8 +545,10 @@ public class FortunePower implements Power {
     private static final int HOUSE_RADIUS = 8;
     private static final int HOUSE_WALL_LAYERS = 4;
     private static final int HOUSE_BUILD_INTERVAL_TICKS = 7;
-    private static final int HOUSE_ACTIVE_TICKS = 238; // - 2 if a multiple of 40
+    private static final int HOUSE_ACTIVE_TICKS = 298;
     private static final int HOUSE_CLEAR_HEIGHT = 10;
+    private static final int HOUSE_MAX_RULES = 4;
+    private static final int HOUSE_TELEPORT_HEIGHT_ALLOWANCE = 14;
 
     // Roof particles
     private static final int HOUSE_ROOF_FX_EVERY_TICKS = 2;
@@ -583,12 +583,16 @@ public class FortunePower implements Power {
     // Double or Nothing
     private static final float RULE_DOUBLE_MULT = 1.25f;
 
+    // The Bouncer
+    private static final float RULE_BOUNCER_DAMAGE = 8.0f;
+    private static final double RULE_BOUNCER_BOUNCE_MULT = 2.6;
+
     // Rule effect duration scaling (all potion rules)
     private static final float HOUSE_RULE_EFFECT_MULT = 1.75f; // e.g. 1.75x longer
     private static final int   HOUSE_RULE_EFFECT_BONUS_TICKS = 40; // +2s
 
     // Chip Toss
-    private static final float RULE_CHIP_TOSS_FRACTION = 0.50f; // 50%
+    private static final float RULE_CHIP_TOSS_FRACTION = 0.70f; // 70%
     private static final double RULE_CHIP_TOSS_UP_MIN = 1.05;
     private static final double RULE_CHIP_TOSS_UP_MAX = 1.75;
     private static final double RULE_CHIP_TOSS_SIDE = 0.35;
@@ -631,7 +635,8 @@ public class FortunePower implements Power {
         SPOTLIGHT,
         JACKPOT,
         CARD_COUNTER,
-        WOOLIAM_INVASION
+        WOOLIAM_INVASION,
+        BOUNCER
     }
 
     private static final Map<UUID, HouseState> ACTIVE_HOUSES = new HashMap<>();
@@ -654,6 +659,7 @@ public class FortunePower implements Power {
         // rules
         HouseRule rule = null;
         int ruleLeft = HOUSE_RULE_INTERVAL_TICKS;
+        int rulesPlayed = 0;
 
         // hot seat
         UUID hotSeatHolder = null;
@@ -673,6 +679,7 @@ public class FortunePower implements Power {
             this.buildWait = HOUSE_BUILD_INTERVAL_TICKS;
             this.activeLeft = HOUSE_ACTIVE_TICKS + (HOUSE_WALL_LAYERS * HOUSE_BUILD_INTERVAL_TICKS) + 20;
             this.built = false;
+            this.rulesPlayed = 0;
         }
     }
 
@@ -774,7 +781,9 @@ public class FortunePower implements Power {
 
     private static void tickHouseRules(ServerWorld w, HouseState st) {
         if (st.rule == null) {
-            forceNewRule(w, st);
+            if (st.rulesPlayed < HOUSE_MAX_RULES) {
+                forceNewRule(w, st);
+            }
             return;
         }
 
@@ -818,6 +827,13 @@ public class FortunePower implements Power {
         if (st.rule == HouseRule.JACKPOT) {
             st.jackpotArmed = false;
         }
+
+        if (st.rulesPlayed >= HOUSE_MAX_RULES) {
+            st.rule = null;
+            return;
+        }
+
+        st.rulesPlayed++;
 
         HouseRule next = rollRule(w, st.rule);
         st.rule = next;
@@ -874,6 +890,12 @@ public class FortunePower implements Power {
             case CARD_COUNTER -> doCardCounter(w, st);
 
             case WOOLIAM_INVASION -> spawnWooliamInvasion(w, st);
+
+            case BOUNCER -> {
+                FortuneCenterFxPayload bouncerFx = new FortuneCenterFxPayload(st.center.getX(), st.baseY, st.center.getZ(), 4);
+                PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, bouncerFx));
+                w.playSound(null, st.center, SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER, net.minecraft.sound.SoundCategory.PLAYERS, 0.5f, 1.8f);
+            }
         }
     }
 
@@ -1090,7 +1112,10 @@ public class FortunePower implements Power {
             double sz = (w.random.nextDouble() * 2 - 1) * RULE_CHIP_TOSS_SIDE;
 
             e.addVelocity(sx, up, sz);
-            e.velocityDirty = true;
+            e.velocityModified = true;
+            if (e instanceof ServerPlayerEntity sp) {
+                sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp.getId(), sp.getVelocity()));
+            }
 
             FortuneEntityFxPayload chipFx = new FortuneEntityFxPayload(e.getId(), 11);
             PlayerLookup.tracking(w, st.center).forEach(sp -> ServerPlayNetworking.send(sp, chipFx));
@@ -1482,10 +1507,13 @@ public class FortunePower implements Power {
     private static void teleportEntity(ServerWorld w, Entity e, Vec3d pos, float yaw, float pitch) {
         if (e instanceof ServerPlayerEntity sp) {
             sp.teleport(w, pos.x, pos.y, pos.z, yaw, pitch);
+            sp.setVelocity(Vec3d.ZERO);
+            sp.velocityModified = true;
+            sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp.getId(), sp.getVelocity()));
         } else {
             e.refreshPositionAndAngles(pos.x, pos.y, pos.z, yaw, pitch);
             e.setVelocity(Vec3d.ZERO);
-            e.velocityDirty = true;
+            e.velocityModified = true;
         }
     }
 
@@ -1550,6 +1578,8 @@ public class FortunePower implements Power {
     private static void enforceHousePrison(ServerWorld w, HouseState st) {
         Vec3d center = new Vec3d(st.center.getX() + 0.5, st.baseY + 1.0, st.center.getZ() + 0.5);
 
+        boolean isBouncer = (st.rule == HouseRule.BOUNCER);
+
         Iterator<UUID> it = st.inside.iterator();
         while (it.hasNext()) {
             UUID uuid = it.next();
@@ -1563,29 +1593,52 @@ public class FortunePower implements Power {
 
             double dx = le.getX() - center.x;
             double dz = le.getZ() - center.z;
-            double distSq = dx * dx + dz * dz;
+
+            // Square hitbox check instead of circular
+            double maxDist = Math.max(Math.abs(dx), Math.abs(dz));
 
             // keep them in
-            if (distSq > (HOUSE_RADIUS - 0.8) * (HOUSE_RADIUS - 0.8) && distSq <= (HOUSE_RADIUS + 2) * (HOUSE_RADIUS + 2)) {
-                Vec3d push = center.subtract(le.getPos()).normalize().multiply(0.6);
+            if (maxDist > (HOUSE_RADIUS - 0.8) && maxDist <= (HOUSE_RADIUS + 2.0)) {
+
+                double bounceMult = isBouncer ? 0.6 * RULE_BOUNCER_BOUNCE_MULT : 0.6;
+                Vec3d push = center.subtract(le.getPos()).normalize().multiply(bounceMult);
+
                 le.addVelocity(push.x, 0.2, push.z);
                 le.velocityModified = true;
+                if (le instanceof ServerPlayerEntity sp) {
+                    sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp.getId(), sp.getVelocity()));
+                }
 
                 // feedback
                 if (w.getTime() % 5 == 0) {
                     w.playSound(null, le.getBlockPos(), SoundEvents.BLOCK_AMETHYST_BLOCK_HIT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 0.5f);
-                    FortuneEntityFxPayload pushFx = new FortuneEntityFxPayload(le.getId(), 7);
+                    FortuneEntityFxPayload pushFx = new FortuneEntityFxPayload(le.getId(), isBouncer ? 13 : 7);
                     PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, pushFx));
+
+                    // The cage damages people who touch it during The Bouncer
+                    if (isBouncer) {
+                        Entity owner = w.getEntity(st.owner);
+                        le.damage(ModDamageTypes.house(w, owner), RULE_BOUNCER_DAMAGE);
+                    }
                 }
             }
             // yank if too far central
-            else if (distSq > (HOUSE_RADIUS + 2) * (HOUSE_RADIUS + 2) || le.getY() > st.baseY + HOUSE_WALL_LAYERS + 2 || le.getY() < st.baseY - 1) {
+            else if (maxDist > (HOUSE_RADIUS + 2.0) || le.getY() > st.baseY + HOUSE_WALL_LAYERS + HOUSE_TELEPORT_HEIGHT_ALLOWANCE || le.getY() < st.baseY - 1) {
                 teleportEntity(w, le, center, le.getYaw(), le.getPitch());
                 w.playSound(null, le.getBlockPos(), SoundEvents.ENTITY_ENDERMAN_TELEPORT, net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.2f);
                 FortuneEntityFxPayload yankFx = new FortuneEntityFxPayload(le.getId(), 8);
                 PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, yankFx));
             }
         }
+    }
+
+    // OTHER HELPERS
+    public static boolean cleanseDuel(LivingEntity target) {
+        if (ACTIVE_DUELS.containsKey(target.getUuid())) {
+            breakDuel(target.getUuid());
+            return true;
+        }
+        return false;
     }
 
     // COOLDOWNS

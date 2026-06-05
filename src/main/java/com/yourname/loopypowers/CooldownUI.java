@@ -127,7 +127,9 @@ public final class CooldownUI {
     }
 
     public static void clearAllCooldowns(ServerPlayerEntity player) {
-        COOLDOWNS.remove(player.getUuid());
+        UUID id = player.getUuid();
+        COOLDOWNS.remove(id);
+        OVERRIDES.remove(id);
     }
 
     // CHANGED: Now returns a translatable Text object instead of a String

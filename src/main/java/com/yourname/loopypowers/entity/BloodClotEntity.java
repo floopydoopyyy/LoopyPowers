@@ -94,7 +94,11 @@ public class BloodClotEntity extends ProjectileEntity {
             return;
         }
 
-        Box sweepBox = new Box(start, end).expand(1.2);
+        // Build sweep covering the path actually traveled this tick (start → end).
+        // Using getBoundingBox() here would be WRONG: super.tick() already moved
+        // the entity to 'end', so getBoundingBox().stretch(v) would cover end→end+v
+        // (the NEXT tick's path), missing every entity in the current path.
+        Box sweepBox = new Box(start, end).expand(1.0);
         LivingEntity hitTarget = null;
         double closestDist = Double.MAX_VALUE;
 
@@ -160,6 +164,8 @@ public class BloodClotEntity extends ProjectileEntity {
 
         final LivingEntity owner = (this.getOwner() instanceof LivingEntity le) ? le : null;
 
+        final boolean wasBleeding = BloodPower.isBleeding(target);
+
         // hit damage
         if (hitDamage > 0.0f) {
             DamageSource src = (owner != null)
@@ -170,7 +176,7 @@ public class BloodClotEntity extends ProjectileEntity {
         }
 
         if (owner instanceof ServerPlayerEntity sp && !this.getWorld().isClient()) {
-            if (BloodPower.isBleeding(target)) {
+            if (wasBleeding) {
                 // target is bleeding - pop them
                 BloodPower.popBleed(target, sp);
             } else {
@@ -189,6 +195,9 @@ public class BloodClotEntity extends ProjectileEntity {
             sw.spawnParticles(net.minecraft.particle.ParticleTypes.DAMAGE_INDICATOR,
                     this.getX(), this.getY(), this.getZ(),
                     8, 0.25, 0.20, 0.25, 0.02);
+            sw.spawnParticles(BLOOD_DUST,
+                    this.getX(), this.getY(), this.getZ(),
+                    15, 0.3, 0.3, 0.3, 0.05);
         }
         this.discard();
     }

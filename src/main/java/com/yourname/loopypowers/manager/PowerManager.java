@@ -204,14 +204,27 @@ public class PowerManager {
     public static void clearCooldownOverride(String key)                 { COOLDOWN_OVERRIDE_MS.remove(key); }
     public static void setGlobalCooldownMultiplier(double mult)          { GLOBAL_CD_MULT = Math.max(0.0, mult); }
 
+    public static double getPlayerCooldownMultiplier(ServerPlayerEntity player) {
+        return PLAYER_CD_MULT.getOrDefault(player.getUuid(), 1.0);
+    }
+
     public static void setPlayerCooldownMultiplier(ServerPlayerEntity player, double mult) {
         PLAYER_CD_MULT.put(player.getUuid(), Math.max(0.0, mult));
     }
+
     public static void clearPlayerCooldownMultiplier(ServerPlayerEntity player) {
         PLAYER_CD_MULT.remove(player.getUuid());
     }
 
     public static void setCooldownsDisabled(boolean disabled) { COOLDOWNS_DISABLED = disabled; }
+
+    public static boolean areCooldownsDisabled() { return COOLDOWNS_DISABLED; }
+
+    public static int getModifiedCooldownTicks(ServerPlayerEntity player, int baseTicks) {
+        if (COOLDOWNS_DISABLED) return 0;
+        double mult = GLOBAL_CD_MULT * PLAYER_CD_MULT.getOrDefault(player.getUuid(), 1.0);
+        return (int) Math.max(0, Math.round(baseTicks * mult));
+    }
 
     /** Applies overrides and multipliers to produce the final cooldown duration. */
     private static long computeFinalCooldownMs(ServerPlayerEntity player, Power power, AbilityTypes type, long baseMs) {
@@ -327,7 +340,7 @@ public class PowerManager {
 
     private static long modifyCooldown(ServerPlayerEntity player, Power power, AbilityTypes type, long baseMs) {
         if (power instanceof StrengthPower && type != AbilityTypes.ULTIMATE && StrengthPower.isRaging(player)) {
-            return Math.max(250L, (long)(baseMs * 0.20));
+            return Math.max(250L, (long)(baseMs * 0.15));
         }
         return baseMs;
     }
@@ -374,14 +387,17 @@ public class PowerManager {
         if (power != null) nbt.putString("lp_power", power.getName());
 
         nbt.putInt("lp_level", getLevel(player));
+        nbt.putDouble("lp_cd_mult", getPlayerCooldownMultiplier(player));
+        nbt.putBoolean("lp_passive", PassiveManager.isEnabled(player));
 
         Map<String, Long> cds = COOLDOWN_END_MS.get(player.getUuid());
         if (cds != null && !cds.isEmpty()) {
             net.minecraft.nbt.NbtCompound cdTag = new net.minecraft.nbt.NbtCompound();
+            long now = nowMs();
             for (Map.Entry<String, Long> entry : cds.entrySet()) {
-                cdTag.putLong(entry.getKey(), entry.getValue());
+                if (entry.getValue() > now) cdTag.putLong(entry.getKey(), entry.getValue());
             }
-            nbt.put("lp_cooldowns", cdTag);
+            if (!cdTag.isEmpty()) nbt.put("lp_cooldowns", cdTag);
         }
     }
 
@@ -401,6 +417,14 @@ public class PowerManager {
         if (nbt.contains("lp_level")) {
             setLevel(player, nbt.getInt("lp_level"));
         }
+
+        if (nbt.contains("lp_cd_mult")) {
+            double mult = nbt.getDouble("lp_cd_mult");
+            if (mult != 1.0) PLAYER_CD_MULT.put(player.getUuid(), Math.max(0.0, mult));
+        }
+
+        boolean passive = !nbt.contains("lp_passive") || nbt.getBoolean("lp_passive");
+        PassiveManager.setPassiveState(player, passive);
 
         if (nbt.contains("lp_cooldowns")) {
             net.minecraft.nbt.NbtCompound cdTag = nbt.getCompound("lp_cooldowns");
@@ -431,5 +455,7 @@ public class PowerManager {
         PLAYER_LEVELS.remove(id);
         COOLDOWN_END_MS.remove(id);
         PLAYER_CD_MULT.remove(id);
+        CooldownUI.clearAllCooldowns(player);
+        PassiveManager.clearPassiveState(player);
     }
 }

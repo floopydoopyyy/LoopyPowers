@@ -11,6 +11,7 @@ import net.minecraft.util.Identifier;
 // 1 = SMOKE_MACHINE_START: LARGE_SMOKE 25
 // 2 = CHIP_TOSS_CENTER   : ENCHANT 18
 // 3 = JACKPOT_ARM        : ENCHANT 22
+// 4 = BOUNCER            : ELECTRIC_SPARK 30
 public record FortuneCenterFxPayload(double x, double y, double z, int type) implements CustomPayload {
 
     public static final Id<FortuneCenterFxPayload> ID =

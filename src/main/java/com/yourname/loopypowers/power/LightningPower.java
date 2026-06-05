@@ -444,9 +444,9 @@ public class LightningPower implements Power {
     }
 
     // ULT
-    private static final double STORM_RADIUS        = 15.0;
+    private static final double STORM_RADIUS        = 13.0;
     private static final int    STORM_DURATION_TICKS = 300;  // 15 seconds
-    private static final int    STORM_PULSE_TICKS    = 17;   // every 30 ticks
+    private static final int    STORM_PULSE_TICKS    = 19;   // every 30 ticks
 
     private static final float STORM_DAMAGE     = 4.5f;
 
@@ -462,8 +462,9 @@ public class LightningPower implements Power {
                 SoundEvents.ENTITY_LIGHTNING_BOLT_THUNDER,
                 player.getSoundCategory(), 1.2f, 0.8f);
 
-        // ult activation — big radial burst
+        // ult activation — big radial burst + overhead cloud reveal
         spawnMaelstromOpenBurst(w, player);
+        spawnStormClouds(w, player.getPos(), STORM_DURATION_TICKS, true);
     }
 
     // massive burst when ult activates
@@ -491,7 +492,7 @@ public class LightningPower implements Power {
         }
 
         // Clouds
-        if (state.stormTicks % 6 == 0) spawnStormClouds(world, center);
+        if (state.stormTicks % 6 == 0) spawnStormClouds(world, center, state.stormTicks, false);
 
         // Targets inside radius
         Box box = new Box(center, center).expand(STORM_RADIUS);
@@ -533,9 +534,10 @@ public class LightningPower implements Power {
         }
     }
 
-    // black stormclouds with yellow
-    private void spawnStormClouds(ServerWorld world, Vec3d center) {
-        LightningStormCloudsPayload payload = new LightningStormCloudsPayload(center.x, center.y, center.z);
+    // stormcloud send — carries stormTicks (for rotation) and isActivation flag
+    private void spawnStormClouds(ServerWorld world, Vec3d center, int stormTicks, boolean isActivation) {
+        LightningStormCloudsPayload payload = new LightningStormCloudsPayload(
+                center.x, center.y, center.z, stormTicks, isActivation);
         PlayerLookup.tracking(world, BlockPos.ofFloored(center)).forEach(sp -> ServerPlayNetworking.send(sp, payload));
     }
 

@@ -26,73 +26,83 @@ public final class SpeedFxClient {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
-            scatter(world, WHITE_BRIGHT, p.x(), p.y(), p.z(), 8, 0.3, 0.4, 0.3, 0.06);
-            scatter(world, ParticleTypes.SWEEP_ATTACK, p.x(), p.y(), p.z(), 3, 0.4, 0.2, 0.4, 0);
+            double oy = p.y() + 0.5;
+            world.addParticle(WHITE_BRIGHT, p.x(), oy, p.z(), 0.3, 0.4, 0.3);
+            world.addParticle(ParticleTypes.SWEEP_ATTACK, p.x(), oy, p.z(), 0.4, 0.2, 0.4);
         });
     }
 
-    // ---- Secondary tick: rush cloud trail ----
+    // ---- Primary: dash cast and trail ----
 
-    public static void handleRushTrail(SpeedRushTrailPayload p, ClientPlayNetworking.Context ctx) {
-        ctx.client().execute(() -> {
-            ClientWorld world = ctx.client().world;
-            if (world == null) return;
-            scatter(world, ParticleTypes.CLOUD, p.x(), p.y(), p.z(), 3, 0.15, 0.05, 0.15, 0.005);
-        });
-    }
-
-    // ---- Primary: dash ----
-
-    public static void handleDash(SpeedDashPayload p, ClientPlayNetworking.Context ctx) {
+    public static void handleDashCast(SpeedDashCastPayload p, ClientPlayNetworking.Context ctx) {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
 
-            double ox = p.x(), oy = p.y() + 0.8, oz = p.z();
+            double x = p.x(), y = p.y(), z = p.z();
             double lx = p.lookX(), ly = p.lookY(), lz = p.lookZ();
 
-            // central burst
-            scatter(world, WHITE_BRIGHT, ox, oy, oz, 12, 0.3, 0.25, 0.3, 0.06);
-
-            // trail streaks behind the look direction
-            for (int i = 1; i <= 4; i++) {
-                double d = i * 0.70;
-                world.addParticle((i % 2 == 0) ? WHITE_BRIGHT : WHITE_STREAK,
-                        ox - lx * d, oy - ly * d * 0.5, oz - lz * d, 0, 0, 0);
+            for (int i = 0; i < 20; i++) {
+                world.addParticle(WHITE_PALE, x, y, z,
+                        (Math.random() - 0.5) * 0.8, Math.random() * 0.5, (Math.random() - 0.5) * 0.8);
             }
-
-            // ring
-            for (int i = 0; i < 6; i++) {
-                double angle = i * Math.PI * 2.0 / 6;
-                world.addParticle(WHITE_STREAK,
-                        ox + Math.cos(angle) * 0.4, oy, oz + Math.sin(angle) * 0.4, 0, 0, 0);
+            for (int i = 0; i < 10; i++) {
+                world.addParticle(WHITE_BRIGHT, x, y, z,
+                        -lx * 0.5 + (Math.random() - 0.5) * 0.2,
+                        -ly * 0.5 + Math.random() * 0.2,
+                        -lz * 0.5 + (Math.random() - 0.5) * 0.2);
             }
-
-            scatter(world, ParticleTypes.SWEEP_ATTACK, ox, p.y() + 0.3, oz, 3, 0.5, 0.15, 0.5, 0);
         });
     }
 
-    // ---- Secondary: rush cast ----
-
-    public static void handleRushCast(SpeedRushCastPayload p, ClientPlayNetworking.Context ctx) {
+    public static void handleDashTrail(SpeedDashTrailPayload p, ClientPlayNetworking.Context ctx) {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
 
-            double ox = p.x(), oy = p.y() + 1.0, oz = p.z();
+            Vec3d vel = new Vec3d(p.vx(), p.vy(), p.vz());
+            if (vel.lengthSquared() < 0.001) return;
+            Vec3d back = vel.normalize().negate();
+            double py = p.y() + 1.0;
 
-            // outward ring at feet
-            for (int i = 0; i < 12; i++) {
-                double angle = i * Math.PI * 2.0 / 12;
-                world.addParticle(WHITE_BRIGHT,
-                        ox + Math.cos(angle) * 0.5, p.y() + 0.1, oz + Math.sin(angle) * 0.5,
-                        Math.cos(angle) * 0.22, 0.01, Math.sin(angle) * 0.22);
+            for (int i = 0; i < 2; i++) {
+                world.addParticle(WHITE_STREAK,
+                        p.x() + (Math.random() - 0.5) * 0.3,
+                        py  + (Math.random() - 0.5) * 0.3,
+                        p.z() + (Math.random() - 0.5) * 0.3,
+                        0, 0, 0);
             }
+            if (Math.random() < 0.3) {
+                world.addParticle(ParticleTypes.ELECTRIC_SPARK,
+                        p.x() + (Math.random() - 0.5) * 0.5,
+                        py  + (Math.random() - 0.5) * 0.5,
+                        p.z() + (Math.random() - 0.5) * 0.5,
+                        back.x * 0.2, back.y * 0.2, back.z * 0.2);
+            }
+            if (p.gameTime() % 2 == 0) {
+                world.addParticle(ParticleTypes.SWEEP_ATTACK, p.x(), py, p.z(), 0, 0, 0);
+            }
+        });
+    }
 
-            scatter(world, WHITE_BRIGHT, ox, oy, oz, 10, 0.5, 0.5, 0.5, 0.10);
-            scatter(world, WHITE_PALE,   ox, oy, oz,  6, 0.6, 0.6, 0.6, 0.08);
-            scatter(world, ParticleTypes.EXPLOSION_EMITTER, ox, oy, oz, 3, 0.6, 0.2, 0.6, 0.1);
-            scatter(world, ParticleTypes.SWEEP_ATTACK, ox, p.y() + 0.5, oz, 4, 0.6, 0.25, 0.6, 0);
+    // ---- Secondary: pinball anchor ring ----
+
+    public static void handlePinballAnchor(SpeedPinballAnchorPayload p, ClientPlayNetworking.Context ctx) {
+        ctx.client().execute(() -> {
+            ClientWorld world = ctx.client().world;
+            if (world == null) return;
+
+            double radius = 10.0;
+            int points = 36;
+            for (int i = 0; i < points; i++) {
+                double angle = 2 * Math.PI * i / points;
+                double px = p.anchorX() + Math.cos(angle) * radius;
+                double pz = p.anchorZ() + Math.sin(angle) * radius;
+                world.addParticle(WHITE_PALE, px, p.anchorY() + 0.1, pz, 0, 0.02, 0);
+                if (i % 4 == 0) {
+                    world.addParticle(ParticleTypes.ELECTRIC_SPARK, px, p.anchorY() + 0.2, pz, 0, 0.05, 0);
+                }
+            }
         });
     }
 
@@ -103,30 +113,26 @@ public final class SpeedFxClient {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
 
-            double ox = p.x(), oy = p.y() + 1.0, oz = p.z();
+            double x = p.x(), oy = p.y() + 1.0, z = p.z();
 
-            // upward sphere burst
-            for (int d = 0; d < 12; d++) {
-                double theta = d * Math.PI * 2.0 / 12;
-                double phi   = Math.PI / 4;
-                double speed = 0.20;
-                world.addParticle(WHITE_BRIGHT, ox, oy, oz,
-                        Math.cos(theta) * Math.cos(phi) * speed,
-                        Math.sin(phi) * speed,
-                        Math.sin(theta) * Math.cos(phi) * speed);
+            world.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, oy,     z, 1.5, 0.5, 1.5);
+            world.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, oy + 1, z, 1.5, 0.5, 1.5);
+
+            for (int i = 0; i < 80; i++) {
+                world.addParticle(WHITE_PALE,   x, oy, z, (Math.random()-0.5)*1.8, Math.random()*1.5, (Math.random()-0.5)*1.8);
             }
-
-            // ring at feet
-            for (int i = 0; i < 10; i++) {
-                double angle = i * Math.PI * 2.0 / 10;
-                world.addParticle(WHITE_STREAK,
-                        ox + Math.cos(angle) * 0.4, p.y() + 0.1, oz + Math.sin(angle) * 0.4,
-                        Math.cos(angle) * 0.28, 0.01, Math.sin(angle) * 0.28);
+            for (int i = 0; i < 30; i++) {
+                world.addParticle(WHITE_BRIGHT,  x, oy, z, (Math.random()-0.5)*1.5, Math.random()*1.0, (Math.random()-0.5)*1.5);
             }
-
-            scatter(world, ParticleTypes.FIREWORK,      ox, oy, oz, 8, 0.5, 0.6, 0.5, 0.08);
-            scatter(world, ParticleTypes.FLASH,         ox, oy, oz, 1, 0.4, 0.2, 0.4, 0);
-            scatter(world, ParticleTypes.SWEEP_ATTACK,  ox, oy, oz, 5, 0.7, 0.3, 0.7, 0);
+            for (int i = 0; i < 40; i++) {
+                world.addParticle(ParticleTypes.ELECTRIC_SPARK, x, oy, z, (Math.random()-0.5)*2.5, Math.random()*2.0, (Math.random()-0.5)*2.5);
+            }
+            for (int i = 0; i < 24; i++) {
+                world.addParticle(ParticleTypes.END_ROD, x, oy, z, (Math.random()-0.5)*2.5, (Math.random()-0.5)*2.5, (Math.random()-0.5)*2.5);
+            }
+            for (int i = 0; i < 4; i++) {
+                world.addParticle(ParticleTypes.FLASH, x, oy + Math.random(), z, 0, 0, 0);
+            }
         });
     }
 
@@ -137,59 +143,97 @@ public final class SpeedFxClient {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
 
-            double ox = p.x(), oy = p.y(), oz = p.z();
+            Vec3d pos  = new Vec3d(p.x(), p.y() + 1.0, p.z());
             Vec3d vel  = new Vec3d(p.velX(), p.velY(), p.velZ());
-            double len = vel.length();
-            if (len < 1.0e-5) return;
+            if (vel.lengthSquared() < 0.001) return;
 
             Vec3d back = vel.normalize().negate();
+            Vec3d arbitrary = Math.abs(back.y) < 0.9 ? new Vec3d(0, 1, 0) : new Vec3d(1, 0, 0);
+            Vec3d right = back.crossProduct(arbitrary).normalize();
+            Vec3d up    = right.crossProduct(back).normalize();
 
-            // streaks behind player
-            for (int i = 0; i < 3; i++) {
-                double d = 0.5 + i * 1.1;
-                world.addParticle(
-                        (i % 2 == 0) ? WHITE_BRIGHT : WHITE_PALE,
-                        ox + back.x * d, oy + back.y * d * 0.3, oz + back.z * d,
+            // Far behind: thick pale dust
+            Vec3d far = pos.add(back.multiply(1.2));
+            for (int i = 0; i < 8; i++) {
+                world.addParticle(WHITE_STREAK,
+                        far.x + (Math.random()-0.5)*0.8, far.y + (Math.random()-0.5)*0.8, far.z + (Math.random()-0.5)*0.8,
                         0, 0, 0);
             }
 
-            scatter(world, ParticleTypes.CLOUD,   ox + back.x * 1.5, oy - 0.3, oz + back.z * 1.5, 3, 0.25, 0.20, 0.25, 0.04);
-            scatter(world, ParticleTypes.SMOKE,   ox + back.x,       oy - 0.1, oz + back.z,        2, 0.15, 0.15, 0.15, 0.03);
-            scatter(world, ParticleTypes.END_ROD, ox, oy, oz, 4, 0.3, 0.6, 0.3, 0.06);
-            scatter(world, ParticleTypes.FIREWORK, ox, oy, oz, 2, 0.35, 0.55, 0.25, 0.05);
+            // Closer: bright core
+            Vec3d close = pos.add(back.multiply(0.5));
+            for (int i = 0; i < 6; i++) {
+                world.addParticle(WHITE_BRIGHT,
+                        close.x + (Math.random()-0.5)*0.5, close.y + (Math.random()-0.5)*0.5, close.z + (Math.random()-0.5)*0.5,
+                        0, 0, 0);
+            }
 
-            if (p.showRing()) {
-                Vec3d right = new Vec3d(-vel.z, 0, vel.x).normalize();
-                for (int i = 0; i < 4; i++) {
-                    double angle = i * Math.PI * 2.0 / 4;
-                    double rx = right.x * Math.cos(angle) * 0.6;
-                    double rz = right.z * Math.cos(angle) * 0.6;
-                    world.addParticle(WHITE_STREAK, ox + rx, oy, oz + rz, 0, 0, 0);
+            // Sparks
+            for (int i = 0; i < 8; i++) {
+                world.addParticle(ParticleTypes.ELECTRIC_SPARK,
+                        pos.x + (Math.random()-0.5)*1.5, pos.y + (Math.random()-0.5)*1.5, pos.z + (Math.random()-0.5)*1.5,
+                        back.x * 0.4, back.y * 0.4, back.z * 0.4);
+            }
+
+            // Speed lines
+            if (Math.random() < 0.4) {
+                world.addParticle(ParticleTypes.END_ROD,
+                        pos.x + (Math.random()-0.5)*1.2, pos.y + (Math.random()-0.5)*1.2, pos.z + (Math.random()-0.5)*1.2,
+                        back.x * 0.8, back.y * 0.8, back.z * 0.8);
+            }
+
+            // Shockwave ring every 4 ticks
+            if (p.gameTime() % 4 == 0) {
+                int points = 32;
+                double ringRadius = 1.2;
+                for (int i = 0; i < points; i++) {
+                    double angle = i * Math.PI * 2.0 / points;
+                    Vec3d pt = pos.add(right.multiply(Math.cos(angle) * ringRadius))
+                                  .add(up.multiply(Math.sin(angle) * ringRadius));
+                    world.addParticle(WHITE_PALE, pt.x, pt.y, pt.z, back.x * 0.1, back.y * 0.1, back.z * 0.1);
+                }
+                for (int i = 0; i < 10; i++) {
+                    double angle = Math.random() * Math.PI * 2.0;
+                    Vec3d pt = pos.add(right.multiply(Math.cos(angle) * (ringRadius + 0.3)))
+                                  .add(up.multiply(Math.sin(angle) * (ringRadius + 0.3)));
+                    world.addParticle(ParticleTypes.ELECTRIC_SPARK, pt.x, pt.y, pt.z, back.x * 0.2, back.y * 0.2, back.z * 0.2);
                 }
             }
         });
     }
 
-    // ---- Overdrive entity hit ----
+    // ---- Overdrive: collision explosions ----
 
-    public static void handleOverdriveHit(SpeedOverdriveHitPayload p, ClientPlayNetworking.Context ctx) {
+    public static void handleExplosionFx(SpeedExplosionFxPayload p, ClientPlayNetworking.Context ctx) {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
-            scatter(world, ParticleTypes.EXPLOSION_EMITTER, p.x(), p.y(), p.z(), 4, 0.6, 0.2, 0.6, 0.1);
+
+            double x = p.x(), oy = p.y() + 1.0, z = p.z();
+            if (p.heavy()) {
+                for (int i = 0; i < 4; i++) {
+                    world.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, oy, z, 0.6, 0.2, 0.6);
+                }
+                world.addParticle(ParticleTypes.FLASH, x, oy, z, 0, 0, 0);
+                for (int i = 0; i < 15; i++) {
+                    world.addParticle(ParticleTypes.ELECTRIC_SPARK, x, oy, z,
+                            (Math.random()-0.5)*1.5, Math.random()*1.0, (Math.random()-0.5)*1.5);
+                }
+            } else {
+                for (int i = 0; i < 3; i++) {
+                    world.addParticle(ParticleTypes.EXPLOSION_EMITTER, x, oy, z, 0.15, 0.10, 0.15);
+                }
+                for (int i = 0; i < 8; i++) {
+                    world.addParticle(ParticleTypes.ELECTRIC_SPARK, x, oy, z,
+                            (Math.random()-0.5)*0.8, Math.random()*0.5, (Math.random()-0.5)*0.8);
+                }
+            }
         });
     }
 
-    // ---- Overdrive block collision ----
+    // ---- Util ----
 
-    public static void handleBlockImpact(SpeedBlockImpactPayload p, ClientPlayNetworking.Context ctx) {
-        ctx.client().execute(() -> {
-            ClientWorld world = ctx.client().world;
-            if (world == null) return;
-            scatter(world, ParticleTypes.EXPLOSION_EMITTER, p.x(), p.y(), p.z(), 3, 0.15, 0.10, 0.15, 0.02);
-        });
-    }
-
+    @SuppressWarnings("unused")
     private static <T extends ParticleEffect> void scatter(
             ClientWorld world, T type,
             double cx, double cy, double cz,

@@ -335,24 +335,173 @@ public final class LightningFxClient {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
             double cx = p.cx(), cy = p.cy(), cz = p.cz();
-            for (int i = 0; i < 80; i++) {
-                double ang = world.random.nextDouble() * Math.PI * 2.0;
-                double rad = world.random.nextDouble() * STORM_RADIUS;
-                double x = cx + Math.cos(ang) * rad;
-                double z = cz + Math.sin(ang) * rad;
-                double y = cy + 6.0 + world.random.nextDouble() * 2.0;
-                DustParticleEffect cloudCol = (world.random.nextFloat() < 0.6f) ? STORM_BLACK : STORM_GREY;
-                scatter(world, cloudCol, x, y, z, 2, 0.55, 0.20, 0.55, 0.003);
-                if (world.random.nextFloat() < 0.18f) scatter(world, ParticleTypes.CLOUD, x, y, z, 1, 0.40, 0.15, 0.40, 0.005);
-                if (world.random.nextFloat() < 0.45f) {
-                    scatter(world, BOLT_YELLOW,
-                            x + (world.random.nextDouble() - 0.5) * 1.2, y - 0.5,
-                            z + (world.random.nextDouble() - 0.5) * 1.2,
-                            1, 0.12, 0.06, 0.12, 0.0);
-                }
-                if (world.random.nextFloat() < 0.28f) scatter(world, ParticleTypes.ELECTRIC_SPARK, x, y - 0.7, z, 1, 0.15, 0.10, 0.15, 0.0);
+            int stormTicks = p.stormTicks();
+            // Rotation offset — one full rotation every ~200 ticks
+            double rotAngle = stormTicks * 0.031;
+
+            if (p.isActivation()) {
+                stormCloudActivationBurst(world, cx, cy, cz, rotAngle);
+            } else {
+                stormCloudCanopy(world, cx, cy, cz, rotAngle);
+                stormCloudCrownEdge(world, cx, cy, cz, rotAngle);
+                stormCloudBody(world, cx, cy, cz, rotAngle, stormTicks);
+                stormCloudUnderbelly(world, cx, cy, cz, rotAngle, stormTicks);
             }
         });
+    }
+
+    // Layer 1 — CANOPY (y+8.5): light CLOUD wisps on very top
+    private static void stormCloudCanopy(ClientWorld world, double cx, double cy, double cz, double rotAngle) {
+        int points = 12;
+        for (int i = 0; i < points; i++) {
+            double a = rotAngle + (2 * Math.PI / points) * i;
+            for (double r : new double[]{ STORM_RADIUS * 0.45, STORM_RADIUS * 0.80 }) {
+                double x = cx + Math.cos(a) * r;
+                double z = cz + Math.sin(a) * r;
+                double y = cy + 8.5 + (world.random.nextDouble() - 0.5) * 0.6;
+                world.addParticle(ParticleTypes.CLOUD, x, y, z,
+                        (world.random.nextDouble() - 0.5) * 0.008, 0.002, (world.random.nextDouble() - 0.5) * 0.008);
+            }
+        }
+    }
+
+    // Layer 2 — CROWN EDGE (y+7–8.1): dense dark ring at STORM_RADIUS boundary
+    private static void stormCloudCrownEdge(ClientWorld world, double cx, double cy, double cz, double rotAngle) {
+        int outerPoints = 32;
+        for (int i = 0; i < outerPoints; i++) {
+            double a = rotAngle + (2 * Math.PI / outerPoints) * i;
+            for (double yOff : new double[]{ 7.0, 7.6, 8.1 }) {
+                double x = cx + Math.cos(a) * (STORM_RADIUS - 0.5 + world.random.nextDouble() * 1.2);
+                double z = cz + Math.sin(a) * (STORM_RADIUS - 0.5 + world.random.nextDouble() * 1.2);
+                double y = cy + yOff + (world.random.nextDouble() - 0.5) * 0.5;
+                DustParticleEffect col = (world.random.nextFloat() < 0.65f) ? STORM_BLACK : STORM_GREY;
+                world.addParticle(col, x, y, z, 0, (world.random.nextDouble() - 0.5) * 0.004, 0);
+            }
+            if (i % 2 == 0) {
+                double x = cx + Math.cos(a) * (STORM_RADIUS * 0.95);
+                double z = cz + Math.sin(a) * (STORM_RADIUS * 0.95);
+                world.addParticle(ParticleTypes.CLOUD, x, cy + 7.4, z, 0, 0.003, 0);
+            }
+        }
+        // counter-rotating inner ring for depth
+        int innerPoints = 20;
+        for (int i = 0; i < innerPoints; i++) {
+            double a = -rotAngle + (2 * Math.PI / innerPoints) * i;
+            double x = cx + Math.cos(a) * (STORM_RADIUS * 0.82);
+            double z = cz + Math.sin(a) * (STORM_RADIUS * 0.82);
+            world.addParticle(STORM_BLACK, x, cy + 6.8 + world.random.nextDouble() * 0.8, z, 0, 0.002, 0);
+        }
+    }
+
+    // Layer 3 — BODY (y+6–7.5): thick dark disc interior
+    private static void stormCloudBody(ClientWorld world, double cx, double cy, double cz,
+                                        double rotAngle, int stormTicks) {
+        double fastRot = rotAngle * 1.3;
+        int pointsA = 18;
+        for (int i = 0; i < pointsA; i++) {
+            double a = fastRot + (2 * Math.PI / pointsA) * i;
+            double r = STORM_RADIUS * 0.58 + (world.random.nextDouble() - 0.5) * 2.0;
+            double x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+            double y = cy + 6.5 + world.random.nextDouble() * 0.9;
+            DustParticleEffect col = (world.random.nextFloat() < 0.5f) ? STORM_BLACK : STORM_GREY;
+            world.addParticle(col, x, y, z, 0, 0.002, 0);
+            if (world.random.nextFloat() < 0.25f)
+                world.addParticle(ParticleTypes.CLOUD, x, y + 0.3, z, 0, 0.003, 0);
+        }
+        int pointsB = 12;
+        for (int i = 0; i < pointsB; i++) {
+            double a = -fastRot + (2 * Math.PI / pointsB) * i;
+            double r = STORM_RADIUS * 0.30 + (world.random.nextDouble() - 0.5) * 1.5;
+            double x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+            world.addParticle(STORM_BLACK, x, cy + 6.2 + world.random.nextDouble() * 1.2, z, 0, 0.003, 0);
+        }
+        if (stormTicks % 12 == 0) {
+            for (int i = 0; i < 8; i++) {
+                double a = world.random.nextDouble() * Math.PI * 2;
+                double r = STORM_RADIUS * (0.2 + world.random.nextDouble() * 0.6);
+                world.addParticle(STORM_GREY,
+                        cx + Math.cos(a) * r, cy + 7.0 + world.random.nextDouble() * 1.0, cz + Math.sin(a) * r,
+                        0, 0.004, 0);
+            }
+        }
+    }
+
+    // Layer 4 — UNDERBELLY (y+5–6.5): BOLT_YELLOW glow + ELECTRIC_SPARK drops
+    private static void stormCloudUnderbelly(ClientWorld world, double cx, double cy, double cz,
+                                              double rotAngle, int stormTicks) {
+        int glowPoints = 14;
+        for (int i = 0; i < glowPoints; i++) {
+            double a = rotAngle * 0.7 + (2 * Math.PI / glowPoints) * i;
+            double r = STORM_RADIUS * (0.20 + world.random.nextDouble() * 0.65);
+            double x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+            double y = cy + 5.6 + world.random.nextDouble() * 0.9;
+            world.addParticle(BOLT_YELLOW, x, y, z,
+                    (world.random.nextDouble() - 0.5) * 0.015, -(world.random.nextDouble() * 0.008),
+                    (world.random.nextDouble() - 0.5) * 0.015);
+        }
+        if (stormTicks % 6 == 0) {
+            for (int i = 0; i < 4; i++) {
+                double a = world.random.nextDouble() * Math.PI * 2;
+                double r = STORM_RADIUS * (0.15 + world.random.nextDouble() * 0.5);
+                world.addParticle(BOLT_WHITE,
+                        cx + Math.cos(a) * r, cy + 5.8 + world.random.nextDouble() * 0.6, cz + Math.sin(a) * r,
+                        0, -0.005, 0);
+            }
+        }
+        // ELECTRIC_SPARK drops falling downward — visual threat signal
+        for (int i = 0; i < 10; i++) {
+            double a = world.random.nextDouble() * Math.PI * 2;
+            double r = STORM_RADIUS * (0.1 + world.random.nextDouble() * world.random.nextDouble() * 0.75);
+            double x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+            double y = cy + 5.2 + world.random.nextDouble() * 1.0;
+            world.addParticle(ParticleTypes.ELECTRIC_SPARK, x, y, z,
+                    (world.random.nextDouble() - 0.5) * 0.02,
+                    -(0.02 + world.random.nextDouble() * 0.04),
+                    (world.random.nextDouble() - 0.5) * 0.02);
+        }
+    }
+
+    // Activation burst — three expanding rings reveal the full zone boundary
+    private static void stormCloudActivationBurst(ClientWorld world, double cx, double cy, double cz,
+                                                   double rotAngle) {
+        double[][] rings = {
+                { STORM_RADIUS * 0.45, cy + 7.0, 20 },
+                { STORM_RADIUS * 0.75, cy + 7.2, 28 },
+                { STORM_RADIUS,        cy + 7.5, 36 },
+        };
+        for (double[] ring : rings) {
+            double r = ring[0], y = ring[1];
+            int points = (int) ring[2];
+            for (int i = 0; i < points; i++) {
+                double a = (2 * Math.PI / points) * i;
+                double outSpeed = 0.22 * (r / STORM_RADIUS);
+                double vx = Math.cos(a) * outSpeed, vz = Math.sin(a) * outSpeed;
+                int mod = i % 3;
+                if (mod == 0)       world.addParticle(ParticleTypes.CLOUD, cx + Math.cos(a) * 0.5, y, cz + Math.sin(a) * 0.5, vx, 0.005, vz);
+                else if (mod == 1)  world.addParticle(STORM_BLACK,         cx + Math.cos(a) * 0.5, y, cz + Math.sin(a) * 0.5, vx, 0.003, vz);
+                else                world.addParticle(BOLT_YELLOW,         cx + Math.cos(a) * 0.5, y, cz + Math.sin(a) * 0.5, vx, 0.008, vz);
+            }
+        }
+        // central upward sparks
+        for (int i = 0; i < 30; i++) {
+            double a = world.random.nextDouble() * Math.PI * 2;
+            double r = world.random.nextDouble() * 2.0;
+            world.addParticle(ParticleTypes.ELECTRIC_SPARK,
+                    cx + Math.cos(a) * r, cy + 0.5 + world.random.nextDouble() * 2.0, cz + Math.sin(a) * r,
+                    (world.random.nextDouble() - 0.5) * 0.06, 0.12 + world.random.nextDouble() * 0.18,
+                    (world.random.nextDouble() - 0.5) * 0.06);
+        }
+        // full-radius cloud band at boundary
+        int edgePoints = 48;
+        for (int i = 0; i < edgePoints; i++) {
+            double a = rotAngle + (2 * Math.PI / edgePoints) * i;
+            double x = cx + Math.cos(a) * (STORM_RADIUS - 0.8 + world.random.nextDouble() * 1.6);
+            double z = cz + Math.sin(a) * (STORM_RADIUS - 0.8 + world.random.nextDouble() * 1.6);
+            double y = cy + 6.5 + world.random.nextDouble() * 2.0;
+            DustParticleEffect col = (world.random.nextFloat() < 0.6f) ? STORM_BLACK : STORM_GREY;
+            world.addParticle(col, x, y, z, 0, 0.003, 0);
+            if (i % 3 == 0) world.addParticle(ParticleTypes.CLOUD, x, y + 0.4, z, 0, 0.004, 0);
+        }
     }
 
     public static void handleStormStrike(LightningStormStrikePayload p, ClientPlayNetworking.Context ctx) {

@@ -8,10 +8,10 @@
       ],
       "conditions": [
         { "condition": "minecraft:survives_explosion" },
-        { "condition": "minecraft:entity_properties",
-          "entity": "this",
+        {
+          "condition": "minecraft:match_tool",
           "predicate": {
-            "type": "minecraft:player"
+            "items": "#minecraft:swords"
           }
         }
       ]

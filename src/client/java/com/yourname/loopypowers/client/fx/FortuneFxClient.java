@@ -172,10 +172,11 @@ public final class FortuneFxClient {
             if (world == null) return;
             double x = p.x() + 0.5, y = p.y(), z = p.z() + 0.5;
             switch (p.type()) {
-                case 0 -> scatter(world, ParticleTypes.ENCHANT,    x, y + 1.2, z, 18, 0.9,  0.35, 0.9,  0.0);  // DOUBLE_OR_NOTHING
-                case 1 -> scatter(world, ParticleTypes.LARGE_SMOKE, x, y + 1.2, z, 25, 1.2,  0.6,  1.2,  0.02); // SMOKE_MACHINE_START
-                case 2 -> scatter(world, ParticleTypes.ENCHANT,    x, y + 1.2, z, 18, 1.0,  0.35, 1.0,  0.0);  // CHIP_TOSS_CENTER
-                case 3 -> scatter(world, ParticleTypes.ENCHANT,    x, y + 1.2, z, 22, 0.8,  0.35, 0.8,  0.0);  // JACKPOT_ARM
+                case 0 -> scatter(world, ParticleTypes.ENCHANT,        x, y + 1.2, z, 18, 0.9,  0.35, 0.9,  0.0);  // DOUBLE_OR_NOTHING
+                case 1 -> scatter(world, ParticleTypes.LARGE_SMOKE,    x, y + 1.2, z, 25, 1.2,  0.6,  1.2,  0.02); // SMOKE_MACHINE_START
+                case 2 -> scatter(world, ParticleTypes.ENCHANT,        x, y + 1.2, z, 18, 1.0,  0.35, 1.0,  0.0);  // CHIP_TOSS_CENTER
+                case 3 -> scatter(world, ParticleTypes.ENCHANT,        x, y + 1.2, z, 22, 0.8,  0.35, 0.8,  0.0);  // JACKPOT_ARM
+                case 4 -> scatter(world, ParticleTypes.ELECTRIC_SPARK, x, y + 1.2, z, 30, 1.0,  0.5,  1.0,  0.1);  // BOUNCER
             }
         });
     }
@@ -203,8 +204,9 @@ public final class FortuneFxClient {
                 case 8  -> scatter(world, ParticleTypes.ENCHANTED_HIT, x, le.getY() + 1.0,     z, 30, 0.5,  0.5,  0.5,  0.05); // PRISON_YANK
                 case 9  -> scatter(world, ParticleTypes.ENCHANT,       x, le.getY() + 1.0,     z, 22, 0.45, 0.55, 0.45, 0.0);  // CARD_COUNTER
                 case 10 -> scatter(world, ParticleTypes.SMOKE,         x, le.getY() + h * 0.6, z,  8, 0.45, 0.35, 0.45, 0.01); // SMOKE_MACHINE
-                case 11 -> scatter(world, ParticleTypes.CRIT,          x, le.getY() + h * 0.5, z, 10, 0.25, 0.35, 0.25, 0.10); // CHIP_TOSS_ENTITY
-                case 12 -> scatter(world, ParticleTypes.ELECTRIC_SPARK,x, le.getY() + h * 0.6, z,  6, 0.25, 0.25, 0.25, 0.0);  // LIGHTNING_TICK
+                case 11 -> scatter(world, ParticleTypes.CRIT,           x, le.getY() + h * 0.5, z, 10, 0.25, 0.35, 0.25, 0.10); // CHIP_TOSS_ENTITY
+                case 12 -> scatter(world, ParticleTypes.ELECTRIC_SPARK, x, le.getY() + h * 0.6, z,  6, 0.25, 0.25, 0.25, 0.0);  // LIGHTNING_TICK
+                case 13 -> scatter(world, ParticleTypes.ELECTRIC_SPARK, x, le.getY() + 1.0,     z, 25, 0.2,  0.4,  0.2,  0.15); // BOUNCER_PUSH
             }
         });
     }

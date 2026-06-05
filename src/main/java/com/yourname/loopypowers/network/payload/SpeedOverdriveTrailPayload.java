@@ -9,7 +9,7 @@ import net.minecraft.util.Identifier;
 public record SpeedOverdriveTrailPayload(
         double x, double y, double z,
         double velX, double velY, double velZ,
-        boolean showRing
+        long gameTime
 ) implements CustomPayload {
 
     public static final Id<SpeedOverdriveTrailPayload> ID =
@@ -21,12 +21,13 @@ public record SpeedOverdriveTrailPayload(
     public SpeedOverdriveTrailPayload(PacketByteBuf buf) {
         this(buf.readDouble(), buf.readDouble(), buf.readDouble(),
              buf.readDouble(), buf.readDouble(), buf.readDouble(),
-             buf.readBoolean());
+             buf.readLong());
     }
+
     public void write(PacketByteBuf buf) {
         buf.writeDouble(x); buf.writeDouble(y); buf.writeDouble(z);
         buf.writeDouble(velX); buf.writeDouble(velY); buf.writeDouble(velZ);
-        buf.writeBoolean(showRing);
+        buf.writeLong(gameTime);
     }
 
     @Override public Id<? extends CustomPayload> getId() { return ID; }

@@ -381,12 +381,20 @@ public class BloodPower implements Power {
             PlayerLookup.tracking(w, target.getBlockPos()).forEach(p ->
                     ServerPlayNetworking.send(p, new BloodPopPayload(tx, ty, tz)));
 
-            CameraShake.shakeNearby(attacker, 3.0, 10, 0.6f);
+            CameraShake.shakeNearby(attacker, 3.0, 10, 0.4f);
         }
     }
 
     public static boolean isBleeding(LivingEntity target) {
         return ACTIVE_BLEEDS.containsKey(target.getUuid());
+    }
+
+    public static boolean cleanseBleed(LivingEntity target) {
+        if (ACTIVE_BLEEDS.remove(target.getUuid()) != null) {
+            target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.BLEED));
+            return true;
+        }
+        return false;
     }
 
     /* ============================================================
@@ -518,7 +526,7 @@ public class BloodPower implements Power {
 
         try {
             if (reduced > 0.0f) victim.damage(source, reduced);
-            DamageSource bindSrc = ModDamageTypes.bind(target.getWorld(), victim);
+            DamageSource bindSrc = ModDamageTypes.bind(target.getWorld());
             if (shared > 0.0f) target.damage(bindSrc, shared);
 
             if (victim.getWorld() instanceof ServerWorld sw) {
@@ -609,10 +617,6 @@ public class BloodPower implements Power {
             }
 
             if ((b.ticksLeft % 2) == 0) {
-                // keep the bloodbound status effect server-side (controls HUD indicator)
-                target.addStatusEffect(new StatusEffectInstance(
-                        Registries.STATUS_EFFECT.getEntry(ModEffects.BLOODBOUND), 5, 0, true, false));
-
                 BloodBindTickPayload bindPayload = new BloodBindTickPayload(caster.getId(), target.getId(), strain);
                 Set<ServerPlayerEntity> bindViewers = new HashSet<>();
                 PlayerLookup.tracking(caster).forEach(bindViewers::add);

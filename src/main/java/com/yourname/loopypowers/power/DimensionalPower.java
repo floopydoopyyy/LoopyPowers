@@ -560,6 +560,8 @@ public class DimensionalPower implements Power {
         entity.addStatusEffect(new StatusEffectInstance(StatusEffects.INVISIBILITY, 5, 0, true, false, false));
         entity.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS,     5, 255, true, false, false));
         entity.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE,   5, 255, true, false, false));
+        entity.addStatusEffect(new StatusEffectInstance(
+                Registries.STATUS_EFFECT.getEntry(ModEffects.DISPLACED), 5, 0, true, false, false));
         if (entity instanceof MobEntity mob) mob.setAiDisabled(true);
 
         // displace fx → client
@@ -787,7 +789,7 @@ public class DimensionalPower implements Power {
        METADATA
        ============================================================ */
 
-    @Override public String getName() { return "power.loopypowers.interdimensional.name"; }
+    @Override public String getName() { return Text.translatable("power.loopypowers.interdimensional.name").getString(); }
 
     @Override public String getPassiveName()   { return Text.translatable("power.loopypowers.interdimensional.passive_name").getString(); }
     @Override public String getPrimaryName()   { return Text.translatable("power.loopypowers.interdimensional.primary_name").getString(); }

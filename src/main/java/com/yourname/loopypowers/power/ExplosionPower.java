@@ -1,6 +1,7 @@
 package com.yourname.loopypowers.power;
 
 import com.yourname.loopypowers.effect.ModEffects;
+import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
@@ -45,6 +46,7 @@ public class ExplosionPower implements Power {
        ============================================================ */
 
     private static final Map<UUID, ExplosionState> ACTIVE_STATES = new HashMap<>();
+    private boolean applyingReducedDamage = false;
 
     private static class ExplosionState {
         int ignitingTicks = 0;
@@ -75,9 +77,14 @@ public class ExplosionPower implements Power {
        TUNING
        ============================================================ */
 
-    private static final int IGNITE_FUSE_TICKS = 20 * 5;
+    // PASSIVE
+    private static final float FALL_DAMAGE_MULT = 0.7f;
+
+    // Primary: ignition
+    private static final int IGNITE_FUSE_TICKS = 80;
     private static final float IGNITE_POWER = 4.5f;
     private static final int IGNITE_SPEED_AMP = 1;
+    private static final int IGNITE_JUMP_AMP = 2; // Jump Boost Modifier
     private static final boolean IGNITE_BREAK_BLOCKS = true;
 
     private static final int BLAST_MAX_CHARGES = 2;
@@ -88,12 +95,12 @@ public class ExplosionPower implements Power {
     private static final double BLAST_SPAWN_DIST = 1.2;
     private static final double BLAST_SPAWN_DOWN = 0.10;
 
-    private static final double RECOIL_STRENGTH = 1.35;
-    private static final double RECOIL_UP_BONUS = 0.55;
-    private static final double RECOIL_MAX_Y = 1.10;
-    private static final double RECOIL_MAX_H = 1.85;
+    private static final double RECOIL_STRENGTH = 0.85;
+    private static final double RECOIL_UP_BONUS = 0.35;
+    private static final double RECOIL_MAX_Y = 2.20;
+    private static final double RECOIL_MAX_H = 2.0;
 
-    private static final int ULT_POPS_ACTUAL = 3;
+    public static final int ULT_POPS_ACTUAL = 3;
     private static final int ULT_WARN_TICKS = 8;
     private static final int ULT_FIZZLE_AIR_TICKS = 500;
     private static final double ULT_AIR_STEER = 0.18;
@@ -107,14 +114,14 @@ public class ExplosionPower implements Power {
     private static final int ULT_CHARGE_SLOWNESS_AMP = 4;
     private static final int ULT_CHARGE_REFRESH_TICKS = 10;
 
-    private static final float IGNITE_DAMAGE = 23.5f;
+    private static final float IGNITE_DAMAGE = 25.5f;
     private static final double IGNITE_DMG_RADIUS = 5.5;
-    private static final float BLAST_DAMAGE = 21.0f;
+    private static final float BLAST_DAMAGE = 21.5f;
     private static final double BLAST_DMG_RADIUS = 3.0;
-    private static final float ULT_POP_DAMAGE = 22.5f;
-    private static final double ULT_POP_DMG_RADIUS = 4.5;
-    private static final float ULT_FINAL_DAMAGE = 25.0f;
-    private static final double ULT_FINAL_DMG_RADIUS = 6.5;
+    private static final float ULT_POP_DAMAGE = 24.5f;
+    public static final double ULT_POP_DMG_RADIUS = 5.5;
+    private static final float ULT_FINAL_DAMAGE = 28.0f;
+    public static final double ULT_FINAL_DMG_RADIUS = 7.0;
     private static final int ULT_LAUNCH_DELAY_TICKS = 2;
     private static final double ULT_LAUNCH_KICK_Y = 0.12;
 
@@ -136,6 +143,7 @@ public class ExplosionPower implements Power {
         player.getCommandTags().removeIf(tag -> tag.startsWith("ex_"));
         ACTIVE_STATES.remove(player.getUuid());
         player.removeStatusEffect(StatusEffects.SPEED);
+        player.removeStatusEffect(StatusEffects.JUMP_BOOST);
         player.removeStatusEffect(StatusEffects.SLOWNESS);
         player.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.BRACED));
     }
@@ -161,7 +169,18 @@ public class ExplosionPower implements Power {
 
     @Override
     public boolean onDamaged(ServerPlayerEntity victim, DamageSource source, float amount) {
+        if (this.applyingReducedDamage) return true;
+
         ExplosionState state = getState(victim);
+
+        // reduce fall damage
+        if (source.isOf(net.minecraft.entity.damage.DamageTypes.FALL)) {
+            this.applyingReducedDamage = true;
+            victim.damage(source, amount * FALL_DAMAGE_MULT);
+            this.applyingReducedDamage = false;
+            return false;
+        }
+
         if (!victim.isOnGround() && state.ultActiveTicks > 0) {
             if (source.getAttacker() instanceof LivingEntity && amount >= 3.0f) {
                 if (victim.getWorld() instanceof ServerWorld sw) {
@@ -196,7 +215,8 @@ public class ExplosionPower implements Power {
         state.ignitingTicks--;
         ServerWorld w = player.getServerWorld();
 
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 10, IGNITE_SPEED_AMP, true, false));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,      10, IGNITE_SPEED_AMP, true, false));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.JUMP_BOOST, 10, IGNITE_JUMP_AMP,  true, false));
 
         float progress = MathHelper.clamp(1.0f - (state.ignitingTicks / (float) IGNITE_FUSE_TICKS), 0.0f, 1.0f);
         int interval = MathHelper.clamp((int) MathHelper.lerp(progress, 6.0f, 1.0f), 1, 6);
@@ -226,6 +246,7 @@ public class ExplosionPower implements Power {
         player.setVelocity(v.x, Math.max(v.y, 0.65), v.z);
         player.velocityModified = true;
         player.fallDistance = 0.0f;
+        player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
         CameraShake.shakeNearby(player, 9.0, 16, 1.4f);
     }
@@ -242,7 +263,7 @@ public class ExplosionPower implements Power {
 
         state.blastCharges--;
         state.blastLockTicks = BLAST_LOCK_TICKS;
-        if (state.blastRechargeTicks <= 0) state.blastRechargeTicks = BLAST_RECHARGE_TICKS;
+        if (state.blastRechargeTicks <= 0) state.blastRechargeTicks = PowerManager.getModifiedCooldownTicks(player, BLAST_RECHARGE_TICKS);
 
         ServerWorld w = player.getServerWorld();
 
@@ -267,55 +288,78 @@ public class ExplosionPower implements Power {
     }
 
     private static void tickBlastRecharge(ServerPlayerEntity player, ExplosionState state) {
+        if (PowerManager.areCooldownsDisabled()) {
+            state.blastCharges = BLAST_MAX_CHARGES;
+            state.blastRechargeTicks = 0;
+            return;
+        }
         if (state.blastCharges >= BLAST_MAX_CHARGES) { state.blastRechargeTicks = 0; return; }
-        if (state.blastRechargeTicks <= 0) state.blastRechargeTicks = BLAST_RECHARGE_TICKS;
+
+        int maxTicks = PowerManager.getModifiedCooldownTicks(player, BLAST_RECHARGE_TICKS);
+        if (state.blastRechargeTicks <= 0) state.blastRechargeTicks = maxTicks;
         state.blastRechargeTicks--;
-        if (state.blastRechargeTicks == 0) {
+        if (state.blastRechargeTicks <= 0) {
             state.blastCharges++;
-            if (state.blastCharges < BLAST_MAX_CHARGES) state.blastRechargeTicks = BLAST_RECHARGE_TICKS;
+            if (state.blastCharges < BLAST_MAX_CHARGES) state.blastRechargeTicks = maxTicks;
         }
     }
 
     private static void applyRecoil(ServerPlayerEntity player, Vec3d explosionOrigin) {
-        Vec3d toPlayer = player.getPos().add(0, 0.9, 0).subtract(explosionOrigin);
-        Vec3d horiz = new Vec3d(toPlayer.x, 0.0, toPlayer.z);
-        if (horiz.lengthSquared() < 1.0e-6) horiz = new Vec3d(0, 0, 1);
-        horiz = horiz.normalize();
-
-        double pushH = RECOIL_STRENGTH;
-        double pushY = RECOIL_UP_BONUS;
-
         Vec3d look = player.getRotationVec(1.0f);
-        if (look.y < -0.35) pushY += 0.20;
-        if (look.y > 0.35)  pushH += 0.10;
+
+        // Push in the opposite direction of where the player is looking
+        Vec3d recoilDir = look.multiply(-1.0);
+
+        // Decoupled horizontal scaling for snappier horizontal mobility
+        double pushX = recoilDir.x * RECOIL_STRENGTH * 2.0;
+        double pushZ = recoilDir.z * RECOIL_STRENGTH * 2.0;
+
+        // Stronger vertical scaling based directly on looking up/down
+        double pushY = recoilDir.y * RECOIL_STRENGTH * 1.3;
+
+        // Base upward boost so sideways blasts still grant a small hop
+        pushY += RECOIL_UP_BONUS;
 
         Vec3d v = player.getVelocity();
-        double nx = v.x + horiz.x * pushH;
-        double nz = v.z + horiz.z * pushH;
-        double ny = Math.max(v.y, 0.0) + pushY;
+        double nx = v.x + pushX;
+        double nz = v.z + pushZ;
 
+        double ny;
+        if (recoilDir.y < -0.1) {
+            // Player is looking up — blast pushes them down
+            ny = v.y + pushY;
+        } else {
+            // Player is looking down/straight — pop them upwards
+            ny = Math.max(v.y, 0.0) + pushY;
+        }
+
+        // Cap horizontal speed to maintain control
         Vec3d hv = new Vec3d(nx, 0.0, nz);
         double hLen = hv.length();
         if (hLen > RECOIL_MAX_H) {
             Vec3d hN = hv.normalize().multiply(RECOIL_MAX_H);
             nx = hN.x; nz = hN.z;
         }
-        ny = Math.min(ny, RECOIL_MAX_Y);
+
+        // Cap max upward speed, let downward slam freely
+        if (ny > RECOIL_MAX_Y) ny = RECOIL_MAX_Y;
 
         player.setVelocity(nx, ny, nz);
         player.velocityModified = true;
         player.fallDistance = 0.0f;
+        player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
     }
 
     private static void updateBlastCooldownUI(ServerPlayerEntity player, ExplosionState state) {
         String key = "ExplosionUI:SECONDARY";
-        if (state.blastCharges >= BLAST_MAX_CHARGES) {
+        if (state.blastCharges >= BLAST_MAX_CHARGES || PowerManager.areCooldownsDisabled()) {
             com.yourname.loopypowers.CooldownUI.clearCooldown(player, key);
             return;
         }
+        int maxTicks = PowerManager.getModifiedCooldownTicks(player, BLAST_RECHARGE_TICKS);
         long endMs = System.currentTimeMillis() + (state.blastRechargeTicks * 50L);
         String suffix = makeChargeSuffix(
-                state.blastCharges, BLAST_MAX_CHARGES, state.blastRechargeTicks, BLAST_RECHARGE_TICKS
+                state.blastCharges, BLAST_MAX_CHARGES, state.blastRechargeTicks, Math.max(1, maxTicks)
         ).getString();
         setCooldownEnd(player, key, endMs, suffix);
     }
@@ -366,6 +410,14 @@ public class ExplosionPower implements Power {
             boolean showLava = w.getTime() % 2 == 0;
             sendToViewers(w, player, new ExplosionFinisherChargePayload(
                     player.getX(), player.getY(), player.getZ(), state.ultWarnTicks, showLava));
+
+            // Server-side charge lock: slow, cancel sprint, drain horizontal velocity
+            player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, ULT_CHARGE_REFRESH_TICKS, ULT_CHARGE_SLOWNESS_AMP, true, false));
+            player.setSprinting(false);
+            Vec3d chargeV = player.getVelocity();
+            player.setVelocity(chargeV.x * 0.2, chargeV.y, chargeV.z * 0.2);
+            player.velocityModified = true;
+            player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player));
 
             if (state.ultWarnTicks == 0) {
                 state.ultWarnTicks = -1;
@@ -483,7 +535,7 @@ public class ExplosionPower implements Power {
             float pitch = 1.05f + 0.12f * popIndex;
             w.playSound(null, player.getX(), player.getY(), player.getZ(),
                     Registries.SOUND_EVENT.getEntry(ModSounds.EXPLODEBIG),
-                    player.getSoundCategory(), 0.75f, pitch);
+                    player.getSoundCategory(), 0.65f, pitch);
             CameraShake.shakeNearby(player, 9.0, 8, 0.9f);
         }
     }
@@ -590,6 +642,7 @@ public class ExplosionPower implements Power {
                 Vec3d dir = horiz.normalize();
                 e.addVelocity(dir.x * (0.25*t) * knockMul, 0.08*t*knockMul, dir.z * (0.25*t) * knockMul);
                 e.velocityModified = true;
+                if (e instanceof ServerPlayerEntity sp) sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp));
             }
         }
     }

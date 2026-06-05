@@ -142,6 +142,7 @@ public class AbilityPackets {
         PayloadTypeRegistry.playS2C().register(BloodBindDamageFxPayload.ID, BloodBindDamageFxPayload.CODEC);
 
         // CosmicPower fx
+        PayloadTypeRegistry.playS2C().register(BlackHoleParticlePayload.ID, BlackHoleParticlePayload.CODEC);
         PayloadTypeRegistry.playS2C().register(CosmicFateAuraPayload.ID, CosmicFateAuraPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(CosmicDetonateStartPayload.ID, CosmicDetonateStartPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(CosmicDetonateTickPayload.ID, CosmicDetonateTickPayload.CODEC);
@@ -193,7 +194,7 @@ public class AbilityPackets {
         PayloadTypeRegistry.playS2C().register(FlightUpdraftPayload.ID,     FlightUpdraftPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(FlightBoomStartPayload.ID,   FlightBoomStartPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(FlightBoomWindupPayload.ID,  FlightBoomWindupPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(FlightBoomTunnelPayload.ID,  FlightBoomTunnelPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(FlightBoomDashPayload.ID,    FlightBoomDashPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(FlightBoomImpactPayload.ID,  FlightBoomImpactPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(FlightTrailPayload.ID,       FlightTrailPayload.CODEC);
 
@@ -226,6 +227,7 @@ public class AbilityPackets {
         PayloadTypeRegistry.playS2C().register(TeleportFrenzyStrikePayload.ID, TeleportFrenzyStrikePayload.CODEC);
 
         // TelekinesisPower fx
+        PayloadTypeRegistry.playS2C().register(TKYankFallPayload.ID,          TKYankFallPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TKBeamPayload.ID,              TKBeamPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TKPassiveHitPayload.ID,        TKPassiveHitPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(TKYankTargetPayload.ID,        TKYankTargetPayload.CODEC);
@@ -257,13 +259,12 @@ public class AbilityPackets {
 
         // SpeedPower fx
         PayloadTypeRegistry.playS2C().register(SpeedLowHealthBurstPayload.ID,  SpeedLowHealthBurstPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SpeedRushTrailPayload.ID,       SpeedRushTrailPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SpeedDashPayload.ID,            SpeedDashPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SpeedRushCastPayload.ID,        SpeedRushCastPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedDashCastPayload.ID,        SpeedDashCastPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedDashTrailPayload.ID,       SpeedDashTrailPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedPinballAnchorPayload.ID,   SpeedPinballAnchorPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(SpeedOverdriveCastPayload.ID,   SpeedOverdriveCastPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(SpeedOverdriveTrailPayload.ID,  SpeedOverdriveTrailPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SpeedOverdriveHitPayload.ID,    SpeedOverdriveHitPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SpeedBlockImpactPayload.ID,     SpeedBlockImpactPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(SpeedExplosionFxPayload.ID,     SpeedExplosionFxPayload.CODEC);
 
         // SoundPower fx
         PayloadTypeRegistry.playS2C().register(SoundResonanceBurstPayload.ID,  SoundResonanceBurstPayload.CODEC);
@@ -287,6 +288,7 @@ public class AbilityPackets {
         PayloadTypeRegistry.playS2C().register(PsychicControlAuraPayload.ID,  PsychicControlAuraPayload.CODEC);
 
         // NaturePower fx
+        PayloadTypeRegistry.playS2C().register(NatureCageFxPayload.ID,       NatureCageFxPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(NatureGasTickPayload.ID,      NatureGasTickPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(NatureVineCastPayload.ID,     NatureVineCastPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(NatureVineBindPayload.ID,     NatureVineBindPayload.CODEC);
@@ -316,7 +318,6 @@ public class AbilityPackets {
         PayloadTypeRegistry.playS2C().register(HealingBurstPayload.ID,       HealingBurstPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(HealingExpelledPayload.ID,    HealingExpelledPayload.CODEC);
         PayloadTypeRegistry.playS2C().register(HealingUltTickPayload.ID,     HealingUltTickPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(HealingUltPhasePayload.ID,    HealingUltPhasePayload.CODEC);
 
         // FortunePower fx
         PayloadTypeRegistry.playS2C().register(FortuneProcEnemyPayload.ID,    FortuneProcEnemyPayload.CODEC);

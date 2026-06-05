@@ -124,20 +124,7 @@ public final class HealingFxClient {
         ctx.client().execute(() -> {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
-            double x = p.x(), y = p.y(), z = p.z();
-            scatter(world, ParticleTypes.FIREWORK, x, y, z, 2, 0.4, 0.6, 0.4, 0.01);
-            scatter(world, HEAL_DUST,              x, y, z, 3, 0.5, 0.6, 0.5, 0.02);
-            if (p.endRod()) {
-                scatter(world, ParticleTypes.END_ROD, x, y, z, 8, 0.6, 0.8, 0.6, 0.05);
-            }
-        });
-    }
-
-    public static void handleUltPhase(HealingUltPhasePayload p, ClientPlayNetworking.Context ctx) {
-        ctx.client().execute(() -> {
-            ClientWorld world = ctx.client().world;
-            if (world == null) return;
-            scatter(world, ParticleTypes.FLASH, p.x(), p.y(), p.z(), 10, 0.5, 0.6, 0.5, 0.1);
+            HealingUltFxClient.onUltTick(world, p.x(), p.y(), p.z(), p.phase(), p.ultTicks(), p.isPhaseChange());
         });
     }
 

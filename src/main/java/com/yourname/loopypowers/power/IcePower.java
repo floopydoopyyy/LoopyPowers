@@ -164,7 +164,7 @@ public class IcePower implements Power {
     private static final float SHATTER_BONUS_DAMAGE = 12.0f; // damage on shatter
 
     // How many points abilities add
-    private static final int FRZ_POINTS_MELEE = 7;  // melee hits
+    private static final int FRZ_POINTS_MELEE = 10;  // melee hits
 
     private static final Map<RegistryKey<World>, Long> FROZEN_LAST_TICK = new HashMap<>();
 
@@ -1489,6 +1489,15 @@ public class IcePower implements Power {
                 RaycastContext.FluidHandling.NONE,
                 player
         ));
+    }
+
+    public static boolean cleanseFreeze(LivingEntity target) {
+        IceVictimState state = VICTIM_STATES.get(target.getUuid());
+        if (state != null && state.freezePoints > 0) {
+            clearFreeze(target);
+            return true;
+        }
+        return false;
     }
 
     private static double distSqPointToSegment(Vec3d p, Vec3d a, Vec3d b) {

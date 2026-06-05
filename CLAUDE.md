@@ -1,185 +1,189 @@
-# Loopypowers Fabric — Particle Payload Migration
+# Loopypowers — Fabric to NeoForge Parity
 
-## Project info
-Fabric mod, Minecraft 1.21.1. Main package: `com.yourname.loopypowers`
-Mod ID: `loopypowers`
+## Overview
+Both the Fabric and NeoForge versions are fully functional. This is not a
+bug-fix task — it is a feature/content parity task. The NeoForge version has
+received additions and improvements that the Fabric version does not yet have.
+The goal is to bring the Fabric version up to the same state as NeoForge.
 
-## The task
-Every significant particle spawning call in the `power/` and `ritual/` packages
-currently runs server-side. This crashes on dedicated servers because particle
-calls require a client world. The fix is to send a network payload to the client
-and spawn the particles there instead.
+Do not assume something is broken in the Fabric version. Read both versions
+and identify what NeoForge has that Fabric does not, then add it.
 
-## Package structure
-```
-src/main/java/com/yourname/loopypowers/
-  power/          ← power classes, each has particle calls to migrate
-  ritual/         ← ritual classes, same problem
-  network/        ← payloads go here
-    payload/      ← one payload record per logical particle event
-  client/
-    fx/           ← one *FxClient.java handler per power/ritual
-```
+## Project locations
+**Fabric (target):** Current working directory
+**NeoForge (reference):** `C:\Users\olive\Documents\things\MDK-1.21.1-NeoGradle-main\src\main\java\com\loopy\loopypowers`
+NeoForge resources: `C:\Users\olive\Documents\things\MDK-1.21.1-NeoGradle-main\src\main\resources`
 
-## What counts as a "significant" particle event
-Migrate these:
-- Any `world.spawnParticles(...)` or `serverWorld.spawnParticles(...)` call
-- Any `world.addParticle(...)` called from server-side code
-- Particle bursts, trails, auras, rings, or impact effects
+Read the NeoForge version as the source of truth for what the Fabric version
+should look like when this task is complete.
 
-Do NOT migrate:
-- `world.playSound(...)` — sounds are fine server-side
-- Block place/break particles — vanilla handles these
-- Single-particle debug calls
+---
 
-## Step-by-step process for each power/ritual
+# SECTION A — Known Parity Gaps (fix these first)
 
-### 1. Read the source file
-Identify every particle call. Group calls that always fire together into a
-single payload (e.g. a burst that spawns 3 different particle types at once
-is one payload, not three).
+These are confirmed differences that were missed during the initial parity
+pass. Fix each one, then do a broader check of the surrounding power/class
+to catch anything else that was missed at the same time.
 
-### 2. Create a payload record
-Location: `src/main/java/com/yourname/loopypowers/network/payload/`
-Naming: `{Power}FxPayload.java` for simple powers, or named by event e.g.
-`SpeedDashCastPayload.java` if a power has many distinct events.
+## A1. HealingPower — missing phase-specific ultimate particle FX
+The Fabric version is missing phase-specific particle effects for the healing
+ultimate. The NeoForge version has distinct particles per phase.
 
-Template:
-```java
-package com.yourname.loopypowers.network.payload;
+**What to do:**
+1. Read the NeoForge `HealingPower.java` and its client handler
+   (`HealingUltPayload`, `HealingFxClient` or equivalent)
+2. Identify each phase and its corresponding particle events
+3. Check what the Fabric version currently sends/renders for the ult
+4. Add the missing phase-specific payload sends to the Fabric power class
+5. Update the Fabric client handler to render the correct particles per phase
+6. While in this file, do a full re-check of HealingPower for any other
+   missed differences and fix those too
 
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+- [x] HealingPower phase-specific ult particles fixed
+- [x] HealingPower full re-check complete
 
-public record ExamplePayload(double x, double y, double z) implements CustomPayload {
+---
 
-    public static final Id<ExamplePayload> ID =
-            new Id<>(Identifier.of("loopypowers", "example"));
+## A2. FlightPower — most particle FX incorrect
+The Fabric version has most flight particle effects implemented incorrectly
+compared to the NeoForge version.
 
-    public static final PacketCodec<PacketByteBuf, ExamplePayload> CODEC =
-            PacketCodec.of(ExamplePayload::write, ExamplePayload::new);
+**What to do:**
+1. Read the NeoForge `FlightPower.java` and ALL its client handler files
+   (FlightBoomDashPayload, FlightBoomImpactPayload, FlightBoomWindupPayload,
+   and any other flight-related payloads and their handlers)
+2. Read every Fabric flight particle payload and client handler
+3. Do a thorough comparison — positions, particle types, counts, spreads,
+   velocities, timing, conditions that trigger each effect
+4. Fix every discrepancy found — do not just fix the obvious ones
+5. While in this file, do a full re-check of FlightPower for any other
+   missed differences and fix those too
 
-    public ExamplePayload(PacketByteBuf buf) {
-        this(buf.readDouble(), buf.readDouble(), buf.readDouble());
-    }
+- [x] FlightPower particle FX corrected
+- [x] FlightPower full re-check complete
 
-    public void write(PacketByteBuf buf) {
-        buf.writeDouble(x);
-        buf.writeDouble(y);
-        buf.writeDouble(z);
-    }
+---
 
-    @Override
-    public Id<? extends CustomPayload> getId() { return ID; }
-}
-```
+## A3. NaturePower — poison gas is boxy instead of rounded
+The poison gas effect in the Fabric version spawns particles in a box/cube
+shape. The NeoForge version uses a rounded/cylindrical/spherical distribution.
 
-Pass exactly the data the client needs to reproduce the particles — position,
-entity ID (client looks up position), velocity direction, intensity, seed, etc.
-Do not pass server-only objects.
+**What to do:**
+1. Read the NeoForge `NatureGasFxPayload` and its client handler to see
+   exactly how it distributes particles (likely uses radius + angle math
+   rather than flat dx/dy/dz spread)
+2. Read the Fabric equivalent client handler
+3. Update the Fabric client handler to use the same distribution math as
+   NeoForge — matching radius, height, density, and particle type exactly
+4. While in this file, do a full re-check of NaturePower for any other
+   missed differences and fix those too
 
-### 3. Register the payload (server side)
-In `AbilityPackets.java` (or equivalent network registration class), add:
-```java
-PayloadTypeRegistry.playS2C().register(ExamplePayload.ID, ExamplePayload.CODEC);
-```
-This must be called from the common initializer (`onInitialize`), not client-only code.
+- [x] NaturePower poison gas rounded correctly
+- [x] NaturePower full re-check complete
 
-### 4. Send the payload from the power/ritual class
-Replace the particle call(s) with a network send. For nearby players:
-```java
-// Replace this:
-world.spawnParticles(ParticleTypes.FLAME, x, y, z, 20, 0.3, 0.3, 0.3, 0.05);
+---
 
-// With this (send to all players who can see the area):
-PlayerLookup.tracking(serverWorld, new BlockPos((int)x, (int)y, (int)z)).forEach(p ->
-    ServerPlayNetworking.send(p, new ExamplePayload(x, y, z))
-);
+## A4. SoundPower — multiple areas different, especially secondary
+SoundPower has significant differences between versions, particularly the
+secondary ability. Treat this as a near-full re-port of the class.
 
-// Or for a single target player:
-ServerPlayNetworking.send(targetPlayer, new ExamplePayload(x, y, z));
-```
+**What to do:**
+1. Read both versions of `SoundPower.java` in full side by side
+2. List every difference found — abilities, logic, values, effects, payloads
+3. Pay particular attention to the secondary ability — compare every line
+4. Check ALL sound-related payloads and client handlers in NeoForge vs Fabric:
+   SoundBassBurstPayload, SoundBassPullPayload, SoundBassPullAnimatePayload,
+   SoundBassBlastAnimatePayload, SoundBassPulsePayload, SoundUltimateBeamPayload
+   and their corresponding client handlers
+5. Fix every difference found — do not skip anything marked as minor
+6. Confirm the secondary ability behaviour matches NeoForge exactly
 
-### 5. Create the client handler
-Location: `src/main/java/com/yourname/loopypowers/client/fx/`
-Naming: `{Power}FxClient.java`
-Annotate with `@Environment(EnvType.CLIENT)` — strips it from the server jar.
+- [x] SoundPower secondary ability corrected
+- [x] SoundPower all other differences fixed
+- [x] SoundPower payload/client handler audit complete
 
-Template:
-```java
-package com.yourname.loopypowers.client.fx;
+---
 
-import com.yourname.loopypowers.network.payload.ExamplePayload;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.particle.ParticleTypes;
+## A5. StrengthPower — ultimate sound ticks not working
+The Fabric version's ultimate sound tick logic is not functioning correctly.
+The NeoForge version ticks sounds during the ultimate correctly.
 
-@Environment(EnvType.CLIENT)
-public final class ExampleFxClient {
+**What to do:**
+1. Read the NeoForge `StrengthPower.java` and identify how ultimate sound
+   ticks are triggered (look for recurring sound sends during the ult duration)
+2. Read the Fabric version and identify where the equivalent code is and
+   why it is not working — wrong tick condition, missing payload, handler
+   not registered, etc.
+3. Fix the root cause — match the NeoForge approach exactly
+4. While in this file, do a full re-check of StrengthPower for any other
+   missed differences and fix those too
 
-    private ExampleFxClient() {}
+- [x] StrengthPower ult sound ticks fixed
+- [x] StrengthPower full re-check complete
 
-    public static void handle(ExamplePayload payload, ClientPlayNetworking.Context ctx) {
-        ctx.client().execute(() -> {
-            ClientWorld world = ctx.client().world;
-            if (world == null) return;
-            world.addParticle(ParticleTypes.FLAME,
-                    payload.x(), payload.y(), payload.z(),
-                    0.0, 0.0, 0.0);
-        });
-    }
-}
-```
+# SECTION B — Lang Entries
+**Goal:** Fabric has missing areas/language entries where NeoForge uses
+translatable text.
 
-### 6. Register the client handler
-In `LoopypowersClient.java` (the `ClientModInitializer`):
-```java
-ClientPlayNetworking.registerGlobalReceiver(ExamplePayload.ID, ExampleFxClient::handle);
-```
+### Where they live
+NeoForge: References across all areas including power classes, items, rituals, commands etc.
+Fabric: References across all areas including power classes, items, rituals, commands etc.
+Lang file across both: `resources/assets/loopypowers/lang/en_us.json`
 
-## Important: spawnParticles vs addParticle
-Server-side `ServerWorld.spawnParticles(type, x, y, z, count, dx, dy, dz, speed)`
-spawns `count` particles with random spread. Client-side `ClientWorld.addParticle`
-only spawns one at a time — reproduce the same spread by calling it in a loop
-with random offsets matching the original dx/dy/dz values. Use the same Random
-seed if the original used one for deterministic effects.
+The lang file can and should be identical across both versions.
 
-## Fabric-specific notes
-- `@Environment(EnvType.CLIENT)` on a class = completely absent from server jar.
-- `PlayerLookup` is from `net.fabricmc.fabric.api.lookup.v1.entity` — use it
-  to find players tracking a position rather than iterating all players.
-- `ctx.client().execute(() -> { ... })` ensures particle code runs on the render thread.
-- Unlike NeoForge, Fabric does NOT require channels declared on both sides —
-  `PayloadTypeRegistry.playS2C().register()` on the server and
-  `ClientPlayNetworking.registerGlobalReceiver()` on the client is all you need.
-- No `PayloadInit`, no `ClientPayloadRegistry` — Fabric is much simpler here.
+### What to do
+1. Transfer the more modern NeoForge lang file to replace the older Fabric version
+2. Open the lang file
+3. Check each entry against the corresponding class/file and ensure the
+   reference is used and correct
+4. If some entries are missing from their class, implement them
 
-## Workflow: one power at a time
-Do powers in order. After each one compiles and the particles work in-game,
-mark it complete and move to the next. Do not batch multiple powers in one pass
-— particle-heavy classes are large and context gets unwieldy.
+### LANG checklist
+- [x] All power text is correctly in place
+- [x] All item text is correctly in place
+- [x] All effect text is correctly in place
+- [x] All entity related text is correctly in place
+- [x] All subtitle text is correctly in place
+- [x] All death messages are correctly in place
+- [x] All remaining text is correctly in place
 
-## Completed
-- [x] BloodPower
-- [x] CosmicPower
-- [x] DarknessPower
-- [x] DimensionalPower
-- [x] ExplosionPower
-- [x] FirePower
-- [x] FlightPower
-- [x] FortunePower
-- [x] HealingPower
-- [x] IcePower
-- [x] LightningPower
-- [x] NaturePower
-- [x] PsychicPower
-- [x] SoundPower
-- [x] SpeedPower
-- [x] StrengthPower
-- [x] TelekinesisPower
-- [x] TeleportPower
-- [x] Rituals (ElementalRitual, LifeRitual, MindRitual, MotionRitual, PerfectedUpgradeRitual, PowerRitual, PowerUpgradeRitual, RuinRitual, SeveranceRitual, SpaceRitual)
+# SECTION C — Final checks
+**Goal:** Fabric had some missing areas on the first sweep, check each class with major changes to see if all areas have complete parity.
+
+### Where they live
+Both files have powers in the 'power' package.
+
+After fixing the five known issues above, do a sweep of the remaining power
+classes that were already marked complete to catch anything else that was
+missed. For each power, quickly re-read both versions and flag any remaining
+differences before closing out this section.
+
+Powers to re-check:
+- [x] FortunePower re-check
+- [x] CosmicPower re-check
+- [x] DarknessPower re-check
+- [x] IcePower re-check
+- [x] FirePower re-check
+- [x] ExplosionPower re-check
+- [x] LightningPower re-check
+- [x] PsychicPower re-check
+- [x] SpeedPower re-check
+- [x] TelekinesisPower re-check
+- [x] TeleportationPower re-check
+
+---
+
+# General workflow rules
+
+- **One item at a time.** Do not batch multiple classes or files in a single pass.
+- **List differences before editing.** For every file, read both versions fully,
+  state every difference found, and confirm before making any changes.
+- **Both versions work.** Do not assume something is broken. If the Fabric
+  version does something differently but achieves the same result, flag it
+  rather than blindly overwriting it.
+- **Mark checklist items done** as each is completed so progress is tracked
+  across sessions. Remove any spare notes next to a checklist entry once
+  that area is completed.
+- **When an entire section is complete, remove it from CLAUDE.md** for
+  clarity and to save context space.

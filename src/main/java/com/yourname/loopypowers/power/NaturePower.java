@@ -280,14 +280,11 @@ public class NaturePower implements Power {
             float halfH = h * 0.5f;
 
             int count = MathHelper.lerp(t, GAS_PARTICLES_MIN, GAS_PARTICLES_MAX);
-            boolean showBoundary = ((now + g.seed) & 1L) == 0L;
-            int boundaryCount = Math.max(20, count / 3);
-            boolean showOccasional = ((now + g.seed) % 10L) == 0L;
 
             NatureGasTickPayload payload = new NatureGasTickPayload(
                     center.x, center.y, center.z,
                     r, halfH,
-                    count, showBoundary, boundaryCount, showOccasional
+                    count, g.seed
             );
             BlockPos centerPos = BlockPos.ofFloored(center);
             PlayerLookup.tracking(w, centerPos).forEach(sp -> ServerPlayNetworking.send(sp, payload));
@@ -349,6 +346,7 @@ public class NaturePower implements Power {
        ============================================================ */
 
     private static final int CAGE_LIFETIME_TICKS = 240; // time up
+    private static final int CAGE_BUILD_INTERVAL_TICKS = 2; // build 1 layer every 2 ticks
 
     private static final int CAGE_RADIUS = 12;
     private static final int CAGE_POINTS = 68; // ring density
@@ -358,10 +356,16 @@ public class NaturePower implements Power {
     private static final class CageState {
         int ticksLeft = CAGE_LIFETIME_TICKS;
         RegistryKey<World> worldKey;
+        final List<BlockPos> bases;
         final List<BlockPos> placed = new ArrayList<>();
 
-        CageState(RegistryKey<World> worldKey) {
+        int buildLayer = 0;
+        int buildWait = 0;
+        boolean built = false;
+
+        CageState(RegistryKey<World> worldKey, List<BlockPos> bases) {
             this.worldKey = worldKey;
+            this.bases = bases;
         }
     }
 
@@ -374,40 +378,29 @@ public class NaturePower implements Power {
 
         removeCageNow(player, state);
 
-        state.cage = new CageState(w.getRegistryKey());
-
         int cx = player.getBlockPos().getX();
         int cz = player.getBlockPos().getZ();
         int aroundY = player.getBlockPos().getY();
 
-        // build a ring on the ground
+        // Calculate all ground bases (do not place blocks yet)
+        List<BlockPos> bases = new ArrayList<>();
         for (int i = 0; i < CAGE_POINTS; i++) {
             double a = (Math.PI * 2.0) * (i / (double) CAGE_POINTS);
-
             for (int t = 0; t < CAGE_THICKNESS; t++) {
                 int rNow = Math.max(1, CAGE_RADIUS - t);
-
                 int x = cx + (int) Math.round(Math.cos(a) * rNow);
                 int z = cz + (int) Math.round(Math.sin(a) * rNow);
-
-                // find ground
                 int baseAirY = findLocalFloorAirY(w, x, z, aroundY);
-
-                // Build column
-                for (int y = 0; y < CAGE_HEIGHT; y++) {
-                    BlockPos pos = new BlockPos(x, baseAirY + y, z);
-
-                    // only replace air
-                    BlockState existing = w.getBlockState(pos);
-                    if (!existing.getFluidState().isEmpty()) continue;
-                    if (!existing.getCollisionShape(w, pos).isEmpty() && !existing.isAir()) continue;
-
-                    BlockState vine = ModBlocks.THORN_VINE.getDefaultState();
-                    w.setBlockState(pos, vine);
-                    state.cage.placed.add(pos);
-                }
+                bases.add(new BlockPos(x, baseAirY, z));
             }
         }
+
+        state.cage = new CageState(w.getRegistryKey(), bases);
+
+        NatureCageFxPayload cageFx = new NatureCageFxPayload(cx, aroundY, cz, CAGE_RADIUS, CAGE_THICKNESS);
+        BlockPos playerPos = player.getBlockPos();
+        PlayerLookup.tracking(w, playerPos).forEach(sp -> ServerPlayNetworking.send(sp, cageFx));
+
         player.swingHand(Hand.MAIN_HAND, true);
     }
 
@@ -440,6 +433,36 @@ public class NaturePower implements Power {
     private static void tickCage(ServerPlayerEntity player, NatureState state) {
         if (state.cage == null) return;
 
+        ServerWorld w = Objects.requireNonNull(player.getServer()).getWorld(state.cage.worldKey);
+        if (w == null) return;
+
+        if (!state.cage.built) {
+            state.cage.buildWait--;
+            if (state.cage.buildWait <= 0) {
+                int yOffset = state.cage.buildLayer;
+                BlockState vine = ModBlocks.THORN_VINE.getDefaultState();
+
+                for (BlockPos base : state.cage.bases) {
+                    BlockPos pos = base.up(yOffset);
+
+                    BlockState existing = w.getBlockState(pos);
+                    if (!existing.getFluidState().isEmpty()) continue;
+                    if (!existing.getCollisionShape(w, pos).isEmpty() && !existing.isAir()) continue;
+
+                    w.setBlockState(pos, vine, 2);
+                    state.cage.placed.add(pos);
+                }
+
+                state.cage.buildLayer++;
+                state.cage.buildWait = CAGE_BUILD_INTERVAL_TICKS;
+
+                if (state.cage.buildLayer >= CAGE_HEIGHT) {
+                    state.cage.built = true;
+                }
+            }
+            return; // Pause lifetime decay while building
+        }
+
         state.cage.ticksLeft--;
         if (state.cage.ticksLeft > 0) return;
 
@@ -451,11 +474,14 @@ public class NaturePower implements Power {
 
         ServerWorld w = Objects.requireNonNull(player.getServer()).getWorld(state.cage.worldKey);
         if (w != null) {
-            for (BlockPos pos : state.cage.placed) {
+            for (int i = state.cage.placed.size() - 1; i >= 0; i--) {
+                BlockPos pos = state.cage.placed.get(i);
                 if (w.getBlockState(pos).isOf(ModBlocks.THORN_VINE)) {
-                    w.breakBlock(pos, false);
+                    w.setBlockState(pos, Blocks.AIR.getDefaultState(), 2);
                 }
             }
+            // Play a single unified crumbling sound instead of per-block sounds
+            w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_CROP_BREAK, SoundCategory.BLOCKS, 1.0f, 0.7f);
         }
         state.cage = null;
     }
@@ -684,11 +710,10 @@ public class NaturePower implements Power {
             if (((now + b.seed) % 3L) == 0L) {
                 Vec3d from = b.anchor.add(0, 0.2, 0);
                 Vec3d to   = le.getPos().add(0, le.getHeight() * 0.55, 0);
-                boolean anchorPuff = (now & 3L) == 0L;
                 NatureVineTetherPayload tetherPayload = new NatureVineTetherPayload(
                         from.x, from.y, from.z,
                         to.x, to.y, to.z,
-                        b.seed, anchorPuff
+                        b.seed
                 );
                 BlockPos midPos = BlockPos.ofFloored((from.x + to.x) * 0.5, (from.y + to.y) * 0.5, (from.z + to.z) * 0.5);
                 PlayerLookup.tracking(w, midPos).forEach(sp -> ServerPlayNetworking.send(sp, tetherPayload));

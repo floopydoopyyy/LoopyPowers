@@ -61,8 +61,8 @@ public class FirePower implements Power {
        CONSTANTS - PRIMARY
        ============================================================ */
     private static final float PRIMARY_SPEED = 2.6f;
-    private static final float PRIMARY_DIRECT_DAMAGE = 11.5f;
-    private static final int PRIMARY_EXPLOSION_POWER = 2;
+    private static final float PRIMARY_DIRECT_DAMAGE = 9.5f;
+    private static final int PRIMARY_EXPLOSION_POWER = 3;
     private static final float PRIMARY_EXPLOSION_DAMAGE = 8.8f;
     private static final double PRIMARY_SPAWN_OFFSET = 0.6;
 

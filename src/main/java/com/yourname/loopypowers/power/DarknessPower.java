@@ -152,7 +152,7 @@ public class DarknessPower implements Power {
        PASSIVE
        ============================================================ */
 
-    private static final float BACKSTAB_BONUS_MULT = 1.30f;
+    private static final float BACKSTAB_BONUS_MULT = 1.40f;
 
     private static boolean isBehindTarget(LivingEntity attacker, LivingEntity victim) {
         if (attacker instanceof ServerPlayerEntity player) {
@@ -204,9 +204,6 @@ public class DarknessPower implements Power {
         ServerWorld w = player.getServerWorld();
 
         RenderPackets.hidePlayerFromOthers(player, MIST_DURATION);
-
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,      MIST_DURATION, 1, false, false, true));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.JUMP_BOOST, MIST_DURATION, 0, false, false, true));
 
         w.playSound(null, player.getBlockPos(), ModSounds.MISTENTER, player.getSoundCategory(), 1.0f, 1.0f);
 
@@ -264,7 +261,8 @@ public class DarknessPower implements Power {
         }
         player.stopUsingItem();
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS,    20, 5, true, false));
-        player.addStatusEffect(new StatusEffectInstance(StatusEffects.INVISIBILITY, 20, 0, true, false));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.INVISIBILITY, 50, 0, true, true));
+        player.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED,        50, 2, true, true));
     }
 
     /* ============================================================

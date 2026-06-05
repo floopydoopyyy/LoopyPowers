@@ -5,6 +5,7 @@ import com.yourname.loopypowers.damage.ModDamageTypes;
 import com.yourname.loopypowers.effect.ModEffects;
 import com.yourname.loopypowers.generation.ModOreGeneration;
 import com.yourname.loopypowers.item.ModItems;
+import com.yourname.loopypowers.manager.PassiveManager;
 import com.yourname.loopypowers.manager.PlayerDataStore;
 import com.yourname.loopypowers.manager.PowerManager;
 import com.yourname.loopypowers.network.AbilityPackets;
@@ -66,26 +67,36 @@ public class Loopypowers implements ModInitializer {
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayerEntity player = handler.player;
+            // Clear any stale in-memory state before loading this world's data.
+            // Guards against leftover maps if a previous disconnect was unclean.
+            PowerManager.clearPlayerState(player);
             PlayerDataStore.load(player);
         });
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayerEntity player = handler.player;
             PlayerDataStore.save(player);
-            // Prevent memory leaks on disconnect
+            // Let the power clean up its own static maps (entities, state machines, etc.)
+            Power disconnectPower = PowerManager.getPower(player);
+            if (disconnectPower != null) disconnectPower.onRemove(player);
+            // Clear all in-memory state so nothing leaks to the next world.
             PowerManager.clearPlayerState(player);
         });
 
         ServerPlayerEvents.COPY_FROM.register((oldPlayer, newPlayer, alive) -> {
             Power oldPower = PowerManager.getPower(oldPlayer);
             if (oldPower != null) {
-                // Silently assign so we don't spam them with text on respawn
                 PowerManager.setPower(newPlayer, oldPower, true);
             }
 
-            int level = PowerManager.getLevel(oldPlayer);
-            PowerManager.setLevel(newPlayer, level);
+            PowerManager.setLevel(newPlayer, PowerManager.getLevel(oldPlayer));
             PowerManager.copyCooldowns(oldPlayer, newPlayer);
+
+            double cdMult = PowerManager.getPlayerCooldownMultiplier(oldPlayer);
+            PowerManager.setPlayerCooldownMultiplier(newPlayer, cdMult);
+
+            PassiveManager.setPassiveState(newPlayer, PassiveManager.isEnabled(oldPlayer));
+
             PlayerDataStore.save(newPlayer);
         });
 
@@ -169,6 +180,8 @@ public class Loopypowers implements ModInitializer {
             }
 
             // ── ATTACKER-SIDE ─────────────────────────────────────────────────
+
+            if (PsychicPower.onDamageGlobal(victim, source)) return false;
 
             if (FortunePower.tryAdjustFortuneDamage(victim, source, amount)) return false;
 

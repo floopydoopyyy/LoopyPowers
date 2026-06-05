@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.yourname.loopypowers.power.BloodPower.ACTIVE_BLEEDS;
 
 public class HealingPower implements Power {
 
@@ -184,17 +183,19 @@ public class HealingPower implements Power {
 
         int removed = 0; // how many debuffs purged
 
-        // POWER-BASED DEBUFFS
-        removed += removeBleed(player) ? 1 : 0;
-        removed += NaturePower.cleanseVines(player) ? 1 : 0;
+        // power-based effects
+        if (removeBleed(player))                            removed++;
+        if (FortunePower.cleanseDuel(player))               removed++;
+        if (CosmicPower.cleanseFate(player))                removed++;
+        if (IcePower.cleanseFreeze(player))                 removed++;
+        if (NaturePower.cleanseVines(player))               removed++;
+        if (PsychicPower.cleansePsychic(player))            removed++;
+        if (SoundPower.cleanseResonance(player))            removed++;
+        if (TelekinesisPower.cleanseTelekinesis(player))    removed++;
 
-        // Legacy string tag cleansing (Will need updating as other powers get optimized to maps)
+        // Legacy tag cleansing for powers not yet ported to map-based systems
         removed += removeTagEffects(player,
-                "sd_resonated_", "sd_dampened_",
-                "ice_frz_p_", "ice_frz_d_",
-                "int_displaced_", "psy_compel_", "psy_ult_ctrl_",
-                "cos_fate_dmg_", "cos_fate_timer_", "cos_fate_deton_",
-                "tk_suspend_", "tk_choke_"
+                "int_displaced_"    // displacement
         );
 
         // copy effects safely using active statuses
@@ -272,7 +273,7 @@ public class HealingPower implements Power {
     }
 
     public static boolean removeBleed(LivingEntity e) {
-        return ACTIVE_BLEEDS.remove(e.getUuid()) != null;
+        return BloodPower.cleanseBleed(e);
     }
 
     /* ============================================================
@@ -490,11 +491,11 @@ public class HealingPower implements Power {
        ULTIMATE - ADAPTIVE SURVIVABILITY
        ============================================================ */
 
-    private static final int ULT_DURATION = 180;
+    private static final int ULT_DURATION = 250;
 
     private static final int EFFECT_REFRESH = 30;
 
-    private static final float MEDIC_SOUND_CHANCE = 0.5f;
+    private static final float MEDIC_SOUND_CHANCE = 0.05f;
 
     // lifesteal scaling
     private static final float LS_HIGH = 0.35f;
@@ -529,43 +530,30 @@ public class HealingPower implements Power {
         state.ultTicks--;
         ServerWorld w = player.getServerWorld();
 
-        // constant particles
-        boolean ultEndRod = state.ultTicks % 10 == 0;
-        Set<ServerPlayerEntity> ultViewers = new HashSet<>();
-        PlayerLookup.tracking(w, player.getBlockPos()).forEach(ultViewers::add);
-        ultViewers.add(player);
-        HealingUltTickPayload ultTickFx = new HealingUltTickPayload(
-                player.getX(), player.getBodyY(0.5), player.getZ(), ultEndRod);
-        ultViewers.forEach(sp -> ServerPlayNetworking.send(sp, ultTickFx));
-
+        // Ult just expired — clean up and exit before sending any FX
         if (state.ultTicks <= 0) {
-            // FULL CLEANUP
             state.lifesteal = 0f;
             state.smoothing = 0f;
             state.ultPhase = -1;
             return;
         }
 
+        // Phase detection (done before FX dispatch so the payload carries the right phase)
         float hpPercent = player.getHealth() / player.getMaxHealth();
-
         int phase = getPhase(hpPercent);
         int prevPhase = state.ultPhase;
+        boolean isPhaseChange = (phase != prevPhase);
 
-        // detect phase change
-        if (phase != prevPhase) {
+        if (isPhaseChange) {
             state.ultPhase = phase;
 
-            if (phase == 1) { // EXPOSED ENTRY BURST
+            if (phase == 1) { // EXPOSED ENTRY
                 player.addStatusEffect(new StatusEffectInstance(
                         StatusEffects.SPEED,
                         40,
                         2,
                         true, false, true
                 ));
-
-                HealingUltPhasePayload phaseFx = new HealingUltPhasePayload(
-                        player.getX(), player.getBodyY(0.5), player.getZ());
-                ultViewers.forEach(sp -> ServerPlayNetworking.send(sp, phaseFx));
 
                 net.minecraft.sound.SoundEvent sound = w.random.nextFloat() < MEDIC_SOUND_CHANCE ? ModSounds.MEDIC : SoundEvents.ENTITY_ENDER_DRAGON_FLAP;
 
@@ -577,6 +565,14 @@ public class HealingPower implements Power {
                 CameraShake.shakeNearby(player, 6.0, 13, 0.7f);
             }
         }
+
+        // Dispatch all particle FX to clients
+        Set<ServerPlayerEntity> ultViewers = new HashSet<>();
+        PlayerLookup.tracking(w, player.getBlockPos()).forEach(ultViewers::add);
+        ultViewers.add(player);
+        HealingUltTickPayload ultTickFx = new HealingUltTickPayload(
+                player.getX(), player.getBodyY(0.5), player.getZ(), phase, state.ultTicks, isPhaseChange);
+        ultViewers.forEach(sp -> ServerPlayNetworking.send(sp, ultTickFx));
 
         applyPhaseEffects(player, state, phase, state.ultTicks);
     }
@@ -663,7 +659,7 @@ public class HealingPower implements Power {
 
     @Override public long getPrimaryCooldownMs() { return 33_000; }
     @Override public long getSecondaryCooldownMs() { return 29_000; }
-    @Override public long getUltimateCooldownMs() { return 290_000; }
+    @Override public long getUltimateCooldownMs() { return 350_000; }
 
     @Override
     public String getOverviewDescription() {

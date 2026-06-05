@@ -1,23 +1,33 @@
 package com.yourname.loopypowers.power;
 
+import com.yourname.loopypowers.CooldownUI;
 import com.yourname.loopypowers.effect.ModEffects;
+import com.yourname.loopypowers.manager.PassiveManager;
+import com.yourname.loopypowers.manager.PowerManager;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import com.yourname.loopypowers.network.CameraShake;
 import com.yourname.loopypowers.network.payload.*;
 import com.yourname.loopypowers.sound.ModSounds;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.Text;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 
@@ -50,7 +60,18 @@ public class FlightPower implements Power {
         int trailStep = 0;
         int soundStep = 0;
         int wingEnforceStep = 0;
+
+        // primary state
+        int gustCharges = GUST_MAX_CHARGES;
+        int gustRechargeTicks = 0;
+        int gustLockTicks = 0;
         int gustEmpowermentTicks = 0;
+
+        // secondary state
+        int updraftEmpowermentTicks = 0;
+        int updraftBlocksBroken = 0;
+
+        // Boom (Ultimate) State
         int boomWindup = 0;
         int boomDash = 0;
         float boomYaw = 0;
@@ -85,7 +106,10 @@ public class FlightPower implements Power {
         player.getCommandTags().removeIf(tag -> tag.startsWith("fl_") && !tag.equals("fl_hecanfly_done"));
 
         ACTIVE_STATES.put(player.getUuid(), new FlightState());
-        equipWings(player);
+
+        if (PassiveManager.isEnabled(player)) {
+            equipWings(player);
+        }
 
         // If they died with the easter egg, inject it into their new respawned body
         if (DIED_WITH_EGG.remove(player.getUuid())) {
@@ -141,39 +165,65 @@ public class FlightPower implements Power {
         if (!player.isAlive()) return;
 
         FlightState state = getState(player);
+        boolean passiveOn = PassiveManager.isEnabled(player);
 
         // EGG
         if (state.funnyTimer > 0) {
             state.funnyTimer--;
         } else {
-            // lock egg (Set.add handles redundancy gracefully, removing the unnecessary contains check)
             player.getCommandTags().add("fl_hecanfly_done");
         }
 
         // timers
         if (state.stallTicks > 0) state.stallTicks--;
+        if (state.gustLockTicks > 0) state.gustLockTicks--;
 
-        // enforce wings
-        state.wingEnforceStep--;
-        if (state.wingEnforceStep <= 0) {
-            state.wingEnforceStep = 20;
-            equipWings(player);
-        }
+        // Gust recharge & UI updates (always tick so they recharge while passive is off)
+        tickGustRecharge(player, state);
+        updateGustCooldownUI(player, state);
 
-        tickSonicBoomUltimate(player, state);
+        if (passiveOn) {
+            // enforce wings
+            state.wingEnforceStep--;
+            if (state.wingEnforceStep <= 0) {
+                state.wingEnforceStep = 20;
+                equipWings(player);
+            }
 
-        // while flying tick
-        tickPassiveFlight(player, state);
+            tickSonicBoomUltimate(player, state);
+            tickPassiveFlight(player, state);
+            tickGustEmpowerment(player, state);
+            tickUpdraftEmpowerment(player, state);
 
-        // speed boost after dash
-        tickGustEmpowerment(player, state);
+            // particles while flying
+            if (player.isFallFlying()) {
+                tickFlightFx(player, state);
+            } else {
+                state.trailStep = 0;
+                state.soundStep = 0;
+            }
 
-        // particles while flying
-        if (player.isFallFlying()) {
-            tickFlightFx(player, state);
         } else {
-            state.trailStep = 0;
-            state.soundStep = 0;
+            // Passive is OFF: clean up states and unequip wings
+            unequipWings(player);
+
+            if (state.flightActive || player.isFallFlying()) {
+                player.stopFallFlying();
+                state.flightActive = false;
+                state.trailStep = 0;
+                state.soundStep = 0;
+            }
+
+            if (state.boomWindup > 0 || state.boomDash > 0) {
+                clearBoomState(state);
+                Vec3d bv = player.getVelocity();
+                player.setVelocity(bv.x, Math.min(bv.y, 0), bv.z);
+                player.velocityModified = true;
+                syncPlayerVelocity(player);
+            }
+
+            if (state.gustEmpowermentTicks > 0) state.gustEmpowermentTicks--;
+            if (state.updraftEmpowermentTicks > 0) state.updraftEmpowermentTicks--;
         }
     }
 
@@ -189,6 +239,7 @@ public class FlightPower implements Power {
             Vec3d v = victim.getVelocity();
             victim.setVelocity(v.x, Math.min(v.y, HURT_KNOCKOUT_MIN_YVEL), v.z);
             victim.velocityModified = true;
+            syncPlayerVelocity(victim);
 
             // Apply visual Grounded effect using registry
             victim.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED), HURT_LOCK_DURATION, 0, false, false, true));
@@ -212,15 +263,28 @@ public class FlightPower implements Power {
        ABILITIES
        ============================================================ */
 
-    // PRIMARY
-    // Gust
-    private static final int GUST_EMPOWERMENT_DURATION = 40;
-    private static final double GUST_BURST_STRENGTH = 1.0;
-    private static final double GUST_EMPOWERMENT_PUSH = 0.06;
-    private static final double GUST_MAX_HORIZ_SPEED = 2.2;
+    // PRIMARY: Gust
+    private static final int GUST_MAX_CHARGES = 2;
+    private static final int GUST_RECHARGE_TICKS = 160;
+    private static final int GUST_LOCK_TICKS = 10;      // 0.5 sec delay between dashes
+
+    private static final int GUST_EMPOWERMENT_DURATION = 50;
+    private static final double GUST_BURST_STRENGTH = 1.8;
+    private static final double GUST_EMPOWERMENT_PUSH = 0.07;
+    private static final double GUST_MAX_HORIZ_SPEED = 3.3;
 
     @Override
     public boolean tryActivatePrimary(ServerPlayerEntity player) {
+        if (!PassiveManager.isEnabled(player)) {
+            player.sendMessage(Text.translatable("message.loopypowers.passive_disabled").formatted(Formatting.RED), true);
+            return false;
+        }
+
+        FlightState state = getState(player);
+
+        if (state.gustLockTicks > 0) return false;
+        if (state.gustCharges <= 0) return false;
+
         if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED))) {
             player.sendMessage(Text.translatable("power.loopypowers.flight.grounded"), true);
             return false;
@@ -231,8 +295,17 @@ public class FlightPower implements Power {
 
     @Override
     public void activatePrimary(ServerPlayerEntity player) {
+        FlightState state = getState(player);
+
+        state.gustCharges--;
+        state.gustLockTicks = GUST_LOCK_TICKS;
+
+        if (state.gustRechargeTicks <= 0) {
+            state.gustRechargeTicks = PowerManager.getModifiedCooldownTicks(player, GUST_RECHARGE_TICKS);
+        }
+
         // force flight to start
-        getState(player).glideRequest = true;
+        state.glideRequest = true;
 
         // FUNNY EGG
         if (player.isFallFlying() && !player.getCommandTags().contains("fl_hecanfly_done")) {
@@ -264,8 +337,9 @@ public class FlightPower implements Power {
 
         player.setVelocity(boosted);
         player.velocityModified = true;
+        syncPlayerVelocity(player);
 
-        getState(player).gustEmpowermentTicks = GUST_EMPOWERMENT_DURATION;
+        state.gustEmpowermentTicks = GUST_EMPOWERMENT_DURATION;
 
         ServerWorld w = player.getServerWorld();
         sendToViewers(w, player, new FlightGustPayload(player.getX(), player.getY(), player.getZ()));
@@ -274,6 +348,50 @@ public class FlightPower implements Power {
                 player.getSoundCategory(),
                 0.9f, 1.6f
         );
+    }
+
+    private void tickGustRecharge(ServerPlayerEntity player, FlightState state) {
+        if (PowerManager.areCooldownsDisabled()) {
+            state.gustCharges = GUST_MAX_CHARGES;
+            state.gustRechargeTicks = 0;
+            return;
+        }
+
+        if (state.gustCharges >= GUST_MAX_CHARGES) {
+            state.gustRechargeTicks = 0;
+            return;
+        }
+
+        int maxTicks = PowerManager.getModifiedCooldownTicks(player, GUST_RECHARGE_TICKS);
+
+        if (state.gustRechargeTicks <= 0) state.gustRechargeTicks = maxTicks;
+
+        state.gustRechargeTicks--;
+
+        if (state.gustRechargeTicks <= 0) {
+            state.gustCharges++;
+            if (state.gustCharges < GUST_MAX_CHARGES) {
+                state.gustRechargeTicks = maxTicks;
+            } else {
+                state.gustRechargeTicks = 0;
+            }
+        }
+    }
+
+    private void updateGustCooldownUI(ServerPlayerEntity player, FlightState state) {
+        String key = "FlightUI:PRIMARY";
+
+        if (state.gustCharges >= GUST_MAX_CHARGES || PowerManager.areCooldownsDisabled()) {
+            CooldownUI.clearCooldown(player, key);
+            return;
+        }
+
+        int maxTicks = PowerManager.getModifiedCooldownTicks(player, GUST_RECHARGE_TICKS);
+        long endMs = System.currentTimeMillis() + (state.gustRechargeTicks * 50L);
+        Text suffix = CooldownUI.makeChargeSuffix(
+                state.gustCharges, GUST_MAX_CHARGES, state.gustRechargeTicks, Math.max(1, maxTicks)
+        );
+        CooldownUI.setCooldownEnd(player, key, endMs, suffix);
     }
 
     private void tickGustEmpowerment(ServerPlayerEntity player, FlightState state) {
@@ -299,6 +417,7 @@ public class FlightPower implements Power {
 
         player.setVelocity(next);
         player.velocityModified = true;
+        syncPlayerVelocity(player);
 
         if (state.gustEmpowermentTicks % 3 == 0) {
             ServerWorld gustW = player.getServerWorld();
@@ -306,9 +425,26 @@ public class FlightPower implements Power {
         }
     }
 
-    // SECONDARY
+    // SECONDARY: Updraft (Homelander Takeoff & Burst)
+    private static final double UPDRAFT_LAUNCH_Y = 3.2;
+    private static final double UPDRAFT_KNOCKBACK_RADIUS = 5.0;
+    private static final double UPDRAFT_KNOCKBACK_STRENGTH = 1.8;
+
+    private static final int UPDRAFT_EMPOWERMENT_DURATION = 10;
+    private static final double UPDRAFT_EMPOWERMENT_PUSH_Y = 0.25;
+    private static final double UPDRAFT_MAX_Y_SPEED = 3.8;
+
+    private static final int UPDRAFT_MAX_BLOCKS_BROKEN = 20;
+    private static final float UPDRAFT_MAX_HARDNESS = 5.0f;
+    private static final float UPDRAFT_DAMAGE_PER_BLOCK = 1.0f;
+
     @Override
     public boolean tryActivateSecondary(ServerPlayerEntity player) {
+        if (!PassiveManager.isEnabled(player)) {
+            player.sendMessage(Text.translatable("message.loopypowers.passive_disabled").formatted(Formatting.RED), true);
+            return false;
+        }
+
         if (player.hasStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED))) {
             player.sendMessage(Text.translatable("power.loopypowers.flight.grounded"), true);
             return false;
@@ -319,38 +455,140 @@ public class FlightPower implements Power {
 
     @Override
     public void activateSecondary(ServerPlayerEntity player) {
+        FlightState state = getState(player);
         ServerWorld w = player.getServerWorld();
+
+        state.updraftBlocksBroken = 0;
+
+        // FX
         sendToViewers(w, player, new FlightUpdraftPayload(player.getX(), player.getY(), player.getZ()));
-        w.playSound(
-                null,
-                player.getX(), player.getY(), player.getZ(),
-                ModSounds.UPDRAFT,
-                player.getSoundCategory(),
-                1.1f,
-                1.3f
-        );
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.ENTITY_GENERIC_EXPLODE, player.getSoundCategory(), 1.5f, 0.8f);
+        w.playSound(null, player.getX(), player.getY(), player.getZ(), ModSounds.UPDRAFT, player.getSoundCategory(), 1.5f, 0.6f);
+        CameraShake.shakeNearby(player, 15, 12, 1.2f);
 
+        // knockback nearby entities
+        Box box = player.getBoundingBox().expand(UPDRAFT_KNOCKBACK_RADIUS);
+        for (LivingEntity e : w.getEntitiesByClass(LivingEntity.class, box, e -> e != player && e.isAlive())) {
+            Vec3d away = e.getPos().subtract(player.getPos());
+            if (away.lengthSquared() < 0.0001) away = new Vec3d(1, 0, 0);
+            Vec3d kb = away.normalize().multiply(UPDRAFT_KNOCKBACK_STRENGTH).add(0, 0.5, 0);
+            e.addVelocity(kb.x, kb.y, kb.z);
+            syncEntityVelocity(e);
+        }
+
+        // velocity
         Vec3d v = player.getVelocity();
-        double up = 2.5;
-        player.setVelocity(v.x, Math.max(v.y, 0.0) + up, v.z);
+        player.setVelocity(v.x, Math.max(v.y, 0.0) + UPDRAFT_LAUNCH_Y, v.z);
         player.velocityModified = true;
+        syncPlayerVelocity(player);
 
-        getState(player).glideRequest = true;
+        // force flight and empowerment
+        player.startFallFlying();
+        state.flightActive = true;
+        state.updraftEmpowermentTicks = UPDRAFT_EMPOWERMENT_DURATION;
+    }
+
+    private void tickUpdraftEmpowerment(ServerPlayerEntity player, FlightState state) {
+        if (state.updraftEmpowermentTicks <= 0) return;
+        state.updraftEmpowermentTicks--;
+
+        // Re-enable flight if vanilla physics cancelled it by bumping the ceiling
+        if (!player.isFallFlying()) {
+            player.startFallFlying();
+        }
+
+        ServerWorld w = player.getServerWorld();
+        Vec3d v = player.getVelocity();
+        int blocksBrokenNow = 0;
+
+        // 9-point grid for a perfect 3x3 tunnel
+        double hW = player.getWidth() * 0.6;
+        Vec3d[] offsets = {
+            new Vec3d(0, 0, 0),
+            new Vec3d(hW, 0, hW),   new Vec3d(-hW, 0, hW),
+            new Vec3d(hW, 0, -hW),  new Vec3d(-hW, 0, -hW),
+            new Vec3d(hW, 0, 0),    new Vec3d(-hW, 0, 0),
+            new Vec3d(0, 0, hW),    new Vec3d(0, 0, -hW)
+        };
+
+        boolean hitUnbreakable = false;
+        double checkDist = Math.max(v.y, 3.5);
+
+        for (Vec3d offset : offsets) {
+            Vec3d start = player.getPos().add(offset).add(0, player.getHeight() - 0.2, 0);
+            Vec3d end = start.add(0, checkDist, 0);
+
+            int iterations = 0;
+            while (iterations < 6 && state.updraftBlocksBroken < UPDRAFT_MAX_BLOCKS_BROKEN) {
+                iterations++;
+                BlockHitResult hit = w.raycast(new RaycastContext(
+                        start, end, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, player));
+
+                if (hit.getType() == HitResult.Type.BLOCK) {
+                    BlockPos pos = hit.getBlockPos();
+                    BlockState bState = w.getBlockState(pos);
+                    float hardness = bState.getHardness(w, pos);
+
+                    if (hardness >= 0 && hardness <= UPDRAFT_MAX_HARDNESS) {
+                        w.breakBlock(pos, true, player);
+                        state.updraftBlocksBroken++;
+                        blocksBrokenNow++;
+                        start = hit.getPos().add(0, 0.05, 0);
+                    } else {
+                        hitUnbreakable = true;
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            if (hitUnbreakable) break;
+        }
+
+        if (hitUnbreakable) {
+            state.updraftEmpowermentTicks = 0;
+            player.setVelocity(v.x, -0.2, v.z);
+            player.velocityModified = true;
+            syncPlayerVelocity(player);
+            return;
+        }
+
+        if (blocksBrokenNow > 0) {
+            player.damage(w.getDamageSources().flyIntoWall(), blocksBrokenNow * UPDRAFT_DAMAGE_PER_BLOCK);
+            CameraShake.shakeNearby(player, 12, 10, 0.8f);
+            w.spawnParticles(ParticleTypes.EXPLOSION, player.getX(), player.getY() + 1.0, player.getZ(), 2, 0.2, 0.2, 0.2, 0.05);
+            v = new Vec3d(v.x, Math.max(v.y, UPDRAFT_LAUNCH_Y * 0.8), v.z);
+        }
+
+        double nextY = v.y + UPDRAFT_EMPOWERMENT_PUSH_Y;
+        if (nextY > UPDRAFT_MAX_Y_SPEED) nextY = UPDRAFT_MAX_Y_SPEED;
+
+        player.setVelocity(v.x, nextY, v.z);
+        player.velocityModified = true;
+        syncPlayerVelocity(player);
+
+        if (state.updraftEmpowermentTicks % 2 == 0) {
+            w.spawnParticles(ParticleTypes.CLOUD, player.getX(), player.getY() - 0.5, player.getZ(), 3, 0.2, 0.2, 0.2, 0.02);
+        }
     }
 
     // Ultimate
 
     private static final int BOOM_WINDUP_TICKS = 30;
     private static final int BOOM_DASH_TICKS = 18;
-    private static final double BOOM_SPEED = 4.0;
+    private static final double BOOM_SPEED = 5.0;
     private static final double BOOM_RADIUS = 4.0;
     private static final double BOOM_IMPACT_RADIUS = 6.0;
-    private static final float  BOOM_IMPACT_DAMAGE = 15.0f;
+    private static final float  BOOM_IMPACT_DAMAGE = 18.5f;
     private static final double BOOM_IMPACT_KB = 2.8;
     private static final int BOOM_KNOCKOUT_DURATION = 20 * 3;
 
     @Override
     public boolean tryActivateUltimate(ServerPlayerEntity player) {
+        if (!PassiveManager.isEnabled(player)) {
+            player.sendMessage(Text.translatable("message.loopypowers.passive_disabled").formatted(Formatting.RED), true);
+            return false;
+        }
         if (player.isOnGround() || player.isTouchingWater()) {
             player.sendMessage(Text.translatable("power.loopypowers.flight.must_be_airborne"), true);
             return false;
@@ -371,6 +609,7 @@ public class FlightPower implements Power {
 
         player.setVelocity(0, 0, 0);
         player.velocityModified = true;
+        syncPlayerVelocity(player);
         player.fallDistance = 0;
 
         ServerWorld w = player.getServerWorld();
@@ -382,8 +621,6 @@ public class FlightPower implements Power {
     }
 
     private void tickSonicBoomUltimate(ServerPlayerEntity player, FlightState state) {
-        if (player.isCreative() || player.isSpectator()) return;
-
         ServerWorld world = player.getServerWorld();
 
         // windup
@@ -394,10 +631,15 @@ public class FlightPower implements Power {
 
             player.setVelocity(0, 0, 0);
             player.velocityModified = true;
+            syncPlayerVelocity(player);
             player.fallDistance = 0;
 
             if (state.boomWindup % 2 == 0) {
-                sendToViewers(world, player, new FlightBoomWindupPayload(player.getX(), player.getY(), player.getZ()));
+                boolean windupIsStart = (state.boomWindup == BOOM_WINDUP_TICKS - 2);
+                Vec3d look = player.getRotationVec(1.0f);
+                sendToViewers(world, player, new FlightBoomWindupPayload(
+                        player.getX(), player.getBodyY(0.5), player.getZ(),
+                        look.x, look.y, look.z, windupIsStart));
             }
 
             if (state.boomWindup <= 0) {
@@ -410,6 +652,7 @@ public class FlightPower implements Power {
                 Vec3d launch = dir.multiply(BOOM_SPEED);
                 player.setVelocity(launch.x, Math.max(launch.y, 0.05), launch.z);
                 player.velocityModified = true;
+                syncPlayerVelocity(player);
 
                 world.playSound(null, player.getX(), player.getY(), player.getZ(),
                         SoundEvents.ENTITY_WARDEN_SONIC_BOOM,
@@ -440,11 +683,14 @@ public class FlightPower implements Power {
 
             player.setVelocity(dir.multiply(BOOM_SPEED));
             player.velocityModified = true;
+            syncPlayerVelocity(player);
             player.fallDistance = 0;
             player.startFallFlying();
 
-            sendToViewers(world, player, new FlightBoomTunnelPayload(
-                    player.getX(), player.getY() + 1.0, player.getZ(), dir.x, dir.y, dir.z));
+            boolean dashIsStart = (state.boomDash == BOOM_DASH_TICKS - 1);
+            sendToViewers(world, player, new FlightBoomDashPayload(
+                    player.getX(), player.getBodyY(0.5), player.getZ(),
+                    dir.x, dir.y, dir.z, dashIsStart));
 
             Box box = player.getBoundingBox().expand(BOOM_RADIUS);
             List<LivingEntity> nearby = world.getEntitiesByClass(LivingEntity.class, box,
@@ -468,7 +714,7 @@ public class FlightPower implements Power {
                     if (away.lengthSquared() < 0.0001) continue;
                     Vec3d knock = away.normalize().multiply(0.9).add(0, 0.15, 0);
                     e.addVelocity(knock.x, knock.y, knock.z);
-                    e.velocityModified = true;
+                    syncEntityVelocity(e);
                 }
             }
 
@@ -556,13 +802,22 @@ public class FlightPower implements Power {
        COOLDOWNS
        ============================================================ */
 
-    @Override public long getPrimaryCooldownMs() { return 7_000; }
+    @Override public long getPrimaryCooldownMs() { return 0; } // Controlled by charges
     @Override public long getSecondaryCooldownMs() { return 33_000; }
     @Override public long getUltimateCooldownMs() { return 170_000; }
 
     /* ============================================================
        HELPERS
        ============================================================ */
+
+    private static void syncPlayerVelocity(ServerPlayerEntity player) {
+        player.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(player.getId(), player.getVelocity()));
+    }
+
+    private static void syncEntityVelocity(LivingEntity e) {
+        e.velocityModified = true;
+        if (e instanceof ServerPlayerEntity sp) syncPlayerVelocity(sp);
+    }
 
     private static <T extends net.minecraft.network.packet.CustomPayload> void sendToViewers(
             ServerWorld w, ServerPlayerEntity player, T payload) {
@@ -623,11 +878,12 @@ public class FlightPower implements Power {
             if (away.lengthSquared() < 0.0001) away = new Vec3d(0, 0, 1);
             Vec3d kb = away.normalize().multiply(BOOM_IMPACT_KB).add(0, 0.45, 0);
             e.addVelocity(kb.x, kb.y, kb.z);
-            e.velocityModified = true;
+            syncEntityVelocity(e);
         }
         player.addStatusEffect(new StatusEffectInstance(Registries.STATUS_EFFECT.getEntry(ModEffects.GROUNDED), BOOM_KNOCKOUT_DURATION, 0, false, false, true));
         player.setVelocity(0, Math.min(player.getVelocity().y, -0.25), 0);
         player.velocityModified = true;
+        syncPlayerVelocity(player);
     }
 
     private void clearBoomState(FlightState state) {

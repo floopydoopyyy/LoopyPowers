@@ -40,6 +40,16 @@ public final class TelekinesisFxClient {
         scatter(world, TK_PINK, x, y + 0.5, z, 6, 0.3, 0.3, 0.3, 0.05);
     }
 
+    // ---- Yank fall damage ----
+
+    public static void handleYankFall(TKYankFallPayload p, ClientPlayNetworking.Context ctx) {
+        ctx.client().execute(() -> {
+            ClientWorld world = ctx.client().world;
+            if (world == null) return;
+            scatter(world, TK_MAGENTA, p.x(), p.y(), p.z(), 15, 0.4, 0.2, 0.4, 0.05);
+        });
+    }
+
     // ---- TK beam (yank + secondary) ----
 
     public static void handleBeam(TKBeamPayload p, ClientPlayNetworking.Context ctx) {
@@ -256,7 +266,12 @@ public final class TelekinesisFxClient {
             ClientWorld world = ctx.client().world;
             if (world == null) return;
             world.addParticle(p.isInner() ? TK_MAGENTA : TK_DARK_PINK,
-                    p.x(), p.y(), p.z(), 0, 0, 0);
+                    p.x() + world.random.nextGaussian() * 0.04,
+                    p.y() + world.random.nextGaussian() * 0.04,
+                    p.z() + world.random.nextGaussian() * 0.04,
+                    world.random.nextGaussian() * 0.01,
+                    world.random.nextGaussian() * 0.01,
+                    world.random.nextGaussian() * 0.01);
         });
     }
 
@@ -283,6 +298,18 @@ public final class TelekinesisFxClient {
 
             double cx = p.x(), cy = p.y(), cz = p.z();
             long time = p.time();
+
+            if (time % 2 == 0) {
+                for (int i = 0; i < 3; i++) {
+                    double angle = world.random.nextDouble() * Math.PI * 2;
+                    double r = 2.5 + world.random.nextDouble() * 2.0;
+                    scatter(world, TK_DARK_PINK,
+                            cx + Math.cos(angle) * r,
+                            cy + world.random.nextDouble() * 2.5,
+                            cz + Math.sin(angle) * r,
+                            1, 0.1, 0.1, 0.1, 0.05);
+                }
+            }
 
             double[] radii    = { 2.5, 3.3, 4.1 };
             double[] speeds   = { 0.06, 0.08, 0.10 };

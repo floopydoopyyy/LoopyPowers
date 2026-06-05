@@ -120,6 +120,7 @@ public class LoopypowersClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(BloodBindDamageFxPayload.ID, BloodFxClient::handleBindDamageFx);
 
 		// CosmicPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(BlackHoleParticlePayload.ID, CosmicFxClient::handleBlackHoleParticles);
 		ClientPlayNetworking.registerGlobalReceiver(CosmicFateAuraPayload.ID, CosmicFxClient::handleFateAura);
 		ClientPlayNetworking.registerGlobalReceiver(CosmicDetonateStartPayload.ID, CosmicFxClient::handleDetonateStart);
 		ClientPlayNetworking.registerGlobalReceiver(CosmicDetonateTickPayload.ID, CosmicFxClient::handleDetonateTick);
@@ -171,7 +172,7 @@ public class LoopypowersClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(FlightUpdraftPayload.ID,     FlightFxClient::handleUpdraft);
 		ClientPlayNetworking.registerGlobalReceiver(FlightBoomStartPayload.ID,   FlightFxClient::handleBoomStart);
 		ClientPlayNetworking.registerGlobalReceiver(FlightBoomWindupPayload.ID,  FlightFxClient::handleBoomWindup);
-		ClientPlayNetworking.registerGlobalReceiver(FlightBoomTunnelPayload.ID,  FlightFxClient::handleBoomTunnel);
+		ClientPlayNetworking.registerGlobalReceiver(FlightBoomDashPayload.ID,    FlightFxClient::handleBoomDash);
 		ClientPlayNetworking.registerGlobalReceiver(FlightBoomImpactPayload.ID,  FlightFxClient::handleBoomImpact);
 		ClientPlayNetworking.registerGlobalReceiver(FlightTrailPayload.ID,       FlightFxClient::handleTrail);
 
@@ -214,7 +215,6 @@ public class LoopypowersClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(HealingBurstPayload.ID,       HealingFxClient::handleBurst);
 		ClientPlayNetworking.registerGlobalReceiver(HealingExpelledPayload.ID,    HealingFxClient::handleExpelled);
 		ClientPlayNetworking.registerGlobalReceiver(HealingUltTickPayload.ID,     HealingFxClient::handleUltTick);
-		ClientPlayNetworking.registerGlobalReceiver(HealingUltPhasePayload.ID,    HealingFxClient::handleUltPhase);
 
 		// TeleportPower fx receivers
 		ClientPlayNetworking.registerGlobalReceiver(TeleportDodgePayload.ID,        TeleportFxClient::handleDodge);
@@ -225,6 +225,7 @@ public class LoopypowersClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(TeleportFrenzyStrikePayload.ID, TeleportFxClient::handleFrenzyStrike);
 
 		// TelekinesisPower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(TKYankFallPayload.ID,          TelekinesisFxClient::handleYankFall);
 		ClientPlayNetworking.registerGlobalReceiver(TKBeamPayload.ID,              TelekinesisFxClient::handleBeam);
 		ClientPlayNetworking.registerGlobalReceiver(TKPassiveHitPayload.ID,        TelekinesisFxClient::handlePassiveHit);
 		ClientPlayNetworking.registerGlobalReceiver(TKYankTargetPayload.ID,        TelekinesisFxClient::handleYankTarget);
@@ -256,13 +257,12 @@ public class LoopypowersClient implements ClientModInitializer {
 
 		// SpeedPower fx receivers
 		ClientPlayNetworking.registerGlobalReceiver(SpeedLowHealthBurstPayload.ID,  SpeedFxClient::handleLowHealthBurst);
-		ClientPlayNetworking.registerGlobalReceiver(SpeedRushTrailPayload.ID,       SpeedFxClient::handleRushTrail);
-		ClientPlayNetworking.registerGlobalReceiver(SpeedDashPayload.ID,            SpeedFxClient::handleDash);
-		ClientPlayNetworking.registerGlobalReceiver(SpeedRushCastPayload.ID,        SpeedFxClient::handleRushCast);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedDashCastPayload.ID,        SpeedFxClient::handleDashCast);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedDashTrailPayload.ID,       SpeedFxClient::handleDashTrail);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedPinballAnchorPayload.ID,   SpeedFxClient::handlePinballAnchor);
 		ClientPlayNetworking.registerGlobalReceiver(SpeedOverdriveCastPayload.ID,   SpeedFxClient::handleOverdriveCast);
 		ClientPlayNetworking.registerGlobalReceiver(SpeedOverdriveTrailPayload.ID,  SpeedFxClient::handleOverdriveTrail);
-		ClientPlayNetworking.registerGlobalReceiver(SpeedOverdriveHitPayload.ID,    SpeedFxClient::handleOverdriveHit);
-		ClientPlayNetworking.registerGlobalReceiver(SpeedBlockImpactPayload.ID,     SpeedFxClient::handleBlockImpact);
+		ClientPlayNetworking.registerGlobalReceiver(SpeedExplosionFxPayload.ID,     SpeedFxClient::handleExplosionFx);
 
 		// SoundPower fx receivers
 		ClientPlayNetworking.registerGlobalReceiver(SoundResonanceBurstPayload.ID,  SoundFxClient::handleResonanceBurst);
@@ -286,6 +286,7 @@ public class LoopypowersClient implements ClientModInitializer {
 		ClientPlayNetworking.registerGlobalReceiver(PsychicControlAuraPayload.ID, PsychicFxClient::handleControlAura);
 
 		// NaturePower fx receivers
+		ClientPlayNetworking.registerGlobalReceiver(NatureCageFxPayload.ID,       NatureFxClient::handleCageFx);
 		ClientPlayNetworking.registerGlobalReceiver(NatureGasTickPayload.ID,      NatureFxClient::handleGasTick);
 		ClientPlayNetworking.registerGlobalReceiver(NatureVineCastPayload.ID,     NatureFxClient::handleVineCast);
 		ClientPlayNetworking.registerGlobalReceiver(NatureVineBindPayload.ID,     NatureFxClient::handleVineBind);

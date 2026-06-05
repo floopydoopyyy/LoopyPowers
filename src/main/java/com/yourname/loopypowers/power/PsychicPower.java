@@ -18,6 +18,7 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
 import net.minecraft.network.packet.s2c.play.PositionFlag;
 import net.minecraft.registry.Registries;
@@ -102,7 +103,7 @@ public class PsychicPower implements Power {
     // Compel (primary)
     private static final int    COMPEL_DURATION         = 80;
     private static final double COMPEL_STOP_DISTANCE    = 2.3;
-    private static final double COMPEL_MOB_SPEED        = 0.20;
+    private static final double COMPEL_MOB_SPEED        = 0.18;
     private static final double COMPEL_PLAYER_ACCEL     = 0.14;
     private static final double COMPEL_PLAYER_MAX_SPEED = 0.40;
     private static final float  COMPEL_LOOK_STRENGTH    = 0.25f;
@@ -128,10 +129,16 @@ public class PsychicPower implements Power {
     private static final int    ULT_CONTROL_DURATION  = 180;
     private static final double ULT_PLAYER_ACCEL      = 0.30;
     private static final double ULT_PLAYER_MAX_SPEED  = 0.65;
-    private static final double ULT_MOB_SPEED         = 0.36;
+    private static final double ULT_MOB_SPEED         = 0.33;
     private static final float  ULT_LOOK_STRENGTH     = 0.3f;
     private static final double ULT_STOP_DISTANCE     = 1.5;
     private static final int    ATTACK_COOLDOWN        = 35;
+
+    // Break rewards
+    private static final float  COMPEL_BREAK_CHANCE    = 0.4f;
+    private static final float  POSSESS_BREAK_CHANCE   = 0.3f;
+    private static final float  BREAK_HEAL_REWARD      = 10.0f;
+    private static final long   BREAK_CDR_REWARD_MS    = 2500;
 
     // Easter egg
     private static final double COMPEL_CHAT_CHANCE = 0.05;
@@ -298,28 +305,6 @@ public class PsychicPower implements Power {
     }
 
     private static void tickCompel(ServerPlayerEntity player, PsychicState state) {
-        // DEBUG: test control by compelling the caster itself towards the nearest entity
-        if (player.getCommandTags().contains("psy_debug")) {
-            ServerWorld w = player.getServerWorld();
-            LivingEntity nearest = w.getClosestEntity(
-                    LivingEntity.class,
-                    net.minecraft.entity.ai.TargetPredicate.DEFAULT,
-                    player, player.getX(), player.getY(), player.getZ(),
-                    player.getBoundingBox().expand(20)
-            );
-            if (nearest != null && nearest != player) {
-                Vec3d dir = nearest.getEyePos().subtract(player.getEyePos());
-                double dist = dir.length();
-                if (dist > 0.0001) dir = dir.normalize();
-                if (dist > COMPEL_LOOK_MIN_DIST) forceLook(player, dir, COMPEL_LOOK_STRENGTH);
-                applyMovement(player, dir, dist, COMPEL_MOB_SPEED, COMPEL_PLAYER_ACCEL, COMPEL_PLAYER_MAX_SPEED, COMPEL_STOP_DISTANCE);
-                applyControlEffects(player);
-
-                PsychicCompelAuraPayload aura = new PsychicCompelAuraPayload(player.getId());
-                sendToViewers(w, player, aura);
-            }
-        }
-
         if (state.compelled.isEmpty()) return;
 
         Iterator<CompelEntry> it = state.compelled.values().iterator();
@@ -344,6 +329,9 @@ public class PsychicPower implements Power {
 
             if (distance > COMPEL_LOOK_MIN_DIST) {
                 forceLook(le, dir, COMPEL_LOOK_STRENGTH);
+            } else {
+                Vec3d flatDir = new Vec3d(dir.x, 0, dir.z);
+                if (flatDir.lengthSquared() > 0.001) forceLook(le, flatDir.normalize(), COMPEL_LOOK_STRENGTH);
             }
             applyMovement(le, dir, distance, COMPEL_MOB_SPEED, COMPEL_PLAYER_ACCEL, COMPEL_PLAYER_MAX_SPEED, COMPEL_STOP_DISTANCE);
             applyControlEffects(le);
@@ -543,7 +531,12 @@ public class PsychicPower implements Power {
             double dist = dir.length();
             if (dist > 0.0001) dir = dir.normalize();
 
-            forceLook(le, dir, ULT_LOOK_STRENGTH);
+            if (dist > ULT_STOP_DISTANCE) {
+                forceLook(le, dir, ULT_LOOK_STRENGTH);
+            } else {
+                Vec3d flatDir = new Vec3d(dir.x, 0, dir.z);
+                if (flatDir.lengthSquared() > 0.001) forceLook(le, flatDir.normalize(), ULT_LOOK_STRENGTH);
+            }
             applyMovement(le, dir, dist, ULT_MOB_SPEED, ULT_PLAYER_ACCEL, ULT_PLAYER_MAX_SPEED, ULT_STOP_DISTANCE);
 
             le.addStatusEffect(new StatusEffectInstance(
@@ -552,7 +545,7 @@ public class PsychicPower implements Power {
             PsychicControlAuraPayload aura = new PsychicControlAuraPayload(le.getId());
             PlayerLookup.tracking(w, le.getBlockPos()).forEach(sp -> ServerPlayNetworking.send(sp, aura));
 
-            handleControlledAttacks(w, le, entry);
+            handleControlledAttacks(w, le, entry, player);
         }
     }
 
@@ -570,26 +563,29 @@ public class PsychicPower implements Power {
         return (hit.getType() != net.minecraft.util.hit.HitResult.Type.MISS) ? hit.getPos() : end;
     }
 
-    private static void handleControlledAttacks(ServerWorld world, LivingEntity entity, PossessedEntry entry) {
+    private static void handleControlledAttacks(ServerWorld world, LivingEntity entity, PossessedEntry entry, ServerPlayerEntity owner) {
         if (!entity.getAttributes().hasAttribute(EntityAttributes.GENERIC_ATTACK_DAMAGE)) return;
 
-        // OPTIMIZATION: attack cooldown stored in PossessedEntry, replacing ATTACK_CD_TAG on entity
+        LivingEntity target = findNearestTarget(world, entity, owner);
+
         if (entry.attackCd > 0) {
             entry.attackCd--;
-            // Still face nearest target even while on cooldown
-            LivingEntity target = findNearestTarget(world, entity);
             if (target != null && entity.canSee(target)) {
                 forceLook(entity, target.getEyePos().subtract(entity.getEyePos()).normalize(), ULT_LOOK_STRENGTH);
             }
             return;
         }
 
-        LivingEntity target = findNearestTarget(world, entity);
-        if (target == null || !entity.canSee(target)) return;
+        // Clear vanilla AI target so they don't randomly attack other entities
+        if (target == null || !entity.canSee(target)) {
+            if (entity instanceof MobEntity mob) mob.setTarget(null);
+            return;
+        }
 
         forceLook(entity, target.getEyePos().subtract(entity.getEyePos()).normalize(), ULT_LOOK_STRENGTH);
 
         if (entity instanceof MobEntity mob) {
+            mob.setTarget(target);
             if (mob.tryAttack(target)) entry.attackCd = ATTACK_COOLDOWN;
         } else if (entity instanceof ServerPlayerEntity controlledPlayer) {
             controlledPlayer.swingHand(Hand.MAIN_HAND, true);
@@ -598,14 +594,14 @@ public class PsychicPower implements Power {
         }
     }
 
-    private static LivingEntity findNearestTarget(ServerWorld world, LivingEntity attacker) {
+    private static LivingEntity findNearestTarget(ServerWorld world, LivingEntity attacker, ServerPlayerEntity owner) {
         LivingEntity closest      = null;
         double       closestDistSq = 3.0 * 3.0;
 
         for (LivingEntity e : world.getEntitiesByClass(
                 LivingEntity.class,
                 attacker.getBoundingBox().expand(3.0),
-                en -> en.isAlive() && en != attacker && attacker.canSee(en))) {
+                en -> en.isAlive() && en != attacker && en != owner && attacker.canSee(en))) {
 
             double dist = attacker.squaredDistanceTo(e);
             if (dist < closestDistSq) {
@@ -625,24 +621,30 @@ public class PsychicPower implements Power {
                                       double stopDistance) {
         Vec3d velocity = entity.getVelocity();
 
+        // Auto-jump when running into a wall on the ground
+        double nextY = velocity.y;
+        if (entity.horizontalCollision && entity.isOnGround()) {
+            nextY = 0.5;
+        }
+
         if (entity instanceof MobEntity mob) {
             mob.getNavigation().stop();
 
             if (distance > stopDistance) {
                 Vec3d flatDir = new Vec3d(dir.x, 0, dir.z);
                 if (flatDir.lengthSquared() > 0.0001) flatDir = flatDir.normalize();
-                entity.setVelocity(flatDir.x * mobSpeed, velocity.y, flatDir.z * mobSpeed);
+                entity.setVelocity(flatDir.x * mobSpeed, nextY, flatDir.z * mobSpeed);
                 entity.velocityModified = true;
 
                 if (entity.getWorld() instanceof ServerWorld sw) {
                     sw.getChunkManager().sendToNearbyPlayers(entity, new EntityPositionS2CPacket(entity));
                 }
             } else {
-                entity.setVelocity(velocity.x * 0.4, velocity.y, velocity.z * 0.4);
+                entity.setVelocity(velocity.x * 0.4, nextY, velocity.z * 0.4);
                 entity.velocityModified = true;
             }
 
-        } else if (entity instanceof ServerPlayerEntity) {
+        } else if (entity instanceof ServerPlayerEntity sp) {
             if (distance > stopDistance) {
                 Vec3d flatDir = new Vec3d(dir.x, 0, dir.z);
                 if (flatDir.lengthSquared() > 0.0001) flatDir = flatDir.normalize();
@@ -651,13 +653,15 @@ public class PsychicPower implements Power {
                 if (newVel.horizontalLength() > playerMaxSpeed) {
                     newVel = new Vec3d(newVel.x, 0, newVel.z)
                             .normalize().multiply(playerMaxSpeed)
-                            .add(0, velocity.y, 0);
+                            .add(0, nextY, 0);
                 }
-                entity.setVelocity(newVel.x, velocity.y, newVel.z);
+                entity.setVelocity(newVel.x, nextY, newVel.z);
                 entity.velocityModified = true;
+                sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp.getId(), sp.getVelocity()));
             } else {
-                entity.setVelocity(velocity.x * 0.4, velocity.y, velocity.z * 0.4);
+                entity.setVelocity(velocity.x * 0.4, nextY, velocity.z * 0.4);
                 entity.velocityModified = true;
+                sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp.getId(), sp.getVelocity()));
             }
         }
     }
@@ -734,6 +738,84 @@ public class PsychicPower implements Power {
         double t = MathHelper.clamp(
                 point.subtract(lineStart).dotProduct(line) / (len * len), 0, 1);
         return point.distanceTo(lineStart.add(line.multiply(t)));
+    }
+
+    /**
+     * Returns true to block the damage event, false to proceed normally.
+     * Prevents caster from being hurt by their own controlled entities,
+     * and breaks control when the caster hits their own controlled entity (with rewards).
+     */
+    public static boolean onDamageGlobal(LivingEntity victim, net.minecraft.entity.damage.DamageSource source) {
+        net.minecraft.entity.Entity attackerEnt = source.getSource();
+        if (attackerEnt == null) return false;
+
+        // Block caster from being hurt by their own controlled entities
+        if (victim instanceof ServerPlayerEntity player) {
+            PsychicState state = ACTIVE_STATES.get(player.getUuid());
+            if (state != null) {
+                UUID attackerId = attackerEnt.getUuid();
+                if (state.compelled.containsKey(attackerId) || state.possessed.containsKey(attackerId)) {
+                    return true;
+                }
+            }
+        }
+
+        // Break control with chance + reward when caster hits their controlled entity
+        if (attackerEnt instanceof ServerPlayerEntity player) {
+            PsychicState state = ACTIVE_STATES.get(player.getUuid());
+            if (state != null) {
+                UUID victimId = victim.getUuid();
+                boolean isCompelled = state.compelled.containsKey(victimId);
+                boolean isPossessed = state.possessed.containsKey(victimId);
+                boolean brokeControl = false;
+
+                if (isCompelled && player.getRandom().nextFloat() < COMPEL_BREAK_CHANCE) {
+                    state.compelled.remove(victimId);
+                    victim.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.COMPELLED));
+                    brokeControl = true;
+                }
+                if (isPossessed && player.getRandom().nextFloat() < POSSESS_BREAK_CHANCE) {
+                    state.possessed.remove(victimId);
+                    victim.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.POSSESSED));
+                    victim.removeStatusEffect(StatusEffects.MINING_FATIGUE);
+                    brokeControl = true;
+                }
+
+                if (brokeControl && victim.getWorld() instanceof ServerWorld w) {
+                    w.playSound(null, victim.getBlockPos(), SoundEvents.BLOCK_GLASS_BREAK, net.minecraft.sound.SoundCategory.PLAYERS, 0.5f, 1.2f);
+                    w.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_WARDEN_HEARTBEAT, player.getSoundCategory(), 1.0f, 1.8f);
+                    sendToViewers(w, player, new PsychicLeechPayload(player.getId(), victim.getId()));
+                    player.heal(BREAK_HEAL_REWARD);
+                    PowerManager.reduceAllCooldowns(player, BREAK_CDR_REWARD_MS);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static boolean cleansePsychic(LivingEntity target) {
+        boolean cleansed = false;
+        UUID targetId = target.getUuid();
+
+        for (PsychicState state : ACTIVE_STATES.values()) {
+            if (state.compelled.remove(targetId) != null) {
+                target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.COMPELLED));
+                cleansed = true;
+            }
+            if (state.spiked.remove(targetId) != null) {
+                target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.STUN));
+                target.removeStatusEffect(StatusEffects.SLOWNESS);
+                target.removeStatusEffect(StatusEffects.MINING_FATIGUE);
+                cleansed = true;
+            }
+            if (state.possessed.remove(targetId) != null) {
+                target.removeStatusEffect(Registries.STATUS_EFFECT.getEntry(ModEffects.POSSESSED));
+                target.removeStatusEffect(StatusEffects.MINING_FATIGUE);
+                cleansed = true;
+            }
+        }
+        return cleansed;
     }
 
     private static <T extends net.minecraft.network.packet.CustomPayload> void sendToViewers(

@@ -16,8 +16,15 @@ public class PassiveManager {
     private static final Map<UUID, Boolean> PASSIVES = new HashMap<>();
 
     public static boolean isEnabled(ServerPlayerEntity player) {
-        // default = true
         return PASSIVES.getOrDefault(player.getUuid(), true);
+    }
+
+    public static void setPassiveState(ServerPlayerEntity player, boolean state) {
+        PASSIVES.put(player.getUuid(), state);
+    }
+
+    public static void clearPassiveState(ServerPlayerEntity player) {
+        PASSIVES.remove(player.getUuid());
     }
 
     public static void toggle(ServerPlayerEntity player) {
