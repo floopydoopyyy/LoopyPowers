@@ -83,7 +83,7 @@
   "power.loopypowers.flight.ultimate_name": "Sonic Boom",
   "power.loopypowers.flight.passive_name": "Wings Of Valor",
   "power.loopypowers.flight.description.overview": "Flight revolves around mobility, with very little to offer outside of that. Both abilities grant you heightened mobility and the ultimate can be used both for mobility and damage. It is useful for survival but you may have limited tools in combat compared to other powers.",
-  "power.loopypowers.flight.description.passive": "You permanently have wings as a chestplate that grant you elytra flight. When damaged, any forms of flight are blocked for a few seconds. You cannot remove these wings and they cannot break.",
+  "power.loopypowers.flight.description.passive": "You permanently have wings as a chestplate that grant you elytra flight. When damaged, any forms of flight are blocked for a few seconds. You can remove these wings by toggling your passive, which disables all abilities.",
   "power.loopypowers.flight.description.primary": "Gain a burst of momentum in the direction that you're looking and gain a speed boost after, this has 2 charges.",
   "power.loopypowers.flight.description.secondary": "Launch yourself into the air in an explosion that has high knockback and enter flight, you can burst through ceilings during this at the cost of some damage. If you are grounded this ability cannot be used.",
   "power.loopypowers.flight.description.ultimate": "Can only be used while flying. Stop all movement and briefly charge up. Once charged, shoot off in the direction you're looking with high speed. During flight, nearby entities will be pushed away and if you collide with a solid block, explode nearby entites with high knockback and become grounded for a few seconds.",

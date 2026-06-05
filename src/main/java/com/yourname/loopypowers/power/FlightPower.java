@@ -762,6 +762,10 @@ public class FlightPower implements Power {
             return;
         }
 
+        if (player.getCommandTags().remove("fl_glide_req")) {
+            state.glideRequest = true;
+        }
+
         if (state.glideRequest) {
             state.glideRequest = false;
 

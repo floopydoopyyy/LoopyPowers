@@ -1,7 +1,6 @@
 package com.yourname.loopypowers.manager;
 
 import com.yourname.loopypowers.CooldownUI;
-import com.yourname.loopypowers.power.FlightPower;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -28,16 +27,12 @@ public class PassiveManager {
     }
 
     public static void toggle(ServerPlayerEntity player) {
-        // block for flight power
-        if (PowerManager.getPower(player) instanceof FlightPower) {
-            sendBlockedFeedback(player);
-            return;
-        }
-
         boolean newState = !isEnabled(player);
         PASSIVES.put(player.getUuid(), newState);
 
         sendFeedback(player, newState);
+
+        PlayerDataStore.save(player);
     }
 
     private static void sendFeedback(ServerPlayerEntity player, boolean enabled) {
@@ -45,11 +40,6 @@ public class PassiveManager {
                 ? Text.translatable("message.loopypowers.passive_enabled").formatted(Formatting.GREEN)
                 : Text.translatable("message.loopypowers.passive_disabled").formatted(Formatting.RED);
 
-        CooldownUI.pushActionbarOverride(player, msg, 20);
-    }
-
-    private static void sendBlockedFeedback(ServerPlayerEntity player) {
-        Text msg = Text.translatable("message.loopypowers.passive_blocked").formatted(Formatting.RED);
         CooldownUI.pushActionbarOverride(player, msg, 20);
     }
 }
